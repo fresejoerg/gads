@@ -1,7 +1,7 @@
 [project]
 name = "gads"
 version = "0.1.0"
-description = "Add your description here"
+description = "A repo for developing and sharing Data Science tools and methods that utilize generative AI capabilities"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
