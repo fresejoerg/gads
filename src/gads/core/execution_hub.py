@@ -5,16 +5,8 @@ from typing import List, Optional, Dict, Any
 from sqlmodel import select, Session
 from gads.core.database import engine
 from gads.core.models import Task, OutboxEvent
+from gads.core.registry import get_next_model_dynamic
 import uuid
-
-# Escalation ladder: defines the next model to try upon failure
-ESCALATION_LADDER = {
-    "local_model": "claude-haiku-4.5",
-    "claude-haiku-4.5": "claude-sonnet-4.6",
-    "gemini-3.1-flash-lite-preview": "gemini-3.1-flash-preview",
-    "claude-sonnet-4.6": "claude-opus-4.7",
-    "gemini-3.1-flash-preview": "gemini-3.1-pro-preview"
-}
 
 class ExecutionHub:
     """Manages task lifecycle, heartbeats, and durable execution."""
@@ -38,7 +30,6 @@ class ExecutionHub:
     def validate_contract(self, task: Task, stdout: str) -> Optional[str]:
         """
         Validates the sandbox output against the task's postcondition contract.
-        Returns an error message if invalid, else None.
         """
         if not task.postcondition_json:
             return None
@@ -48,13 +39,11 @@ class ExecutionHub:
         
         try:
             if ctype == "dataframe":
-                # Very basic check: look for columns in stdout
                 cols = contract.get("required_columns", [])
                 for col in cols:
                     if col not in stdout:
                         return f"Contract Violation: Column '{col}' not found in output."
                 
-                # Check row count (heuristic)
                 min_rows = contract.get("min_rows", 0)
                 if min_rows > 0:
                     lines = [l for l in stdout.split('\n') if len(l.strip()) > 0]
@@ -62,8 +51,6 @@ class ExecutionHub:
                         return f"Contract Violation: Output seems too short. Expected ~{min_rows} rows."
             
             elif ctype == "list":
-                min_items = contract.get("min_items", 1)
-                # Heuristic: look for list-like indicators
                 if '[' not in stdout and '-' not in stdout:
                     return f"Contract Violation: Output does not appear to be a list."
                     
@@ -92,32 +79,31 @@ class ExecutionHub:
             self.session.add(task)
             self.session.commit()
 
-    def escalate_task(self, task_id: uuid.UUID, error: str) -> bool:
+    def escalate_task(self, task_id: uuid.UUID, error: str, hierarchy: Dict[str, Any]) -> bool:
         """
         Upgrades a task to a more powerful model and re-queues it.
-        Returns True if escalated, False if limit reached.
+        Uses dynamic selection across tiers with random sampling.
         """
         task = self.session.get(Task, task_id)
         if not task:
             return False
             
-        next_model = ESCALATION_LADDER.get(task.assigned_to)
+        next_model = get_next_model_dynamic(task.assigned_to, hierarchy)
         
         if next_model and task.escalation_count < 2:
-            print(f"  [Escalation] Upgrading Task {task_id} from {task.assigned_to} to {next_model}")
+            print(f"  [Escalation] Upgrading Task {task_id} from {task.assigned_to} to {next_model} (Tier Shift)")
             
-            # Prepare Failure Packet Context
             failure_context = (
                 f"\n\n--- PREVIOUS ATTEMPT FAILED ---\n"
                 f"Model: {task.assigned_to}\n"
                 f"Error: {error}\n"
-                f"Note: DO NOT repeat the mistake above. Ground your solution in the objective below.\n"
+                f"Note: DO NOT repeat the mistake above.\n"
             )
             
             task.description += failure_context
             task.assigned_to = next_model
             task.escalation_count += 1
-            task.status = "pending" # Re-queue
+            task.status = "pending"
             task.error = f"Escalated: {error}"
             
             self.session.add(task)
@@ -126,7 +112,6 @@ class ExecutionHub:
                 "next_model": next_model,
                 "error": error
             })
-            self.session.commit()
             return True
             
         return False
@@ -160,7 +145,6 @@ async def watchdog_loop():
             statement = select(Task).where(Task.status == "running").where(Task.heartbeat < timeout_threshold)
             orphaned_tasks = session.exec(statement).all()
             for task in orphaned_tasks:
-                print(f"Watchdog: Recovering orphaned task {task.id}")
                 task.status = "pending"
                 task.error = "Orphaned (heartbeat timeout)"
                 session.add(task)

@@ -41,8 +41,11 @@ Score every task across these 4 dimensions (Low, Med, High):
 - **Tier 2 (Sonnet/Flash)**: "Clean this messy CSV with pandas", "Create a Seaborn plot".
 - **Tier 1 (Pro/Opus)**: "Design the entire pipeline", "Debug a multi-file race condition".
 
-### 4. POSTCONDITION CONTRACTS
-You MUST define a structural contract for every task to detect "silent failures."
+### 4. OUTPUT FORMAT
+You MUST provide a list of steps. For each task:
+- Set `assigned_to` to the EXACT verbatim model ID from the 'models' list in the chosen Tier (e.g. 'claude-haiku-4.5', NOT 'T3').
+- You MUST select a model that is explicitly listed in the hierarchy below.
+- define a structural contract for every task to detect "silent failures."
 Example contracts:
 - DataFrame: {{"output_type": "dataframe", "min_rows": 5, "required_columns": ["x", "y"]}}
 - List: {{"output_type": "list", "min_items": 1}}

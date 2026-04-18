@@ -92,7 +92,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                 
                 # Run task OUTSIDE session
                 res, model_used = await executor.run_task(
-                    desc, project_id=project_id, session=None, session_id=str(project_id)
+                    desc, project_id=project_id, session_id=str(project_id)
                 )
                 
                 # Update status
@@ -108,7 +108,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
 
                     if error_msg:
                         print(f"  [Executor] ❌ Failure: {error_msg}")
-                        if hub.escalate_task(task_id, error_msg):
+                        if hub.escalate_task(task_id, error_msg, hierarchy):
                             session.commit()
                             continue 
                         else:

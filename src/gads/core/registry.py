@@ -1,6 +1,7 @@
 import httpx
 import os
-from typing import Dict, List, Any
+import random
+from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -15,6 +16,8 @@ TIER_MAPPING = {
     "T3": ["claude-haiku-4.5", "gemini-3.1-flash-lite-preview"],
     "T4": ["local_model"]
 }
+
+TIER_ORDER = ["T4", "T3", "T2", "T1"]
 
 TIER_DESCRIPTIONS = {
     "T1": "Architect tier. Use for complex reasoning, multi-step planning, and novel problem solving.",
@@ -47,5 +50,34 @@ async def get_model_hierarchy() -> Dict[str, Any]:
             return hierarchy
     except Exception as e:
         print(f"Registry Error: {e}")
-        # Fallback
         return {"T4": {"description": "Fallback", "models": ["local_model"]}}
+
+def get_next_model_dynamic(current_model: str, hierarchy: Dict[str, Any]) -> Optional[str]:
+    """
+    Finds the next tier up from current_model and picks a random model from it.
+    """
+    # 1. Identify current tier
+    current_tier = None
+    for tier, data in hierarchy.items():
+        if current_model in data["models"]:
+            current_tier = tier
+            break
+            
+    if not current_tier:
+        # If model is unknown, assume it's Tier 4 for safety
+        current_tier = "T4"
+        
+    # 2. Find next tier index
+    try:
+        idx = TIER_ORDER.index(current_tier)
+        if idx + 1 < len(TIER_ORDER):
+            next_tier = TIER_ORDER[idx + 1]
+            
+            # 3. Pick random model from next tier if it exists in hierarchy
+            if next_tier in hierarchy:
+                models = hierarchy[next_tier]["models"]
+                return random.choice(models)
+    except ValueError:
+        pass
+        
+    return None
