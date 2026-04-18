@@ -1,7 +1,7 @@
 import asyncio
 import uuid
 import time
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict, Any
 from gads.agents.workers.coder import CodeGeneratorAgent, CoderInput
 from gads.tools.sandbox import SandboxClient, ExecutionResult
 from gads.core.models import Artifact
@@ -13,6 +13,7 @@ class ExecutionManager:
     def __init__(self, sandbox_url: str = "http://localhost:8000"):
         self.coder = CodeGeneratorAgent()
         self.sandbox = SandboxClient(base_url=sandbox_url)
+        self.authoritative_state: Dict[str, Any] = {} # Persistent memory for the project run
 
     async def run_task(
         self, 
@@ -22,7 +23,7 @@ class ExecutionManager:
         session_id: str = "default"
     ) -> Tuple[ExecutionResult, str]:
         """
-        Runs the full loop with strict timeouts and detailed logging.
+        Runs the full loop with State Introspection to prevent hallucinations.
         """
         max_retries = 2
         retry_count = 0
@@ -35,35 +36,36 @@ class ExecutionManager:
             try:
                 # 0. List available files
                 available_files = self.sandbox.list_workspace_files(project_id)
-                print(f"    [Executor] Available files: {available_files}")
-
-                # 1. Generate Code (with timeout)
-                print(f"    [Executor] Calling CodeGenerator ({self.coder.model})...")
-                start_time = time.time()
                 
-                # Add a 60-second timeout to the LLM call to prevent infinite hangs
+                # 1. Generate Code (with state injection)
+                print(f"    [Executor] Calling CodeGenerator with {len(self.authoritative_state)} variables in memory...")
                 coder_res = await asyncio.wait_for(
                     self.coder.run(CoderInput(
                         task_description=task_description,
                         available_files=available_files,
+                        authoritative_state=self.authoritative_state,
                         previous_code=previous_code,
                         error_feedback=error_feedback
                     )),
-                    timeout=60.0
+                    timeout=90.0 # High reasoning models can take time
                 )
                 
-                # NOTE: coder_res is an AgentResponse object. We need to access .content.code
                 current_code = coder_res.content.code
                 
-                print(f"    [Executor] Code generated in {time.time() - start_time:.2f}s")
-                
                 # 2. Execute Code
-                print(f"    [Executor] Sending code to Sandbox (session: {session_id})...")
+                print(f"    [Executor] Sending code to Sandbox...")
                 exec_result = await self.sandbox.execute(current_code, project_id=project_id, session_id=session_id)
 
                 # 3. Handle Result
                 if exec_result.error is None:
                     print(f"    [Executor] ✅ Execution successful.")
+                    
+                    # UPDATE AUTHORITATIVE STATE
+                    # We merge the new kernel state into our memory
+                    if exec_result.kernel_state:
+                        self.authoritative_state.update(exec_result.kernel_state)
+                        print(f"    [Executor] Memory updated. Total variables: {len(self.authoritative_state)}")
+
                     artifact = Artifact(
                         project_id=project_id,
                         type="code_execution",
@@ -83,18 +85,22 @@ class ExecutionManager:
                     retry_count += 1
 
             except asyncio.TimeoutError:
-                print(f"    [Executor] ❌ Code generation timed out after 60s")
+                print(f"    [Executor] ❌ Code generation timed out")
                 return ExecutionResult(
                     stdout="", stderr="", 
                     error={"ename": "TimeoutError", "evalue": "LLM generation timed out"},
-                    execution_time_ms=60000
+                    execution_time_ms=60000,
+                    kernel_state={}
                 ), self.coder.model
             except Exception as e:
                 print(f"    [Executor] ❌ Unexpected error in run_task: {e}")
+                import traceback
+                traceback.print_exc()
                 return ExecutionResult(
                     stdout="", stderr="", 
                     error={"ename": "RuntimeError", "evalue": str(e)},
-                    execution_time_ms=0
+                    execution_time_ms=0,
+                    kernel_state={}
                 ), self.coder.model
 
         return exec_result, self.coder.model

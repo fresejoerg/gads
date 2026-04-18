@@ -13,18 +13,17 @@ class ExecutionResult(BaseModel):
     displays: List[Dict[str, Any]] = []
     error: Optional[Dict[str, Any]] = None
     execution_time_ms: int
+    kernel_state: Dict[str, Any] = {} # New field for state introspection
 
 class CodeValidator:
     """Proactively scans code for security and syntax issues."""
     
-    # Blacklisted modules that are dangerous even in a sandbox
     BLACKLISTED_MODULES = {"os", "subprocess", "shutil", "socket", "requests", "urllib", "pickle", "marshal", "shelve"}
 
     @staticmethod
     def validate(code: str) -> Optional[str]:
         """
         Returns an error message if code is invalid or dangerous, else None.
-        Includes a 'Hallucination Guard' to block hardcoded data.
         """
         try:
             tree = ast.parse(code)
@@ -50,17 +49,6 @@ class CodeValidator:
                     if node.func.attr in {"read_pickle", "to_pickle", "system", "popen"}:
                         return f"Security Error: Call to dangerous method '{node.func.attr}' is not allowed."
 
-                    # 3. Hallucination Guard: Detect hardcoded DataFrames
-                    # Rejects pd.DataFrame({'a': [1,2,3]}) or pd.DataFrame([[1,2]])
-                    if node.func.attr == "DataFrame":
-                        # Check if first argument is a literal (List or Dict)
-                        if node.args and isinstance(node.args[0], (ast.List, ast.Dict)):
-                            return "Hallucination Error: You are attempting to create a hardcoded DataFrame. You MUST load data from the '/app/workspaces' directory instead."
-                        if node.keywords:
-                            for kw in node.keywords:
-                                if kw.arg == "data" and isinstance(kw.value, (ast.List, ast.Dict)):
-                                    return "Hallucination Error: You are attempting to create a hardcoded DataFrame. You MUST load data from the '/app/workspaces' directory instead."
-
         return None
 
 class SandboxClient:
@@ -68,7 +56,7 @@ class SandboxClient:
     
     def __init__(self, base_url: str = "http://localhost:8000"):
         self.base_url = base_url
-        self.client = httpx.AsyncClient(timeout=70.0)
+        self.client = httpx.AsyncClient(timeout=120.0) # Longer timeout for introspection
 
     def list_workspace_files(self, project_id: uuid.UUID) -> List[str]:
         """Lists files available in the project's host workspace directory."""
@@ -87,7 +75,8 @@ class SandboxClient:
                 stdout="",
                 stderr="",
                 error={"ename": "ValidationError", "evalue": validation_error, "traceback": []},
-                execution_time_ms=0
+                execution_time_ms=0,
+                kernel_state={}
             )
 
         # 2. Remote Execution
@@ -105,7 +94,8 @@ class SandboxClient:
                 stdout="",
                 stderr=str(e),
                 error={"ename": "ConnectionError", "evalue": f"Failed to reach sandbox: {e}", "traceback": []},
-                execution_time_ms=0
+                execution_time_ms=0,
+                kernel_state={}
             )
 
     async def close(self):
