@@ -1,0 +1,3 @@
+Create a dataset of 5 random people with names and ages, calculate their average age, and show me a bar chart of their ages.
+
+generate a pandas dataframe of 5 strings where each string is a paragraph from a book about flowers. Then give me a summary story.

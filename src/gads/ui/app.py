@@ -20,18 +20,24 @@ WS_URL = os.getenv("GADS_WS_URL", "ws://localhost:8001/ws")
 async def start():
     cl.user_session.set("last_seq", 0)
     
-    # Initialize Side Panels
-    files_el = cl.Text(name="Workspace Files", content="*(No files yet)*", display="side")
-    files_msg = cl.Message(content="📂 **Workspace Explorer** initialized. Attach files to your prompt to upload them.", elements=[files_el])
-    await files_msg.send()
-    cl.user_session.set("files_msg", files_msg)
+    # Initialize the Unified Project Explorer (Files + Memory)
+    explorer_el = cl.Text(
+        name="📁 Project Explorer", 
+        content="### 📁 Workspace Files\n*(No files yet)*\n\n---\n\n### 🧠 Sandbox Memory\n*(Empty)*", 
+        display="side"
+    )
     
-    mem_el = cl.Text(name="Sandbox Memory", content="*(Empty)*", display="side")
-    mem_msg = cl.Message(content="🧠 **Sandbox State** tracking initialized.", elements=[mem_el])
-    await mem_msg.send()
-    cl.user_session.set("mem_msg", mem_msg)
+    # Store in session
+    cl.user_session.set("explorer_el", explorer_el)
     
-    await cl.Message(content="--- 🚀 GADS: Data Science Rockstar Control Center ---").send()
+    # Send initial message to make the side panel available
+    await cl.Message(
+        content="--- 🚀 GADS: Data Science Rockstar Control Center ---\n\n"
+                "I've initialized your **[📁 Project Explorer]**. "
+                "Open the side panel to see your files and memory state update in real-time.",
+        elements=[explorer_el]
+    ).send()
+    
     asyncio.create_task(ws_listener())
 
 async def ws_listener():
@@ -111,56 +117,53 @@ async def handle_event(event: dict):
         files = payload.get("files", [])
         state = payload.get("state", {})
         
-        # 1. Update Files Panel
-        files_md = "### 📁 Workspace Files\n"
+        # Format Unified Markdown
+        md = "## 📁 Workspace Files\n"
         if not files:
-            files_md += "*(No files)*\n"
-        for f in files:
-            files_md += f"- `{f}`\n"
+            md += "*(No files yet)*\n"
+        else:
+            for f in files:
+                md += f"- `{f}`\n"
         
-        files_el = cl.Text(name="Workspace Files", content=files_md, display="side")
-        files_msg = cl.user_session.get("files_msg")
-        if files_msg:
-            files_msg.elements = [files_el]
-            await files_msg.update()
-
-        # 2. Update Memory Panel
-        mem_md = "### 🧠 Sandbox Memory\n"
+        md += "\n---\n\n## 🧠 Sandbox Memory\n"
         if not state:
-            mem_md += "*(Empty)*\n"
-        for var_name, var_info in state.items():
-            vtype = var_info.get("type", "Unknown")
-            mem_md += f"- **`{var_name}`** (`{vtype}`)\n"
-            if vtype == "DataFrame":
-                mem_md += f"  - Shape: {var_info.get('shape')}\n"
-                # Some columns can be objects, so we convert list to string
-                cols_str = ", ".join([str(c) for c in var_info.get('columns', [])])
-                mem_md += f"  - Cols: [{cols_str}]\n"
-            elif "value" in var_info:
-                val = str(var_info['value'])[:100].replace('\n', ' ')
-                mem_md += f"  - Value: `{val}`\n"
-                
-        mem_el = cl.Text(name="Sandbox Memory", content=mem_md, display="side")
-        mem_msg = cl.user_session.get("mem_msg")
-        if mem_msg:
-            mem_msg.elements = [mem_el]
-            await mem_msg.update()
+            md += "*(Empty)*\n"
+        else:
+            for var_name, var_info in state.items():
+                vtype = var_info.get("type", "Unknown")
+                md += f"- **`{var_name}`** (`{vtype}`)\n"
+                if vtype == "DataFrame":
+                    md += f"  - Shape: {var_info.get('shape')}\n"
+                    cols_str = ", ".join([str(c) for c in var_info.get('columns', [])])
+                    md += f"  - Cols: [{cols_str}]\n"
+                elif "value" in var_info:
+                    val = str(var_info['value'])[:100].replace('\n', ' ')
+                    md += f"  - Value: `{val}`\n"
+        
+        explorer_el = cl.user_session.get("explorer_el")
+        if explorer_el:
+            explorer_el.content = md
+            await explorer_el.update()
 
     elif etype == "STEP_COMPLETED":
         await cl.Message(content=f"✅ {payload['message']}").send()
 
 @cl.on_message
 async def main(message: cl.Message):
-    # Parse attached files
     files = []
     for element in message.elements:
         if isinstance(element, cl.File):
-            files.append({
-                "name": element.name,
-                "content_base64": base64.b64encode(element.content).decode("utf-8")
-            })
+            content = element.content
+            if content is None and element.path:
+                with open(element.path, "rb") as f:
+                    content = f.read()
             
-    # Session Persistence
+            if content:
+                files.append({
+                    "name": element.name,
+                    "content_base64": base64.b64encode(content).decode("utf-8")
+                })
+            
     project_id = cl.user_session.get("current_project_id")
     
     payload = {

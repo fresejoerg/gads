@@ -18,7 +18,8 @@ class ExecutionResult(BaseModel):
 class CodeValidator:
     """Proactively scans code for security and syntax issues."""
     
-    BLACKLISTED_MODULES = {"os", "subprocess", "shutil", "socket", "requests", "urllib", "pickle", "marshal", "shelve"}
+    # Standard DS libraries are allowed. Block system-level access.
+    BLACKLISTED_MODULES = {"subprocess", "shutil", "socket", "requests", "urllib", "pickle", "marshal", "shelve"}
 
     @staticmethod
     def validate(code: str) -> Optional[str]:
@@ -40,13 +41,13 @@ class CodeValidator:
                 if node.module and node.module.split('.')[0] in CodeValidator.BLACKLISTED_MODULES:
                     return f"Security Error: From-Import of '{node.module}' is not allowed."
             
-            # 2. Security: Block dangerous calls
+            # 2. Security: Block dangerous calls (Allow 'open' for DS work)
             if isinstance(node, ast.Call):
                 if isinstance(node.func, ast.Name):
-                    if node.func.id in {"eval", "exec", "open", "compile", "getattr", "setattr"}:
+                    if node.func.id in {"eval", "exec", "compile", "getattr", "setattr"}:
                         return f"Security Error: Use of '{node.func.id}' is not allowed."
                 elif isinstance(node.func, ast.Attribute):
-                    if node.func.attr in {"read_pickle", "to_pickle", "system", "popen"}:
+                    if node.func.attr in {"system", "popen"}:
                         return f"Security Error: Call to dangerous method '{node.func.attr}' is not allowed."
 
         return None
