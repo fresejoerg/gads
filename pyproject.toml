@@ -24,4 +24,5 @@ dependencies = [
     "psycopg2-binary>=2.9.10",
     "chainlit>=2.1.0",
     "websockets>=14.2",
+    "asyncpg>=0.30.0",
 ]

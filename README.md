@@ -48,11 +48,17 @@ cd GADS
 uv sync
 ```
 
-### 3. Running the Demo
+### 4. Running the Demo
 Execute the stateful sandbox demo to see a multi-turn data science workflow (Create -> Analyze -> Plot):
 ```bash
 uv run main.py
 ```
+
+### 5. Running the Control Center UI
+```bash
+uv run chainlit run src/gads/ui/app.py --port 8002
+```
+
 
 ---
 
