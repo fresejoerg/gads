@@ -39,7 +39,6 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             # Filter and save tasks
             valid_tasks = []
             for step in planner_res.content.steps:
-                # Ensure the task is a real data science task and not conversational filler
                 if any(kw in step.description.lower() for kw in ["create", "calculate", "plot", "extract", "analyze", "run", "load"]):
                     new_task = Task(
                         project_id=project_id,
@@ -64,7 +63,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             for task in valid_tasks:
                 print(f"  [Workflow] Claiming task: {task.id}")
                 if hub.claim_task(task.id):
-                    res = await executor.run_task(
+                    # Unpack result and model_used
+                    res, model_used = await executor.run_task(
                         task.description, 
                         project_id=project_id, 
                         session=session, 
@@ -72,14 +72,15 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                     )
                     
                     if res.error:
-                        print(f"  [Workflow] Task {task.id} failed.")
                         hub.fail_task(task.id, res.error.get("evalue", "Unknown error"))
                     else:
-                        print(f"  [Workflow] Task {task.id} completed.")
-                        hub.complete_task(task.id, {"stdout": res.stdout})
+                        # Pass model_used to the completion event
+                        hub.complete_task(task.id, {
+                            "stdout": res.stdout,
+                            "model_used": model_used
+                        })
                         
                         if res.plots:
-                            print(f"  [Workflow] Found plot artifact.")
                             art = Artifact(
                                 project_id=project_id,
                                 type="plot",

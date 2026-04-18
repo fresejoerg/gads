@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from gads.agents.workers.coder import CodeGeneratorAgent, CoderInput
 from gads.tools.sandbox import SandboxClient, ExecutionResult
 from gads.core.models import Artifact
@@ -19,10 +19,11 @@ class ExecutionManager:
         project_id: uuid.UUID, 
         session: Session, 
         session_id: str = "default"
-    ) -> ExecutionResult:
+    ) -> Tuple[ExecutionResult, str]:
         """
         Runs the full loop: Generate -> Validate -> Execute -> (Retry if fail).
         Persists artifacts directly to the database session.
+        Returns (ExecutionResult, model_used).
         """
         max_retries = 2
         retry_count = 0
@@ -54,8 +55,7 @@ class ExecutionManager:
                     agent_id="CodeGenerator"
                 )
                 session.add(artifact)
-                # Note: Caller is responsible for committing or creating Outbox event
-                return exec_result
+                return exec_result, coder_res.model_used
             else:
                 # 4. Feedback Loop
                 ename = exec_result.error.get("ename", "Error")
@@ -66,4 +66,4 @@ class ExecutionManager:
                 previous_code = coder_res.code
                 retry_count += 1
 
-        return exec_result
+        return exec_result, self.coder.model
