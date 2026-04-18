@@ -10,11 +10,12 @@ if not DATABASE_URL:
     raise ValueError("GADS_DATABASE_URL not set in environment")
 
 # Create the engine
-# Note: we don't need connect_args={"check_same_thread": False} for Postgres
 engine = create_engine(DATABASE_URL, echo=False)
 
 def init_db():
     """Create database tables."""
+    # IMPORTANT: Import models here so they are registered with SQLModel.metadata
+    from gads.core.models import Project, Task, Artifact, OutboxEvent
     SQLModel.metadata.create_all(engine)
 
 def get_session():
