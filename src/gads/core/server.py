@@ -8,6 +8,7 @@ from gads.core.execution_hub import watchdog_loop, ExecutionHub
 from gads.core.database import init_db, engine
 from gads.core.models import Project, Task, Artifact
 from gads.agents.planner import DataSciencePlanner, PlannerInput
+from gads.agents.workers.synthesizer import SynthesizerAgent, SynthesizerInput
 from gads.core.executor import ExecutionManager
 from sqlmodel import select, Session
 
@@ -28,6 +29,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             hub = ExecutionHub(session)
             executor = ExecutionManager()
             planner = DataSciencePlanner()
+            synthesizer = SynthesizerAgent()
             
             # 1. Planning
             print(f"  [Planner] Analyzing objective: {objective}")
@@ -35,19 +37,19 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             session.commit()
             
             planner_res = await planner.run(PlannerInput(objective=objective))
-            print(f"  [Planner] Created {len(planner_res.content.steps)} steps.")
             
-            # Save all tasks produced by the planner
+            # Save all tasks
             valid_tasks = []
             for step in planner_res.content.steps:
-                new_task = Task(
-                    project_id=project_id,
-                    description=step.description,
-                    assigned_to=step.assigned_to,
-                    status="pending"
-                )
-                session.add(new_task)
-                valid_tasks.append(new_task)
+                if any(kw in step.description.lower() for kw in ["create", "calculate", "plot", "extract", "analyze", "run", "load"]):
+                    new_task = Task(
+                        project_id=project_id,
+                        description=step.description,
+                        assigned_to=step.assigned_to,
+                        status="pending"
+                    )
+                    session.add(new_task)
+                    valid_tasks.append(new_task)
             
             session.commit()
             
@@ -60,11 +62,10 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             session.commit()
 
             # 2. Sequential Execution
-            print(f"  [Executor] Beginning execution of {len(valid_tasks)} tasks...")
+            context_summary = []
             for task in valid_tasks:
-                print(f"  [Executor] Processing: {task.description[:50]}...")
+                print(f"  [Executor] Claiming task: {task.id}")
                 if hub.claim_task(task.id):
-                    # Unpack result and model_used
                     res, model_used = await executor.run_task(
                         task.description, 
                         project_id=project_id, 
@@ -73,17 +74,13 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                     )
                     
                     if res.error:
-                        print(f"  [Executor] ❌ Task {task.id} failed: {res.error.get('evalue')}")
                         hub.fail_task(task.id, res.error.get("evalue", "Unknown error"))
+                        context_summary.append(f"Task '{task.description}' failed with error: {res.error.get('evalue')}")
                     else:
-                        print(f"  [Executor] ✅ Task {task.id} complete ({model_used}).")
-                        hub.complete_task(task.id, {
-                            "stdout": res.stdout,
-                            "model_used": model_used
-                        })
+                        hub.complete_task(task.id, {"stdout": res.stdout, "model_used": model_used})
+                        context_summary.append(f"Task '{task.description}' completed. Output: {res.stdout[:200]}...")
                         
                         if res.plots:
-                            print(f"  [Executor] 🎨 Found plot artifact.")
                             art = Artifact(
                                 project_id=project_id,
                                 type="plot",
@@ -94,7 +91,6 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                             session.add(art)
                             session.commit()
                             session.refresh(art)
-                            
                             hub.create_outbox_event("ARTIFACT_CREATED", {
                                 "type": "plot",
                                 "description": art.description,
@@ -102,12 +98,27 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                             })
                     session.commit()
 
-            print(f"--- ✅ Workflow for Project {project_id} Complete ---\n")
+            # 3. Final Synthesis
+            print(f"  [Synthesizer] Generating final story...")
+            hub.create_outbox_event("STEP_STARTED", {"message": "Lead Data Scientist is synthesizing the results..."})
+            session.commit()
+
+            synth_res = await synthesizer.run(SynthesizerInput(
+                objective=objective,
+                context_artifacts="\n".join(context_summary)
+            ))
+            
+            hub.create_outbox_event("WORKFLOW_FINAL_RESULT", {
+                "narrative": synth_res.content.narrative,
+                "takeaways": synth_res.content.key_takeaways
+            })
+            session.commit()
+
             hub.create_outbox_event("STEP_COMPLETED", {"message": "Project workflow complete."})
             session.commit()
             
     except Exception as e:
-        print(f"❌ FATAL ERROR in run_agent_workflow: {e}")
+        print(f"ERROR in run_agent_workflow: {e}")
         traceback.print_exc()
 
 @app.websocket("/ws")

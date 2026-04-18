@@ -60,10 +60,16 @@ async def handle_event(event: dict):
     elif etype == "TASK_COMPLETED":
         step = cl.user_session.get(f"step_{payload['task_id']}")
         if step:
-            # Show the model used in the step title
             model = payload.get("result", {}).get("model_used", "unknown-model")
             step.name = f"Task Completed ({model})"
             step.output = f"Result:\n```\n{payload['result'].get('stdout', '')}\n```"
+            await step.update()
+
+    elif etype == "TASK_FAILED":
+        step = cl.user_session.get(f"step_{payload['task_id']}")
+        if step:
+            step.name = "Task Failed ❌"
+            step.output = f"Error:\n```\n{payload.get('error', 'Unknown error')}\n```"
             await step.update()
             
     elif etype == "ARTIFACT_CREATED":
@@ -73,6 +79,15 @@ async def handle_event(event: dict):
             await cl.Message(content=f"🎨 **Visualization**: {payload['description']}", elements=[image]).send()
         else:
             await cl.Message(content=f"📝 **Artifact**: {payload['description']}").send()
+
+    elif etype == "WORKFLOW_FINAL_RESULT":
+        # Display the story as a main message
+        content = f"### 📖 The Story\n\n{payload['narrative']}\n\n"
+        if payload.get("takeaways"):
+            content += "**Key Takeaways:**\n"
+            for t in payload["takeaways"]:
+                content += f"- {t}\n"
+        await cl.Message(content=content).send()
 
     elif etype == "STEP_COMPLETED":
         await cl.Message(content=f"✅ {payload['message']}").send()
