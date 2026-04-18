@@ -27,6 +27,7 @@ class ProjectCreateRequest(BaseModel):
     name: str
     objective: str
     files: List[FileUpload] = []
+    existing_project_id: Optional[str] = None
 
 @app.on_event("startup")
 async def startup_event():
@@ -200,22 +201,29 @@ async def websocket_endpoint(websocket: WebSocket, last_seq: int = 0):
 @app.post("/projects", response_model=Project)
 async def create_project(req: ProjectCreateRequest, background_tasks: BackgroundTasks):
     with Session(engine) as session:
-        project = Project(name=req.name, objective=req.objective)
-        session.add(project)
-        session.commit()
-        session.refresh(project)
+        if req.existing_project_id:
+            project = session.get(Project, uuid.UUID(req.existing_project_id))
+            if not project:
+                raise HTTPException(status_code=404, detail="Session project not found")
+            print(f"  [Server] Re-using existing project session: {project.id}", flush=True)
+        else:
+            project = Project(name=req.name, objective=req.objective)
+            session.add(project)
+            session.commit()
+            session.refresh(project)
+            print(f"  [Server] Created new project session: {project.id}", flush=True)
         
-        # Save files to workspace directory
+        # Save files to workspace directory (persistent across messages)
         if req.files:
-            # Note: we use {project.id}_{project.id} to match Sandbox session format
             workspace_dir = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project.id}_{project.id}"
             os.makedirs(workspace_dir, exist_ok=True)
             for f in req.files:
                 file_path = os.path.join(workspace_dir, f.name)
-                print(f"  [Server] Saving uploaded file: {file_path}", flush=True)
+                print(f"  [Server] Saving/Updating file: {file_path}", flush=True)
                 with open(file_path, "wb") as out:
                     out.write(base64.b64decode(f.content_base64))
         
+        # Trigger the workflow for the objective (appends tasks if project exists)
         background_tasks.add_task(run_agent_workflow, project.id, req.objective)
         return project
 

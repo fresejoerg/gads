@@ -158,14 +158,25 @@ async def main(message: cl.Message):
                 "content_base64": base64.b64encode(element.content).decode("utf-8")
             })
             
+    # Check for existing project session
+    project_id = cl.user_session.get("current_project_id")
+    
     payload = {
-        "name": "User Project",
+        "name": "Chat Session Project",
         "objective": message.content,
-        "files": files
+        "files": files,
+        "existing_project_id": str(project_id) if project_id else None
     }
 
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    async with httpx.AsyncClient(timeout=120.0) as client:
         try:
-            await client.post(f"{BACKEND_URL}/projects", json=payload)
+            resp = await client.post(f"{BACKEND_URL}/projects", json=payload)
+            resp.raise_for_status()
+            project_data = resp.json()
+            
+            # Store the ID for follow-up messages
+            if not project_id:
+                cl.user_session.set("current_project_id", project_data["id"])
+                
         except Exception as e:
-            await cl.Message(content=f"Error initializing project: {e}").send()
+            await cl.Message(content=f"Error communicating with backend: {e}").send()
