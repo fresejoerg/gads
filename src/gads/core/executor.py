@@ -47,11 +47,14 @@ class ExecutionManager:
                     timeout=60.0
                 )
                 
+                # NOTE: coder_res is an AgentResponse object. We need to access .content.code
+                current_code = coder_res.content.code
+                
                 print(f"    [Executor] Code generated in {time.time() - start_time:.2f}s")
                 
                 # 2. Execute Code
                 print(f"    [Executor] Sending code to Sandbox (session: {session_id})...")
-                exec_result = await self.sandbox.execute(coder_res.code, project_id=project_id, session_id=session_id)
+                exec_result = await self.sandbox.execute(current_code, project_id=project_id, session_id=session_id)
 
                 # 3. Handle Result
                 if exec_result.error is None:
@@ -60,7 +63,7 @@ class ExecutionManager:
                         project_id=project_id,
                         type="code_execution",
                         description=f"Execution result for: {task_description}",
-                        content_json={"code": coder_res.code, "stdout": exec_result.stdout},
+                        content_json={"code": current_code, "stdout": exec_result.stdout},
                         agent_id="CodeGenerator"
                     )
                     session.add(artifact)
@@ -71,7 +74,7 @@ class ExecutionManager:
                     print(f"    [Executor] ❌ Execution failed: {ename}")
                     
                     error_feedback = f"{ename}: {evalue}"
-                    previous_code = coder_res.code
+                    previous_code = current_code
                     retry_count += 1
 
             except asyncio.TimeoutError:
