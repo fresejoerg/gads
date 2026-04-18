@@ -60,7 +60,7 @@ class SandboxClient:
 
     def list_workspace_files(self, project_id: uuid.UUID) -> List[str]:
         """Lists files available in the project's host workspace directory."""
-        host_path = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project_id}"
+        host_path = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project_id}_{project_id}"
         if not os.path.exists(host_path):
             return []
         return os.listdir(host_path)

@@ -3,8 +3,10 @@ import uuid
 import traceback
 import json
 import base64
-from typing import List
+import os
+from typing import List, Dict, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
+from pydantic import BaseModel
 from gads.core.bus import bus, dispatcher_loop
 from gads.core.execution_hub import watchdog_loop, ExecutionHub
 from gads.core.database import init_db, engine
@@ -16,6 +18,15 @@ from gads.core.registry import get_model_hierarchy
 from sqlmodel import select, Session
 
 app = FastAPI(title="GADS Core API")
+
+class FileUpload(BaseModel):
+    name: str
+    content_base64: str
+
+class ProjectCreateRequest(BaseModel):
+    name: str
+    objective: str
+    files: List[FileUpload] = []
 
 @app.on_event("startup")
 async def startup_event():
@@ -187,13 +198,25 @@ async def websocket_endpoint(websocket: WebSocket, last_seq: int = 0):
         bus.disconnect(websocket)
 
 @app.post("/projects", response_model=Project)
-async def create_project(name: str, objective: str, background_tasks: BackgroundTasks):
+async def create_project(req: ProjectCreateRequest, background_tasks: BackgroundTasks):
     with Session(engine) as session:
-        project = Project(name=name, objective=objective)
+        project = Project(name=req.name, objective=req.objective)
         session.add(project)
         session.commit()
         session.refresh(project)
-        background_tasks.add_task(run_agent_workflow, project.id, objective)
+        
+        # Save files to workspace directory
+        if req.files:
+            # Note: we use {project.id}_{project.id} to match Sandbox session format
+            workspace_dir = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project.id}_{project.id}"
+            os.makedirs(workspace_dir, exist_ok=True)
+            for f in req.files:
+                file_path = os.path.join(workspace_dir, f.name)
+                print(f"  [Server] Saving uploaded file: {file_path}", flush=True)
+                with open(file_path, "wb") as out:
+                    out.write(base64.b64decode(f.content_base64))
+        
+        background_tasks.add_task(run_agent_workflow, project.id, req.objective)
         return project
 
 @app.get("/health")

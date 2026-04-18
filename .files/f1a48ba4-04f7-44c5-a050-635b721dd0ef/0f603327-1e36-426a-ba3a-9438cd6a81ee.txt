@@ -1,0 +1,23 @@
+### 📁 Workspace Files
+*(No files)*
+
+### 🧠 Sandbox Memory
+- **`In`** (`list`)
+  - Value: `['', "import matplotlib\nimport matplotlib.pyplot as plt\nmatplotlib.use('Agg')\nget_ipython().run_l`
+- **`Out`** (`dict`)
+  - Value: `{}`
+- **`matplotlib`** (`module`)
+- **`plt`** (`module`)
+- **`pd`** (`module`)
+- **`np`** (`module`)
+- **`sns`** (`module`)
+- **`os`** (`module`)
+- **`random`** (`module`)
+- **`names`** (`list`)
+  - Value: `['Alice Johnson', 'Michael Chen', 'Sarah Williams', 'David Martinez', 'Emma Davis']`
+- **`ages`** (`list`)
+  - Value: `[47, 31, 80, 28, 70]`
+- **`df`** (`DataFrame`)
+  - Shape: [5, 2]
+  - Cols: ['name', 'age']
+- **`json`** (`module`)
