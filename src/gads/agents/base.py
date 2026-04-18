@@ -6,7 +6,7 @@ from gads.core.llm import get_structured_completion
 TIn = TypeVar("TIn", bound=BaseModel)
 TOut = TypeVar("TOut", bound=BaseModel)
 
-class AgentResponse(Generic[TOut]):
+class AgentResponse(BaseModel, Generic[TOut]):
     """Wrapper for agent output that includes metadata."""
     content: TOut
     model_used: str
