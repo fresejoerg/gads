@@ -33,6 +33,10 @@ class ExecutionManager:
             print(f"    [Executor] --- Step {retry_count + 1} for: {task_description[:30]}... ---")
             
             try:
+                # 0. List available files
+                available_files = self.sandbox.list_workspace_files(project_id)
+                print(f"    [Executor] Available files: {available_files}")
+
                 # 1. Generate Code (with timeout)
                 print(f"    [Executor] Calling CodeGenerator ({self.coder.model})...")
                 start_time = time.time()
@@ -41,6 +45,7 @@ class ExecutionManager:
                 coder_res = await asyncio.wait_for(
                     self.coder.run(CoderInput(
                         task_description=task_description,
+                        available_files=available_files,
                         previous_code=previous_code,
                         error_feedback=error_feedback
                     )),

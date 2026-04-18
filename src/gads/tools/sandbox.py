@@ -24,6 +24,7 @@ class CodeValidator:
     def validate(code: str) -> Optional[str]:
         """
         Returns an error message if code is invalid or dangerous, else None.
+        Includes a 'Hallucination Guard' to block hardcoded data.
         """
         try:
             tree = ast.parse(code)
@@ -31,7 +32,7 @@ class CodeValidator:
             return f"Syntax Error: {e.msg} at line {e.lineno}"
 
         for node in ast.walk(tree):
-            # Check imports
+            # 1. Security: Block dangerous imports
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name.split('.')[0] in CodeValidator.BLACKLISTED_MODULES:
@@ -40,16 +41,25 @@ class CodeValidator:
                 if node.module and node.module.split('.')[0] in CodeValidator.BLACKLISTED_MODULES:
                     return f"Security Error: From-Import of '{node.module}' is not allowed."
             
-            # Check calls (e.g., eval, exec)
+            # 2. Security: Block dangerous calls
             if isinstance(node, ast.Call):
-                # Handle direct calls like eval()
                 if isinstance(node.func, ast.Name):
                     if node.func.id in {"eval", "exec", "open", "compile", "getattr", "setattr"}:
                         return f"Security Error: Use of '{node.func.id}' is not allowed."
-                # Handle attribute calls like pandas.read_pickle()
                 elif isinstance(node.func, ast.Attribute):
                     if node.func.attr in {"read_pickle", "to_pickle", "system", "popen"}:
                         return f"Security Error: Call to dangerous method '{node.func.attr}' is not allowed."
+
+                    # 3. Hallucination Guard: Detect hardcoded DataFrames
+                    # Rejects pd.DataFrame({'a': [1,2,3]}) or pd.DataFrame([[1,2]])
+                    if node.func.attr == "DataFrame":
+                        # Check if first argument is a literal (List or Dict)
+                        if node.args and isinstance(node.args[0], (ast.List, ast.Dict)):
+                            return "Hallucination Error: You are attempting to create a hardcoded DataFrame. You MUST load data from the '/app/workspaces' directory instead."
+                        if node.keywords:
+                            for kw in node.keywords:
+                                if kw.arg == "data" and isinstance(kw.value, (ast.List, ast.Dict)):
+                                    return "Hallucination Error: You are attempting to create a hardcoded DataFrame. You MUST load data from the '/app/workspaces' directory instead."
 
         return None
 
@@ -59,6 +69,13 @@ class SandboxClient:
     def __init__(self, base_url: str = "http://localhost:8000"):
         self.base_url = base_url
         self.client = httpx.AsyncClient(timeout=70.0)
+
+    def list_workspace_files(self, project_id: uuid.UUID) -> List[str]:
+        """Lists files available in the project's host workspace directory."""
+        host_path = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project_id}"
+        if not os.path.exists(host_path):
+            return []
+        return os.listdir(host_path)
 
     async def execute(self, code: str, project_id: uuid.UUID, session_id: str = "default") -> ExecutionResult:
         """Validates and executes code in the sandbox, isolated by project."""
@@ -74,7 +91,6 @@ class SandboxClient:
             )
 
         # 2. Remote Execution
-        # Note: we use (project_id + session_id) to create a unique kernel namespace
         internal_session_id = f"{project_id}_{session_id}"
         
         try:

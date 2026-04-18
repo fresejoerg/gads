@@ -1,0 +1,34 @@
+You are a world-class systems architect and security researcher.
+I am building a "Data Science Rockstar" multi-agent system.
+The system is suffering from "hallucinations" where agents invent data instead of using what is provided.
+I am proposing a **Workspace Filesystem** architecture to enforce data constraints.
+
+PLAN:
+---
+# Objective
+Eliminate "hallucinations" in the GADS multi-agent system by implementing a strict **Workspace Filesystem** and hard-coded data-usage constraints. Sub-agents must operate *only* on data explicitly provided by the user or generated in previous steps, operating within an isolated, project-specific directory.
+
+# Proposed Architecture
+1. **Workspace Filesystem**: 
+   - A unique host directory `/data/workspaces/{project_id}` for every project.
+   - This directory is mounted into the Sandbox Docker container at `/workspace`.
+   - All file uploads (CSVs, etc.) go here.
+2. **Dynamic Context Injection**:
+   - For every task, the system runs `os.listdir('/workspace')` and injects the file list into the agent's prompt.
+   - Example prompt: "Available files in /workspace: ['data.csv']. You MUST use these files. Do not invent data."
+3. **Strict Worker Prompts**:
+   - The CodeGenerator is explicitly forbidden from using `import os` (blocked by AST) but is told its working directory *is* `/workspace`.
+   - It is forbidden from generating mock data.
+
+# Execution Flow
+- User uploads `sales.csv`.
+- Planner: "Summarize sales.csv".
+- Executor: Injects `['sales.csv']` list and directory path.
+- Coder: Writes `pd.read_csv('/workspace/sales.csv')`.
+---
+
+Please identify:
+1. **Concurrency/Race Conditions**: What happens if two agents try to write to the same file in the same project workspace?
+2. **Security**: Is a shared volume mount at `/workspace` sufficient isolation?
+3. **Robustness**: How can we ensure the agent doesn't just bypass the prompt instructions if the local model is "lazy"?
+4. **Implementation Risks**: Any issues with dynamic mounting in Docker during runtime?

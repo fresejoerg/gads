@@ -9,6 +9,7 @@ class CoderOutput(BaseModel):
 
 class CoderInput(BaseModel):
     task_description: str
+    available_files: List[str] = []
     previous_code: Optional[str] = None
     error_feedback: Optional[str] = None
     dataset_summary: Optional[str] = None
@@ -17,10 +18,10 @@ CODER_SYSTEM_PROMPT = """
 You are an expert Data Science Python Developer. 
 Your goal is to write clean, efficient, and correct Python code to solve the user's task.
 
-RULES:
-1. Assume you are running in a stateful IPython kernel. Variables from 'previous_code' are already in memory.
-2. DO NOT import 'os', 'subprocess', or other dangerous modules.
-3. Focus on 'pandas', 'numpy', 'matplotlib', and 'seaborn'.
+STRICT DATA RULES:
+1. NO HALLUCINATIONS: Do not generate mock data. 
+2. DATA PROVENANCE: You MUST load data from the files listed in 'available_files'.
+3. WORKING DIRECTORY: Your working directory is already set to the workspace root. Use relative paths for local files.
 4. If 'error_feedback' is provided, fix the bug in your new code.
 5. Always provide a complete, runnable code block for the CURRENT step.
 """
