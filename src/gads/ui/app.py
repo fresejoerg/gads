@@ -96,6 +96,40 @@ async def handle_event(event: dict):
                 content += f"- {t}\n"
         await cl.Message(content=content).send()
 
+    elif etype == "STATE_UPDATED":
+        files = payload.get("files", [])
+        state = payload.get("state", {})
+        
+        md = "### 📁 Workspace Files\n"
+        if not files:
+            md += "*(No files)*\n"
+        for f in files:
+            md += f"- `{f}`\n"
+        
+        md += "\n### 🧠 Sandbox Memory\n"
+        if not state:
+            md += "*(Empty)*\n"
+        for var_name, var_info in state.items():
+            vtype = var_info.get("type", "Unknown")
+            md += f"- **`{var_name}`** (`{vtype}`)\n"
+            if vtype == "DataFrame":
+                md += f"  - Shape: {var_info.get('shape')}\n"
+                md += f"  - Cols: {var_info.get('columns')}\n"
+            elif "value" in var_info:
+                val = str(var_info['value'])[:100].replace('\n', ' ')
+                md += f"  - Value: `{val}`\n"
+                
+        text_el = cl.Text(name="Workspace State", content=md, display="side")
+        
+        state_step = cl.user_session.get("state_step")
+        if not state_step:
+            state_step = cl.Message(content="🔍 Open **Workspace State** in the side panel to see live files and memory.", elements=[text_el])
+            await state_step.send()
+            cl.user_session.set("state_step", state_step)
+        else:
+            state_step.elements = [text_el]
+            await state_step.update()
+
     elif etype == "STEP_COMPLETED":
         await cl.Message(content=f"✅ {payload['message']}").send()
 

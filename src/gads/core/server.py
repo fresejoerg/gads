@@ -119,6 +119,13 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                         print(f"  [Executor] ✅ Success.")
                         hub.complete_task(task_id, {"stdout": res.stdout, "model_used": model_used})
                         
+                        # EMIT LIVE STATE UPDATE
+                        files = executor.sandbox.list_workspace_files(project_id)
+                        hub.create_outbox_event("STATE_UPDATED", {
+                            "files": files,
+                            "state": executor.authoritative_state
+                        })
+                        
                         if res.plots:
                             art = Artifact(
                                 project_id=project_id,
