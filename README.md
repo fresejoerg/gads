@@ -1,54 +1,72 @@
-# GADS
+# GADS: Generative-augmented Data Science
 
-## GADS = Generative-augmented Data Science.
+## The "Data Science Rockstar" Multi-Agent System
 
-### A repo for developing and sharing Data Science tools and methods that utilize generative AI capabilities
+GADS is a repository for developing highly capable, multi-agent systems designed to act as an end-to-end Data Science copilot. The system utilizes a **Planner-Executor-Blackboard** architecture to orchestrate specialized sub-agents for tasks ranging from exploratory data analysis (EDA) and visualization to complex NLP extraction and model training.
 
-This repo is motivated by the observation that the advent of current generative capabilities has had a significant impact on the practice of Data Science in real-life applications, especially, but not exclusively, in the area of NLP. While it is perhaps not surprising that LLMs have revolutionized the field of Natural Language Processing, questions also arise with respect to the effects pre-trained foundation models are having and can have on other aspects of Data Science and Statistical Data Analysis.
+### Core Philosophy: "Local First, Hybrid Ready"
+A foundational requirement of GADS is the ability to run on **local LLMs** (via LM Studio, Ollama, etc.) while leveraging high-powered remote models (Claude 4.7, Gemini 3.1) for high-level planning and orchestration.
 
-In this repo I am exploring what these effects are and how they can be systematically leveraged. The repo is not a software library nor does it attempt to be in any way comprehensive. It is a personal project that others may or may not find interesting.
+---
 
-I am organizing the content to align with the major components of the field of Data Science:
+## Architecture
 
- 1. Data Management: This includes all aspects of preparing the data to be analyzed, including Exploratory Data Analysis (EDA)
- 2. Modeling: the algorithmic processing of data sets in order to identify and express patterns
- 3. Application: the utilization of the fully processed data in order to achieve a desired outcome. This ranges from business strategies being influenced by high-level observations to the production deployment of trained ML models.
+The system is built on a custom, lightweight framework using **LiteLLM**, **Pydantic**, and **Instructor**:
 
-I will not proceed in any kind of planned sequence and am most certainly going to be jumping around between topics.
+1.  **Project Manager (The Planner)**: A high-reasoning agent that decomposes user objectives into a deterministic Directed Acyclic Graph (DAG) of tasks.
+2.  **Specialized Workers (The Sub-Agents)**:
+    *   `NLPExtractor`: Precision entity and structured data extraction.
+    *   `DataViz`: (In Progress) Specialized in generating visualization code.
+    *   `CodeRunner`: (In Progress) Safe, sandboxed Python execution for data processing.
+3.  **The Blackboard**: A central Pydantic-based state repository where all agents store and retrieve artifacts, preventing context window bloat and ensuring data integrity.
+4.  **Instructor Integration**: Uses the `instructor` library with `MD_JSON` mode to ensure local models strictly adhere to Pydantic schemas through automatic retries and validation.
 
-## Google AI Overview
+---
 
-Generative AI enhances classical Data Science by generating synthetic data, automating code/documentation, improving feature engineering, and enabling natural language interfaces for data discovery, while also augmenting traditional models for better predictions (e.g., in fraud detection or medical imaging) by filling data gaps or creating complex data pipelines, ultimately boosting efficiency and innovation in the analytics lifecycle. [1, 2, 3, 4, 5]  
-Key Applications 
+## Project Structure
 
-1. Data Augmentation & Generation: Creates synthetic data (images, text, time-series) to overcome scarcity, especially for rare events (e.g., medical data), improving classical model training. 
-2. Feature Engineering & Enrichment: Discovers hidden patterns to suggest new features, enriches datasets with metadata, and automates data preparation (ETL). 
-3. Code & Task Automation: Generates Python/SQL code, creates documentation, automates report generation, and assists with debugging, boosting data scientist productivity. 
-4. Enhanced Data Discovery: Uses natural language to query data, allowing users to ask questions and get insights without complex coding. 
-5. Hybrid Modeling: Combines traditional ML (for prediction) with GenAI (for context/generation), like using GenAI to create realistic scenarios for fraud detection or to provide context around ML predictions. 
-6. Model Building: Can assist in designing, training, and evaluating classical ML models by taking instructions and data to build and test them. 
-7. Personalization & Business Intelligence: Generates tailored marketing content and assists in creating dynamic visualizations and summaries for faster decision-making. [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]  
+- `src/gads/core/`: Foundation logic (LLM connectors, Blackboard state).
+- `src/gads/agents/`: Agent definitions (Base class, Planner).
+- `src/gads/agents/workers/`: Specialized sub-agent implementations.
+- `src/gads/tools/`: Functional tools and execution environments.
 
-How it Works with Classical ML 
+---
 
-• Bridging Gaps: Generative AI fills gaps where traditional data collection is hard (e.g., rare diseases). 
-• Deepening Insights: Extracts complex, unstructured information (like metadata from documents) for structured feature use in classic models. 
-• Improving Workflow: Acts as a copilot for data scientists, automating tedious tasks while focusing on core ML problems. [2, 3, 5, 10, 12]  
+## Getting Started
 
-In essence, GenAI augments, rather than replaces, traditional ML, allowing for broader problem-solving and deeper insights by making data handling more efficient and models more robust. [4, 13]  
+### 1. Prerequisites
+*   [MyLocalStack](https://github.com/deepfrese/MyLocalStack) running (LiteLLM proxy on port 4000).
+*   **uv** Python package manager installed.
 
-AI responses may include mistakes.
+### 2. Installation
+```bash
+git clone git@codeberg.org:deepfrese/GADS.git
+cd GADS
+uv sync
+```
 
-[1] https://www.snowflake.com/en/fundamentals/generative-ai-architecture-models-applications/
-[2] https://www.usdsi.org/data-science-insights/the-data-science-method-and-generative-ai
-[3] https://odsc.medium.com/5-use-cases-for-generative-ai-in-data-analytics-26a91238dbc8
-[4] https://www.transorg.ai/blog/why-classical-machine-learning-still-matters-in-a-generative-ai-world/
-[5] https://www.researchgate.net/post/How_Can_the_Application_of_Generative_AI_Improve_and_Evolve_Traditional_Machine_Learning_Techniques
-[6] https://www.snowflake.com/en/fundamentals/generative-ai/
-[7] https://www.analytics8.com/blog/6-use-cases-for-generative-ai/
-[8] https://www.aimpointdigital.com/blog/ai-application-planning-choosing-between-traditional-ml-and-generative-ai
-[9] https://www.exasol.com/blog/generative-ai-in-data-analytics/
-[10] https://medium.com/data-reply-it-datatech/genai-vs-classical-ml-get-the-best-of-both-worlds-3546d3b36528
-[11] https://mitsloan.mit.edu/ideas-made-to-matter/machine-learning-and-generative-ai-what-are-they-good-for
-[12] https://www.youtube.com/watch?v=5BtHm_Sx34U
-[13] https://iianalytics.com/community/blog/genai-is-reshaping-data-science-teams
+### 3. Configuration
+Create a `.env` file in the root directory (see `.env.example`):
+```bash
+LITELLM_BASE_URL=http://localhost:4000/v1
+LITELLM_MASTER_KEY=sk-1234
+ANTHROPIC_API_KEY=your_key_here
+GEMINI_API_KEY=your_key_here
+```
+
+### 4. Running the Demo
+Execute the main entry point to see the Planner and NLP Worker in action:
+```bash
+uv run main.py
+```
+
+---
+
+## Development Roadmap
+
+- [x] Foundation: custom multi-agent orchestration.
+- [x] Planner-Worker-Blackboard architecture.
+- [x] Reliable structured output for local models via Instructor.
+- [ ] Implement `DataVizAgent` for automatic chart generation.
+- [ ] Implement `Sandbox` for safe Python code execution.
+- [ ] Full automated Executor loop for multi-step DAGs.

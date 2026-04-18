@@ -1,0 +1,17 @@
+# Environment and caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.dspy_cache/
+.DS_Store
+.env
+*.log
+
+# IDEs
+.vscode/
+.idea/
+
+# Data and artifacts
+data/
+artifacts/

@@ -1,0 +1,7 @@
+model_list:
+  - model_name: lm-studio-model
+    litellm_params:
+      model: openai/local-model
+      # CHANGED: Added http://, port :1234, and /v1
+      api_base: "http://host.docker.internal:1234/v1" 
+      api_key: lm-studio
