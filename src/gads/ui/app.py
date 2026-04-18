@@ -133,7 +133,9 @@ async def handle_event(event: dict):
             mem_md += f"- **`{var_name}`** (`{vtype}`)\n"
             if vtype == "DataFrame":
                 mem_md += f"  - Shape: {var_info.get('shape')}\n"
-                mem_md += f"  - Cols: {var_info.get('columns')}\n"
+                # Some columns can be objects, so we convert list to string
+                cols_str = ", ".join([str(c) for c in var_info.get('columns', [])])
+                mem_md += f"  - Cols: [{cols_str}]\n"
             elif "value" in var_info:
                 val = str(var_info['value'])[:100].replace('\n', ' ')
                 mem_md += f"  - Value: `{val}`\n"
@@ -158,7 +160,7 @@ async def main(message: cl.Message):
                 "content_base64": base64.b64encode(element.content).decode("utf-8")
             })
             
-    # Check for existing project session
+    # Session Persistence
     project_id = cl.user_session.get("current_project_id")
     
     payload = {
@@ -173,10 +175,7 @@ async def main(message: cl.Message):
             resp = await client.post(f"{BACKEND_URL}/projects", json=payload)
             resp.raise_for_status()
             project_data = resp.json()
-            
-            # Store the ID for follow-up messages
             if not project_id:
                 cl.user_session.set("current_project_id", project_data["id"])
-                
         except Exception as e:
             await cl.Message(content=f"Error communicating with backend: {e}").send()

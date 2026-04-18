@@ -60,7 +60,7 @@ class SandboxClient:
 
     def list_workspace_files(self, project_id: uuid.UUID) -> List[str]:
         """Lists files available in the project's host workspace directory."""
-        host_path = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project_id}_{project_id}"
+        host_path = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project_id}"
         if not os.path.exists(host_path):
             return []
         return os.listdir(host_path)
@@ -79,13 +79,11 @@ class SandboxClient:
                 kernel_state={}
             )
 
-        # 2. Remote Execution
-        internal_session_id = f"{project_id}_{session_id}"
-        
+        # 2. Remote Execution (Session ID is just the project ID for simple isolation)
         try:
             response = await self.client.post(
                 f"{self.base_url}/execute",
-                json={"code": code, "session_id": internal_session_id}
+                json={"code": code, "session_id": str(project_id)}
             )
             response.raise_for_status()
             return ExecutionResult(**response.json())

@@ -215,7 +215,7 @@ async def create_project(req: ProjectCreateRequest, background_tasks: Background
         
         # Save files to workspace directory (persistent across messages)
         if req.files:
-            workspace_dir = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project.id}_{project.id}"
+            workspace_dir = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project.id}"
             os.makedirs(workspace_dir, exist_ok=True)
             for f in req.files:
                 file_path = os.path.join(workspace_dir, f.name)
