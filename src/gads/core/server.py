@@ -21,7 +21,7 @@ async def startup_event():
 
 async def run_agent_workflow(project_id: uuid.UUID, objective: str):
     """Orchestrates the multi-agent workflow for a project."""
-    print(f"--- Starting Workflow for Project {project_id} ---")
+    print(f"\n--- 🚀 Starting Workflow for Project {project_id} ---")
     
     try:
         with Session(engine) as session:
@@ -30,24 +30,24 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             planner = DataSciencePlanner()
             
             # 1. Planning
-            print(f"  [Workflow] Planning for objective: {objective}")
+            print(f"  [Planner] Analyzing objective: {objective}")
             hub.create_outbox_event("STEP_STARTED", {"message": "Project Manager is planning the objective..."})
             session.commit()
             
             planner_res = await planner.run(PlannerInput(objective=objective))
+            print(f"  [Planner] Created {len(planner_res.content.steps)} steps.")
             
-            # Filter and save tasks
+            # Save all tasks produced by the planner
             valid_tasks = []
             for step in planner_res.content.steps:
-                if any(kw in step.description.lower() for kw in ["create", "calculate", "plot", "extract", "analyze", "run", "load"]):
-                    new_task = Task(
-                        project_id=project_id,
-                        description=step.description,
-                        assigned_to=step.assigned_to,
-                        status="pending"
-                    )
-                    session.add(new_task)
-                    valid_tasks.append(new_task)
+                new_task = Task(
+                    project_id=project_id,
+                    description=step.description,
+                    assigned_to=step.assigned_to,
+                    status="pending"
+                )
+                session.add(new_task)
+                valid_tasks.append(new_task)
             
             session.commit()
             
@@ -60,8 +60,9 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             session.commit()
 
             # 2. Sequential Execution
+            print(f"  [Executor] Beginning execution of {len(valid_tasks)} tasks...")
             for task in valid_tasks:
-                print(f"  [Workflow] Claiming task: {task.id}")
+                print(f"  [Executor] Processing: {task.description[:50]}...")
                 if hub.claim_task(task.id):
                     # Unpack result and model_used
                     res, model_used = await executor.run_task(
@@ -72,15 +73,17 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                     )
                     
                     if res.error:
+                        print(f"  [Executor] ❌ Task {task.id} failed: {res.error.get('evalue')}")
                         hub.fail_task(task.id, res.error.get("evalue", "Unknown error"))
                     else:
-                        # Pass model_used to the completion event
+                        print(f"  [Executor] ✅ Task {task.id} complete ({model_used}).")
                         hub.complete_task(task.id, {
                             "stdout": res.stdout,
                             "model_used": model_used
                         })
                         
                         if res.plots:
+                            print(f"  [Executor] 🎨 Found plot artifact.")
                             art = Artifact(
                                 project_id=project_id,
                                 type="plot",
@@ -99,11 +102,12 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                             })
                     session.commit()
 
+            print(f"--- ✅ Workflow for Project {project_id} Complete ---\n")
             hub.create_outbox_event("STEP_COMPLETED", {"message": "Project workflow complete."})
             session.commit()
             
     except Exception as e:
-        print(f"ERROR in run_agent_workflow: {e}")
+        print(f"❌ FATAL ERROR in run_agent_workflow: {e}")
         traceback.print_exc()
 
 @app.websocket("/ws")
