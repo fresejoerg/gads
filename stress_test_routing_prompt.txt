@@ -1,0 +1,22 @@
+You are a world-class systems architect and expert in LLM orchestration.
+I am implementing **Dynamic Model Routing** in a multi-agent system (GADS).
+The Project Manager (PM) will receive a list of available models categorized into 4 Tiers (Pro/Sonnet/Haiku/Local).
+The PM is tasked with assigning sub-tasks to the **LOWEST FEASIBLE TIER** to optimize cost and performance.
+
+PLAN:
+---
+# Proposed Architecture
+1. **Model Discovery**: Backend calls LiteLLM `/v1/models` and sorts them:
+   - Tier 1: Claude 4.7, Gemini 3.1 Pro (Planning)
+   - Tier 2: Claude 4.6, Gemini 3.1 Flash (Coding/Logic)
+   - Tier 3: Claude 4.5, Gemini 3.1 Lite (Basic text)
+   - Tier 4: Local models (LM Studio)
+2. **Context Injection**: Injected into PM: "AVAILABLE_MODELS_HIERARCHY: {tiers_json}".
+3. **Decision Logic**: PM must select the cheapest model that guarantees success.
+
+---
+Please provide a detailed critique:
+1. **Decision Heuristics**: What specific guidance or categorization rules should I provide the PM in the prompt to help it distinguish between a "Tier 2 task" and a "Tier 3 task"?
+2. **Failure Scenarios**: What happens if a Tier 4 model fails? Should I implement an automatic "Escalation Ladder" (Retry with Tier 3 -> Tier 2)?
+3. **Ambiguity**: How should the PM handle a task that spans multiple tiers (e.g., complex logic + large data)?
+4. **Efficiency**: Is sorting into Tiers better than just letting the PM see the whole list with descriptions?

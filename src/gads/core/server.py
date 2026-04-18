@@ -10,6 +10,7 @@ from gads.core.models import Project, Task, Artifact
 from gads.agents.planner import DataSciencePlanner, PlannerInput
 from gads.agents.workers.synthesizer import SynthesizerAgent, SynthesizerInput
 from gads.core.executor import ExecutionManager
+from gads.core.registry import get_model_hierarchy
 from sqlmodel import select, Session
 
 app = FastAPI(title="GADS Core API")
@@ -21,35 +22,42 @@ async def startup_event():
     asyncio.create_task(watchdog_loop())
 
 async def run_agent_workflow(project_id: uuid.UUID, objective: str):
-    """Orchestrates the multi-agent workflow for a project."""
+    """Orchestrates the multi-agent workflow with Dynamic Routing."""
     print(f"\n--- 🚀 Starting Workflow for Project {project_id} ---")
     
     try:
         with Session(engine) as session:
             hub = ExecutionHub(session)
             executor = ExecutionManager()
-            planner = DataSciencePlanner()
-            synthesizer = SynthesizerAgent()
             
-            # 1. Planning
-            print(f"  [Planner] Analyzing objective: {objective}")
-            hub.create_outbox_event("STEP_STARTED", {"message": "Project Manager is planning the objective..."})
+            # 0. Discovery: Fetch and categorize models
+            hierarchy = await get_model_hierarchy()
+            
+            # 1. Planning (Always uses a Tier 1 model if available)
+            t1_models = hierarchy.get("T1", {}).get("models", ["claude-opus-4.7"])
+            planner_model = t1_models[0]
+            planner = DataSciencePlanner(model=planner_model)
+            
+            print(f"  [Planner] Analyzing objective with {planner_model}...")
+            hub.create_outbox_event("STEP_STARTED", {"message": f"Project Manager ({planner_model}) is planning the objective..."})
             session.commit()
             
-            planner_res = await planner.run(PlannerInput(objective=objective))
+            planner_res = await planner.run(PlannerInput(
+                objective=objective,
+                available_models_hierarchy=hierarchy
+            ))
             
             # Save all tasks
             valid_tasks = []
             for step in planner_res.content.steps:
-                if any(kw in step.description.lower() for kw in ["create", "calculate", "plot", "extract", "analyze", "run", "load"]):
-                    new_task = Task(
-                        project_id=project_id,
-                        description=step.description,
-                        assigned_to=step.assigned_to,
-                        status="pending"
-                    )
-                    session.add(new_task)
-                    valid_tasks.append(new_task)
+                new_task = Task(
+                    project_id=project_id,
+                    description=step.description,
+                    assigned_to=step.assigned_to,
+                    status="pending"
+                )
+                session.add(new_task)
+                valid_tasks.append(new_task)
             
             session.commit()
             
@@ -62,10 +70,12 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             session.commit()
 
             # 2. Sequential Execution
-            context_summary = []
             for task in valid_tasks:
                 print(f"  [Executor] Claiming task: {task.id}")
                 if hub.claim_task(task.id):
+                    # Instantiate executor with the DYNAMICALLY assigned model
+                    executor.coder.model = task.assigned_to
+                    
                     res, model_used = await executor.run_task(
                         task.description, 
                         project_id=project_id, 
@@ -75,10 +85,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                     
                     if res.error:
                         hub.fail_task(task.id, res.error.get("evalue", "Unknown error"))
-                        context_summary.append(f"Task '{task.description}' failed with error: {res.error.get('evalue')}")
                     else:
                         hub.complete_task(task.id, {"stdout": res.stdout, "model_used": model_used})
-                        context_summary.append(f"Task '{task.description}' completed. Output: {res.stdout[:200]}...")
                         
                         if res.plots:
                             art = Artifact(
@@ -103,9 +111,15 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             hub.create_outbox_event("STEP_STARTED", {"message": "Lead Data Scientist is synthesizing the results..."})
             session.commit()
 
+            # Fetch summary context
+            statement = select(Artifact).where(Artifact.project_id == project_id)
+            artifacts = session.exec(statement).all()
+            context = "\n".join([f"Artifact {a.id} ({a.type}): {a.description}" for a in artifacts])
+
+            synthesizer = SynthesizerAgent(model=planner_model) # Use same high-end model for story
             synth_res = await synthesizer.run(SynthesizerInput(
                 objective=objective,
-                context_artifacts="\n".join(context_summary)
+                context_artifacts=context
             ))
             
             hub.create_outbox_event("WORKFLOW_FINAL_RESULT", {
