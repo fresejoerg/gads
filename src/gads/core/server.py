@@ -34,11 +34,11 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             hub.create_outbox_event("STEP_STARTED", {"message": "Project Manager is planning the objective..."})
             session.commit()
             
-            plan_output = await planner.run(PlannerInput(objective=objective))
+            planner_res = await planner.run(PlannerInput(objective=objective))
             
             # Filter and save tasks
             valid_tasks = []
-            for step in plan_output.steps:
+            for step in planner_res.content.steps:
                 # Ensure the task is a real data science task and not conversational filler
                 if any(kw in step.description.lower() for kw in ["create", "calculate", "plot", "extract", "analyze", "run", "load"]):
                     new_task = Task(

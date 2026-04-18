@@ -1,7 +1,7 @@
 from typing import List
 from pydantic import BaseModel, Field
 from gads.agents.base import BaseAgent
-from gads.core.state import Task
+from gads.core.models import Task
 
 class PlannerInput(BaseModel):
     objective: str
