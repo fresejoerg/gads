@@ -5,36 +5,50 @@ import sys
 # Ensure src directory is in path
 sys.path.append(os.path.join(os.getcwd(), "src"))
 
-from gads.agents.planner import DataSciencePlanner, PlannerInput
-from gads.agents.workers.nlp import NLPExtractorAgent, NLPExtractorInput
+from gads.core.state import Blackboard
+from gads.core.executor import ExecutionManager
 
 async def main():
-    print("--- 🚀 GADS: Data Science Rockstar Initializing ---")
+    print("--- 🚀 GADS: Data Science Rockstar - Stateful Sandbox Demo ---")
     
-    # 1. Initialize Agents
-    planner = DataSciencePlanner()
-    nlp_worker = NLPExtractorAgent()
-    
-    # 2. Project Input
-    objective = "Extract all organizations and dates from the following text: 'Anthropic released Claude 4.7 on April 16, 2026. Google followed with Gemini 3.1 shortly after.'"
-    
-    print(f"\n[Project Manager] Objective: {objective}")
-    
-    # 3. Planning Phase (Uses strong model)
-    print("\n[Planning] Generating execution DAG...")
-    plan_output = await planner.run(PlannerInput(objective=objective))
-    
-    for i, task in enumerate(plan_output.steps):
-        print(f"  Step {i+1}: {task.description} (Assignee: {task.assigned_to})")
-    
-    # 4. Execution Phase (Uses local model for worker)
-    print("\n[Execution] Starting Worker tasks...")
-    # For this demo, we just call the worker directly based on the objective
-    worker_result = await nlp_worker.run(NLPExtractorInput(text=objective))
-    
-    print("\n[Result] Extracted Entities:")
-    for entity in worker_result.entities:
-        print(f"  - {entity.name} ({entity.category}): {entity.context}")
+    # 1. Initialize Blackboard and Execution Manager
+    blackboard = Blackboard(
+        project_name="Sandbox Verification",
+        objective="Create data, analyze it, and plot it statefully."
+    )
+    executor = ExecutionManager()
+    session_id = "verification-session-001"
+
+    # 2. Task 1: Data Creation
+    print("\n[Task 1] Creating a synthetic dataset of 100 rows...")
+    res1 = await executor.run_task(
+        "Create a pandas DataFrame 'df' with 100 rows of random data. Columns: 'age' (int 20-60), 'salary' (float).",
+        blackboard,
+        session_id=session_id
+    )
+    print(f"  Result: {res1.stdout}")
+
+    # 3. Task 2: Data Analysis (Stateful)
+    print("\n[Task 2] Calculating mean salary (reusing 'df')...")
+    res2 = await executor.run_task(
+        "Calculate the mean of the 'salary' column from 'df' and print it.",
+        blackboard,
+        session_id=session_id
+    )
+    print(f"  Result: {res2.stdout}")
+
+    # 4. Task 3: Data Visualization (Stateful)
+    print("\n[Task 3] Generating a plot...")
+    res3 = await executor.run_task(
+        "Create a histogram of the 'age' column from 'df'. Use seaborn.",
+        blackboard,
+        session_id=session_id
+    )
+    print(f"  Number of plots captured: {len(res3.plots)}")
+    if res3.plots:
+        print(f"  Success: Plot captured (Base64 length: {len(res3.plots[0])})")
+
+    await executor.sandbox.close()
 
 if __name__ == "__main__":
     asyncio.run(main())
