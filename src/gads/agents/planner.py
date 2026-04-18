@@ -44,9 +44,9 @@ Score every task across these 4 dimensions (Low, Med, High):
 ### 4. POSTCONDITION CONTRACTS
 You MUST define a structural contract for every task to detect "silent failures."
 Example contracts:
-- DataFrame: {"output_type": "dataframe", "min_rows": 5, "required_columns": ["x", "y"]}
-- List: {"output_type": "list", "min_items": 1}
-- Text: {"output_type": "string", "contains": "keyword"}
+- DataFrame: {{"output_type": "dataframe", "min_rows": 5, "required_columns": ["x", "y"]}}
+- List: {{"output_type": "list", "min_items": 1}}
+- Text: {{"output_type": "string", "contains": "keyword"}}
 
 ## AVAILABLE_MODELS_HIERARCHY:
 {hierarchy_json}

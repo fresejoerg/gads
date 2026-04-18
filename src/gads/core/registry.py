@@ -25,6 +25,7 @@ TIER_DESCRIPTIONS = {
 
 async def get_model_hierarchy() -> Dict[str, Any]:
     """Fetches models from LiteLLM and organizes them into capability tiers."""
+    print(f"  [Registry] Fetching models from: {LITELLM_URL}", flush=True)
     try:
         async with httpx.AsyncClient() as client:
             resp = await client.get(
@@ -36,7 +37,6 @@ async def get_model_hierarchy() -> Dict[str, Any]:
             
             hierarchy = {}
             for tier, keywords in TIER_MAPPING.items():
-                # Find available models that belong to this tier
                 matching_models = [m for m in available_models if m in keywords]
                 if matching_models:
                     hierarchy[tier] = {
@@ -47,5 +47,5 @@ async def get_model_hierarchy() -> Dict[str, Any]:
             return hierarchy
     except Exception as e:
         print(f"Registry Error: {e}")
-        # Fallback to a minimal safe hierarchy if LiteLLM is down
+        # Fallback
         return {"T4": {"description": "Fallback", "models": ["local_model"]}}

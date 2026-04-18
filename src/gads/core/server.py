@@ -1,6 +1,8 @@
 import asyncio
 import uuid
 import traceback
+import json
+import base64
 from typing import List
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
 from gads.core.bus import bus, dispatcher_loop
@@ -23,32 +25,31 @@ async def startup_event():
 
 async def run_agent_workflow(project_id: uuid.UUID, objective: str):
     """Orchestrates the multi-agent workflow with Dynamic Routing & Escalation."""
-    print(f"\n--- 🚀 Starting Workflow for Project {project_id} ---")
+    print(f"\n--- 🚀 Starting Workflow for Project {project_id} ---", flush=True)
     
     try:
+        executor = ExecutionManager()
+        hierarchy = await get_model_hierarchy()
+        
+        # 1. Planning
+        t1_models = hierarchy.get("T1", {}).get("models", ["claude-opus-4.7"])
+        planner_model = t1_models[0]
+        planner = DataSciencePlanner(model=planner_model)
+        
+        print(f"  [Planner] Analyzing objective with {planner_model}...", flush=True)
         with Session(engine) as session:
             hub = ExecutionHub(session)
-            executor = ExecutionManager()
-            
-            # 0. Discovery
-            hierarchy = await get_model_hierarchy()
-            
-            # 1. Planning
-            t1_models = hierarchy.get("T1", {}).get("models", ["claude-opus-4.7"])
-            planner_model = t1_models[0]
-            planner = DataSciencePlanner(model=planner_model)
-            
-            print(f"  [Planner] Analyzing objective with {planner_model}...")
             hub.create_outbox_event("STEP_STARTED", {"message": f"Project Manager ({planner_model}) is planning the objective..."})
             session.commit()
-            
-            planner_res = await planner.run(PlannerInput(
-                objective=objective,
-                available_models_hierarchy=hierarchy
-            ))
-            
-            # Save tasks with Postcondition Contracts
-            valid_tasks = []
+        
+        planner_res = await planner.run(PlannerInput(
+            objective=objective,
+            available_models_hierarchy=hierarchy
+        ))
+        
+        tasks_to_run = []
+        with Session(engine) as session:
+            hub = ExecutionHub(session)
             for step in planner_res.content.steps:
                 new_task = Task(
                     project_id=project_id,
@@ -58,85 +59,89 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                     status="pending"
                 )
                 session.add(new_task)
-                valid_tasks.append(new_task)
-            
+                tasks_to_run.append(new_task)
             session.commit()
             
-            for t in valid_tasks:
+            for t in tasks_to_run:
                 session.refresh(t)
                 hub.create_outbox_event("TASK_CREATED", {
                     "task_id": str(t.id),
                     "description": t.description
                 })
             session.commit()
+            task_ids = [t.id for t in tasks_to_run]
 
-            # 2. Sequential Execution with Escalation Loop
-            for task_obj in valid_tasks:
-                task_id = task_obj.id
-                
-                while True:
-                    # Refresh task from DB to get latest status/assignee
-                    session.refresh(task_obj)
-                    print(f"  [Executor] Claiming task: {task_obj.id} (Assignee: {task_obj.assigned_to})")
+        print(f"  [Workflow] Saved {len(task_ids)} tasks.", flush=True)
+
+        # 2. Sequential Execution
+        for task_id in task_ids:
+            while True:
+                desc, assigned_to = "", ""
+                with Session(engine) as session:
+                    hub = ExecutionHub(session)
+                    task_obj = session.get(Task, task_id)
+                    if not task_obj: break
                     
+                    print(f"  [Executor] Attempting claim for task: {task_id} ({task_obj.assigned_to})")
                     if hub.claim_task(task_id):
                         executor.coder.model = task_obj.assigned_to
-                        
-                        res, model_used = await executor.run_task(
-                            task_obj.description, 
-                            project_id=project_id, 
-                            session=session, 
-                            session_id=str(project_id)
-                        )
-                        
-                        # Check for failure or contract violation
-                        error_msg = None
-                        if res.error:
-                            error_msg = res.error.get("evalue", "Unknown error")
-                        else:
-                            # Successful execution, now validate contract
-                            error_msg = hub.validate_contract(task_obj, res.stdout)
+                        desc = task_obj.description
+                        assigned_to = task_obj.assigned_to
+                    else:
+                        break # Already claimed or completed
+                
+                # Run task OUTSIDE session
+                res, model_used = await executor.run_task(
+                    desc, project_id=project_id, session=None, session_id=str(project_id)
+                )
+                
+                # Update status
+                with Session(engine) as session:
+                    hub = ExecutionHub(session)
+                    task_obj = session.get(Task, task_id)
+                    
+                    error_msg = None
+                    if res.error:
+                        error_msg = res.error.get("evalue", "Unknown error")
+                    else:
+                        error_msg = hub.validate_contract(task_obj, res.stdout)
 
-                        if error_msg:
-                            print(f"  [Executor] ❌ Task failed/violated contract: {error_msg}")
-                            # Attempt escalation
-                            if hub.escalate_task(task_id, error_msg):
-                                # Loop back to re-claim and re-run with new model
-                                continue
-                            else:
-                                # Reached limit or no ladder available
-                                hub.fail_task(task_id, error_msg)
-                                break
+                    if error_msg:
+                        print(f"  [Executor] ❌ Failure: {error_msg}")
+                        if hub.escalate_task(task_id, error_msg):
+                            session.commit()
+                            continue 
                         else:
-                            # Absolute success
-                            print(f"  [Executor] ✅ Task {task_id} successful.")
-                            hub.complete_task(task_id, {"stdout": res.stdout, "model_used": model_used})
-                            
-                            if res.plots:
-                                art = Artifact(
-                                    project_id=project_id,
-                                    type="plot",
-                                    description=f"Visualization for task: {task_obj.description}",
-                                    content_json={"image_base64": res.plots[0]},
-                                    agent_id="CodeGenerator"
-                                )
-                                session.add(art)
-                                session.commit()
-                                session.refresh(art)
-                                hub.create_outbox_event("ARTIFACT_CREATED", {
-                                    "type": "plot",
-                                    "description": art.description,
-                                    "content_json": art.content_json
-                                })
+                            hub.fail_task(task_id, error_msg)
+                            session.commit()
                             break
                     else:
-                        # Could not claim (maybe already claimed by watchdog?)
+                        print(f"  [Executor] ✅ Success.")
+                        hub.complete_task(task_id, {"stdout": res.stdout, "model_used": model_used})
+                        
+                        if res.plots:
+                            art = Artifact(
+                                project_id=project_id,
+                                type="plot",
+                                description=f"Visualization for task: {task_obj.description[:50]}",
+                                content_json={"image_base64": res.plots[0]},
+                                agent_id="CodeGenerator"
+                            )
+                            session.add(art)
+                            session.commit()
+                            session.refresh(art)
+                            hub.create_outbox_event("ARTIFACT_CREATED", {
+                                "type": "plot",
+                                "description": art.description,
+                                "content_json": art.content_json
+                            })
+                        session.commit()
                         break
-                    
-                session.commit()
 
-            # 3. Final Synthesis
-            print(f"  [Synthesizer] Generating final story...")
+        # 3. Final Synthesis
+        print(f"  [Synthesizer] Storytelling...")
+        with Session(engine) as session:
+            hub = ExecutionHub(session)
             hub.create_outbox_event("STEP_STARTED", {"message": "Lead Data Scientist is synthesizing the results..."})
             session.commit()
 
@@ -144,23 +149,23 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             artifacts = session.exec(statement).all()
             context = "\n".join([f"Artifact {a.id} ({a.type}): {a.description}" for a in artifacts])
 
-            synthesizer = SynthesizerAgent(model=planner_model)
-            synth_res = await synthesizer.run(SynthesizerInput(
-                objective=objective,
-                context_artifacts=context
-            ))
-            
+        synthesizer = SynthesizerAgent(model=planner_model)
+        synth_res = await synthesizer.run(SynthesizerInput(
+            objective=objective,
+            context_artifacts=context
+        ))
+        
+        with Session(engine) as session:
+            hub = ExecutionHub(session)
             hub.create_outbox_event("WORKFLOW_FINAL_RESULT", {
                 "narrative": synth_res.content.narrative,
                 "takeaways": synth_res.content.key_takeaways
             })
-            session.commit()
-
             hub.create_outbox_event("STEP_COMPLETED", {"message": "Project workflow complete."})
             session.commit()
             
     except Exception as e:
-        print(f"ERROR in run_agent_workflow: {e}")
+        print(f"❌ FATAL ERROR: {e}")
         traceback.print_exc()
 
 @app.websocket("/ws")
