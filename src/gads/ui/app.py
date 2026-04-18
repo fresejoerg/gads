@@ -1,8 +1,8 @@
+import os
 import chainlit as cl
 import httpx
 import json
 import asyncio
-import os
 import websockets
 from dotenv import load_dotenv
 
@@ -20,17 +20,21 @@ async def start():
     asyncio.create_task(ws_listener())
 
 async def ws_listener():
-    last_seq = cl.user_session.get("last_seq", 0)
-    async with websockets.connect(f"{WS_URL}?last_seq={last_seq}") as ws:
-        while True:
-            try:
-                msg = await ws.recv()
-                event = json.loads(msg)
-                await handle_event(event)
-                cl.user_session.set("last_seq", event["seq"])
-            except Exception as e:
-                print(f"WS Error: {e}")
-                await asyncio.sleep(5) # Retry logic
+    while True:
+        try:
+            last_seq = cl.user_session.get("last_seq", 0)
+            async with websockets.connect(f"{WS_URL}?last_seq={last_seq}") as ws:
+                while True:
+                    msg = await ws.recv()
+                    event = json.loads(msg)
+                    await handle_event(event)
+                    cl.user_session.set("last_seq", event["seq"])
+        except (websockets.ConnectionClosed, ConnectionRefusedError, OSError) as e:
+            print(f"WS Connection Error: {e}. Retrying in 2s...")
+            await asyncio.sleep(2)
+        except Exception as e:
+            print(f"WS Listener Crash: {e}. Retrying in 5s...")
+            await asyncio.sleep(5)
 
 async def handle_event(event: dict):
     etype = event["type"]
@@ -58,10 +62,11 @@ async def handle_event(event: dict):
 async def main(message: cl.Message):
     # This would call the backend to create a project/run
     async with httpx.AsyncClient() as client:
-        # Mocking project creation for now
-        await client.post(f"{BACKEND_URL}/projects", params={
-            "name": "New Project",
-            "objective": message.content
-        })
-    
-    await cl.Message(content=f"Project initialized: '{message.content}'. Watching the agent DAG...").send()
+        try:
+            await client.post(f"{BACKEND_URL}/projects", params={
+                "name": "New Project",
+                "objective": message.content
+            })
+            await cl.Message(content=f"Project initialized: '{message.content}'. Watching the agent DAG...").send()
+        except Exception as e:
+            await cl.Message(content=f"Error initializing project: {e}").send()
