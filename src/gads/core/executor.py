@@ -2,18 +2,27 @@ import asyncio
 from typing import Optional, List
 from gads.agents.workers.coder import CodeGeneratorAgent, CoderInput
 from gads.tools.sandbox import SandboxClient, ExecutionResult
-from gads.core.state import Blackboard, Artifact
+from gads.core.models import Artifact
+from sqlmodel import Session
+import uuid
 
 class ExecutionManager:
-    """Manages the Code-Execution-Feedback loop."""
+    """Manages the Code-Execution-Feedback loop and persists results to DB."""
 
     def __init__(self, sandbox_url: str = "http://localhost:8000"):
         self.coder = CodeGeneratorAgent()
         self.sandbox = SandboxClient(base_url=sandbox_url)
 
-    async def run_task(self, task_description: str, blackboard: Blackboard, session_id: str = "default") -> ExecutionResult:
+    async def run_task(
+        self, 
+        task_description: str, 
+        project_id: uuid.UUID, 
+        session: Session, 
+        session_id: str = "default"
+    ) -> ExecutionResult:
         """
         Runs the full loop: Generate -> Validate -> Execute -> (Retry if fail).
+        Persists artifacts directly to the database session.
         """
         max_retries = 2
         retry_count = 0
@@ -21,8 +30,9 @@ class ExecutionManager:
         previous_code = ""
 
         while retry_count <= max_retries:
+            print(f"  [Coder] Task: {task_description} (Attempt {retry_count + 1})")
+            
             # 1. Generate Code
-            print(f"  [Coder] Attempt {retry_count + 1}...")
             coder_input = CoderInput(
                 task_description=task_description,
                 previous_code=previous_code,
@@ -30,22 +40,21 @@ class ExecutionManager:
             )
             coder_res = await self.coder.run(coder_input)
             
-            # 2. Execute Code (SandboxClient handles AST validation internally)
-            print(f"  [Sandbox] Executing...")
-            exec_result = await self.sandbox.execute(coder_res.code, session_id=session_id)
+            # 2. Execute Code
+            exec_result = await self.sandbox.execute(coder_res.code, project_id=project_id, session_id=session_id)
 
             # 3. Handle Result
             if exec_result.error is None:
-                print("  [Success] Code ran perfectly.")
-                # Add artifacts to blackboard
+                # Add artifact to DB
                 artifact = Artifact(
-                    id=f"code_{session_id}_{retry_count}",
+                    project_id=project_id,
                     type="code_execution",
-                    description=f"Result of: {task_description}",
-                    content={"code": coder_res.code, "stdout": exec_result.stdout},
+                    description=f"Execution result for: {task_description}",
+                    content_json={"code": coder_res.code, "stdout": exec_result.stdout},
                     agent_id="CodeGenerator"
                 )
-                blackboard.add_artifact(artifact)
+                session.add(artifact)
+                # Note: Caller is responsible for committing or creating Outbox event
                 return exec_result
             else:
                 # 4. Feedback Loop
