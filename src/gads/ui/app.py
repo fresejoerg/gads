@@ -1,4 +1,11 @@
 import os
+import base64
+
+# --- PRE-IMPORT FIX ---
+# Prevent Chainlit from auto-detecting DATABASE_URL and trying to initialize its own SQL data layer.
+os.environ.pop("DATABASE_URL", None)
+os.environ.pop("GADS_DATABASE_URL", None) # Just to be safe
+
 import chainlit as cl
 import httpx
 import json
@@ -30,43 +37,59 @@ async def ws_listener():
                     await handle_event(event)
                     cl.user_session.set("last_seq", event["seq"])
         except (websockets.ConnectionClosed, ConnectionRefusedError, OSError) as e:
-            print(f"WS Connection Error: {e}. Retrying in 2s...")
             await asyncio.sleep(2)
         except Exception as e:
-            print(f"WS Listener Crash: {e}. Retrying in 5s...")
+            print(f"WS Listener Crash: {e}")
             await asyncio.sleep(5)
 
 async def handle_event(event: dict):
     etype = event["type"]
     payload = event["payload"]
     
-    if etype == "TASK_STARTED":
-        async with cl.Step(name="Task Execution") as step:
-            step.input = f"Starting task: {payload['task_id']}"
-            cl.user_session.set(f"step_{payload['task_id']}", step)
+    if etype == "STEP_STARTED":
+        await cl.Message(content=f"🧠 {payload['message']}").send()
+
+    elif etype == "TASK_CREATED":
+        # Create a collapsed step for the task
+        step = cl.Step(name="Task Planned", type="tool")
+        step.input = payload['description']
+        await step.send()
+        cl.user_session.set(f"step_{payload['task_id']}", step)
+    
+    elif etype == "TASK_STARTED":
+        step = cl.user_session.get(f"step_{payload['task_id']}")
+        if step:
+            step.name = "Executing Task"
+            step.output = "Running code in isolated sandbox..."
+            await step.update()
     
     elif etype == "TASK_COMPLETED":
         step = cl.user_session.get(f"step_{payload['task_id']}")
         if step:
-            step.output = f"Task completed successfully."
+            step.name = "Task Completed"
+            step.output = f"Result:\n```\n{payload['result']['stdout']}\n```"
             await step.update()
             
     elif etype == "ARTIFACT_CREATED":
-        await cl.Message(content=f"🎨 New Artifact: {payload['description']}").send()
         if payload["type"] == "plot":
-            # Render plot
-            image = cl.Image(content=payload["content_json"]["image_base64"], name="plot", display="inline")
-            await cl.Message(content="", elements=[image]).send()
+            # Correctly decode base64 for Chainlit display
+            image_bytes = base64.b64decode(payload["content_json"]["image_base64"])
+            image = cl.Image(content=image_bytes, name="plot", display="inline")
+            await cl.Message(content=f"🎨 **Visualization**: {payload['description']}", elements=[image]).send()
+        else:
+            await cl.Message(content=f"📝 **Artifact**: {payload['description']}").send()
+
+    elif etype == "STEP_COMPLETED":
+        await cl.Message(content=f"✅ {payload['message']}").send()
 
 @cl.on_message
 async def main(message: cl.Message):
-    # This would call the backend to create a project/run
     async with httpx.AsyncClient() as client:
         try:
+            # Create the project on the backend, which triggers the workflow
             await client.post(f"{BACKEND_URL}/projects", params={
-                "name": "New Project",
+                "name": "User Project",
                 "objective": message.content
             })
-            await cl.Message(content=f"Project initialized: '{message.content}'. Watching the agent DAG...").send()
         except Exception as e:
             await cl.Message(content=f"Error initializing project: {e}").send()
