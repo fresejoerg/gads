@@ -72,6 +72,13 @@ async def handle_event(event: dict):
             step.output = f"Error:\n```\n{payload.get('error', 'Unknown error')}\n```"
             await step.update()
             
+    elif etype == "ESCALATION_STARTED":
+        step = cl.user_session.get(f"step_{payload['task_id']}")
+        if step:
+            step.name = f"Escalating to {payload['next_model']} 🚀"
+            step.output = f"Retrying task due to failure: {payload['error']}"
+            await step.update()
+            
     elif etype == "ARTIFACT_CREATED":
         if payload["type"] == "plot":
             image_bytes = base64.b64decode(payload["content_json"]["image_base64"])

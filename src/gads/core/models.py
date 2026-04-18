@@ -19,6 +19,8 @@ class Task(SQLModel, table=True):
     description: str
     assigned_to: str
     status: str = "pending"  # pending, running, completed, failed
+    escalation_count: int = 0
+    postcondition_json: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     heartbeat: Optional[datetime] = None
     error: Optional[str] = None
     result_json: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))

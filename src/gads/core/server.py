@@ -22,7 +22,7 @@ async def startup_event():
     asyncio.create_task(watchdog_loop())
 
 async def run_agent_workflow(project_id: uuid.UUID, objective: str):
-    """Orchestrates the multi-agent workflow with Dynamic Routing."""
+    """Orchestrates the multi-agent workflow with Dynamic Routing & Escalation."""
     print(f"\n--- 🚀 Starting Workflow for Project {project_id} ---")
     
     try:
@@ -30,10 +30,10 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             hub = ExecutionHub(session)
             executor = ExecutionManager()
             
-            # 0. Discovery: Fetch and categorize models
+            # 0. Discovery
             hierarchy = await get_model_hierarchy()
             
-            # 1. Planning (Always uses a Tier 1 model if available)
+            # 1. Planning
             t1_models = hierarchy.get("T1", {}).get("models", ["claude-opus-4.7"])
             planner_model = t1_models[0]
             planner = DataSciencePlanner(model=planner_model)
@@ -47,13 +47,14 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                 available_models_hierarchy=hierarchy
             ))
             
-            # Save all tasks
+            # Save tasks with Postcondition Contracts
             valid_tasks = []
             for step in planner_res.content.steps:
                 new_task = Task(
                     project_id=project_id,
                     description=step.description,
                     assigned_to=step.assigned_to,
+                    postcondition_json=step.postcondition,
                     status="pending"
                 )
                 session.add(new_task)
@@ -69,54 +70,81 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                 })
             session.commit()
 
-            # 2. Sequential Execution
-            for task in valid_tasks:
-                print(f"  [Executor] Claiming task: {task.id}")
-                if hub.claim_task(task.id):
-                    # Instantiate executor with the DYNAMICALLY assigned model
-                    executor.coder.model = task.assigned_to
+            # 2. Sequential Execution with Escalation Loop
+            for task_obj in valid_tasks:
+                task_id = task_obj.id
+                
+                while True:
+                    # Refresh task from DB to get latest status/assignee
+                    session.refresh(task_obj)
+                    print(f"  [Executor] Claiming task: {task_obj.id} (Assignee: {task_obj.assigned_to})")
                     
-                    res, model_used = await executor.run_task(
-                        task.description, 
-                        project_id=project_id, 
-                        session=session, 
-                        session_id=str(project_id)
-                    )
-                    
-                    if res.error:
-                        hub.fail_task(task.id, res.error.get("evalue", "Unknown error"))
-                    else:
-                        hub.complete_task(task.id, {"stdout": res.stdout, "model_used": model_used})
+                    if hub.claim_task(task_id):
+                        executor.coder.model = task_obj.assigned_to
                         
-                        if res.plots:
-                            art = Artifact(
-                                project_id=project_id,
-                                type="plot",
-                                description=f"Visualization for task: {task.description}",
-                                content_json={"image_base64": res.plots[0]},
-                                agent_id="CodeGenerator"
-                            )
-                            session.add(art)
-                            session.commit()
-                            session.refresh(art)
-                            hub.create_outbox_event("ARTIFACT_CREATED", {
-                                "type": "plot",
-                                "description": art.description,
-                                "content_json": art.content_json
-                            })
-                    session.commit()
+                        res, model_used = await executor.run_task(
+                            task_obj.description, 
+                            project_id=project_id, 
+                            session=session, 
+                            session_id=str(project_id)
+                        )
+                        
+                        # Check for failure or contract violation
+                        error_msg = None
+                        if res.error:
+                            error_msg = res.error.get("evalue", "Unknown error")
+                        else:
+                            # Successful execution, now validate contract
+                            error_msg = hub.validate_contract(task_obj, res.stdout)
+
+                        if error_msg:
+                            print(f"  [Executor] ❌ Task failed/violated contract: {error_msg}")
+                            # Attempt escalation
+                            if hub.escalate_task(task_id, error_msg):
+                                # Loop back to re-claim and re-run with new model
+                                continue
+                            else:
+                                # Reached limit or no ladder available
+                                hub.fail_task(task_id, error_msg)
+                                break
+                        else:
+                            # Absolute success
+                            print(f"  [Executor] ✅ Task {task_id} successful.")
+                            hub.complete_task(task_id, {"stdout": res.stdout, "model_used": model_used})
+                            
+                            if res.plots:
+                                art = Artifact(
+                                    project_id=project_id,
+                                    type="plot",
+                                    description=f"Visualization for task: {task_obj.description}",
+                                    content_json={"image_base64": res.plots[0]},
+                                    agent_id="CodeGenerator"
+                                )
+                                session.add(art)
+                                session.commit()
+                                session.refresh(art)
+                                hub.create_outbox_event("ARTIFACT_CREATED", {
+                                    "type": "plot",
+                                    "description": art.description,
+                                    "content_json": art.content_json
+                                })
+                            break
+                    else:
+                        # Could not claim (maybe already claimed by watchdog?)
+                        break
+                    
+                session.commit()
 
             # 3. Final Synthesis
             print(f"  [Synthesizer] Generating final story...")
             hub.create_outbox_event("STEP_STARTED", {"message": "Lead Data Scientist is synthesizing the results..."})
             session.commit()
 
-            # Fetch summary context
             statement = select(Artifact).where(Artifact.project_id == project_id)
             artifacts = session.exec(statement).all()
             context = "\n".join([f"Artifact {a.id} ({a.type}): {a.description}" for a in artifacts])
 
-            synthesizer = SynthesizerAgent(model=planner_model) # Use same high-end model for story
+            synthesizer = SynthesizerAgent(model=planner_model)
             synth_res = await synthesizer.run(SynthesizerInput(
                 objective=objective,
                 context_artifacts=context
