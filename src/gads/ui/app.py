@@ -16,29 +16,126 @@ load_dotenv()
 BACKEND_URL = os.getenv("GADS_BACKEND_URL", "http://localhost:8001")
 WS_URL = os.getenv("GADS_WS_URL", "ws://localhost:8001/ws")
 
+def get_action_buttons():
+    return [
+        cl.Action(name="upload_data", label="📁 Upload to Workspace", payload={"action": "upload"}),
+        cl.Action(name="clear_session", label="🗑️ Reset Session", payload={"action": "clear"})
+    ]
+
+def _render_state_md(files, state) -> str:
+    md = "### 📁 Workspace Files\n"
+    if not files:
+        md += "*(No files yet)*\n"
+    else:
+        for f in files:
+            md += f"- `{f}`\n"
+
+    md += "\n---\n\n### 🧠 Sandbox Memory\n"
+    if not state:
+        md += "*(Empty)*\n"
+    else:
+        for var_name, var_info in state.items():
+            vtype = var_info.get("type", "Unknown")
+            md += f"- **`{var_name}`** (`{vtype}`)\n"
+            if vtype == "DataFrame":
+                md += f"  - Shape: {var_info.get('shape')}\n"
+                cols_str = ", ".join([str(c) for c in var_info.get('columns', [])])
+                md += f"  - Cols: [{cols_str}]\n"
+            elif "value" in var_info:
+                val = str(var_info['value'])[:100].replace('\n', ' ')
+                md += f"  - Value: `{val}`\n"
+    return md
+
+async def sync_dashboard(files, state):
+    """Refresh the persistent side panel via Chainlit's ElementSidebar API."""
+    md = _render_state_md(files, state)
+    state_el = cl.Text(name="ProjectState", content=md)
+    await cl.ElementSidebar.set_elements([state_el])
+
 @cl.on_chat_start
 async def start():
+    # Clear any previous session state to prevent bleeding
     cl.user_session.set("last_seq", 0)
+    cl.user_session.set("current_project_id", None)
     
-    # Initialize the Unified Project Explorer (Files + Memory)
-    explorer_el = cl.Text(
-        name="📁 Project Explorer", 
-        content="### 📁 Workspace Files\n*(No files yet)*\n\n---\n\n### 🧠 Sandbox Memory\n*(Empty)*", 
-        display="side"
-    )
-    
-    # Store in session
-    cl.user_session.set("explorer_el", explorer_el)
-    
-    # Send initial message to make the side panel available
-    await cl.Message(
+    # 1. Send the welcome message with actions
+    dashboard_msg = cl.Message(
         content="--- 🚀 GADS: Data Science Rockstar Control Center ---\n\n"
-                "I've initialized your **[📁 Project Explorer]**. "
-                "Open the side panel to see your files and memory state update in real-time.",
-        elements=[explorer_el]
-    ).send()
-    
-    asyncio.create_task(ws_listener())
+                "Environment Initialized. Track workspace state in the side panel →",
+        actions=get_action_buttons()
+    )
+    await dashboard_msg.send()
+
+    # 2. Initialize the persistent side panel
+    await cl.ElementSidebar.set_title("Project State")
+    await sync_dashboard([], {})
+
+    if not cl.user_session.get("ws_active"):
+        cl.user_session.set("ws_active", True)
+        asyncio.create_task(ws_listener())
+
+@cl.action_callback("upload_data")
+async def on_upload_action(action: cl.Action):
+    try:
+        files = await cl.AskFileMessage(
+            content="Select files to upload to your workspace:",
+            accept=["text/plain", "text/csv", "application/json", "application/vnd.ms-excel"],
+            max_files=10,
+            timeout=180,
+            raise_on_timeout=False
+        ).send()
+        
+        if files:
+            upload_payload = []
+            for f in files:
+                with open(f.path, "rb") as fd:
+                    content = fd.read()
+                upload_payload.append({
+                    "name": f.name,
+                    "content_base64": base64.b64encode(content).decode("utf-8")
+                })
+                
+            project_id = cl.user_session.get("current_project_id")
+            
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                try:
+                    if project_id:
+                        url = f"{BACKEND_URL}/projects/{project_id}/files"
+                        resp = await client.post(url, json={"files": upload_payload})
+                    else:
+                        payload = {"name": "Upload Session", "objective": "", "files": upload_payload}
+                        resp = await client.post(f"{BACKEND_URL}/projects", json=payload)
+                    
+                    resp.raise_for_status()
+                    data = resp.json()
+                    
+                    if not project_id:
+                        cl.user_session.set("current_project_id", data["project"]["id"])
+                    
+                    # Update Sidebar
+                    await sync_dashboard(data.get("files", []), {})
+                    await cl.Message(content=f"✅ Successfully uploaded {len(files)} file(s).").send()
+                    
+                except Exception as e:
+                    await cl.Message(content=f"❌ Upload failed: {e}").send()
+    finally:
+        await action.remove()
+        # AskFileMessage.send() ends with an internal task_start() intended to
+        # resume the enclosing message handler. Action callbacks aren't
+        # task-wrapped, so without a matching task_end() the input bar stays
+        # locked in "running" state.
+        try:
+            await cl.context.emitter.task_end()
+        except Exception:
+            pass
+
+@cl.action_callback("clear_session")
+async def on_clear_action(action: cl.Action):
+    try:
+        cl.user_session.set("current_project_id", None)
+        await cl.Message(content="🔄 Session reset.").send()
+    finally:
+        await action.remove()
 
 async def ws_listener():
     while True:
@@ -52,8 +149,7 @@ async def ws_listener():
                     cl.user_session.set("last_seq", event["seq"])
         except (websockets.ConnectionClosed, ConnectionRefusedError, OSError):
             await asyncio.sleep(2)
-        except Exception as e:
-            print(f"WS Listener Crash: {e}")
+        except Exception:
             await asyncio.sleep(5)
 
 async def handle_event(event: dict):
@@ -90,20 +186,11 @@ async def handle_event(event: dict):
             step.output = f"Error:\n```\n{payload.get('error', 'Unknown error')}\n```"
             await step.update()
             
-    elif etype == "ESCALATION_STARTED":
-        step = cl.user_session.get(f"step_{payload['task_id']}")
-        if step:
-            step.name = f"Escalating to {payload['next_model']} 🚀"
-            step.output = f"Retrying task due to failure: {payload['error']}"
-            await step.update()
-            
     elif etype == "ARTIFACT_CREATED":
         if payload["type"] == "plot":
             image_bytes = base64.b64decode(payload["content_json"]["image_base64"])
             image = cl.Image(content=image_bytes, name="plot", display="inline")
-            await cl.Message(content=f"🎨 **Visualization**: {payload['description']}", elements=[image]).send()
-        else:
-            await cl.Message(content=f"📝 **Artifact**: {payload['description']}").send()
+            await cl.Message(content=f"🎨 Visualization: {payload['description']}", elements=[image]).send()
 
     elif etype == "WORKFLOW_FINAL_RESULT":
         content = f"### 📖 The Story\n\n{payload['narrative']}\n\n"
@@ -114,42 +201,14 @@ async def handle_event(event: dict):
         await cl.Message(content=content).send()
 
     elif etype == "STATE_UPDATED":
-        files = payload.get("files", [])
-        state = payload.get("state", {})
-        
-        # Format Unified Markdown
-        md = "## 📁 Workspace Files\n"
-        if not files:
-            md += "*(No files yet)*\n"
-        else:
-            for f in files:
-                md += f"- `{f}`\n"
-        
-        md += "\n---\n\n## 🧠 Sandbox Memory\n"
-        if not state:
-            md += "*(Empty)*\n"
-        else:
-            for var_name, var_info in state.items():
-                vtype = var_info.get("type", "Unknown")
-                md += f"- **`{var_name}`** (`{vtype}`)\n"
-                if vtype == "DataFrame":
-                    md += f"  - Shape: {var_info.get('shape')}\n"
-                    cols_str = ", ".join([str(c) for c in var_info.get('columns', [])])
-                    md += f"  - Cols: [{cols_str}]\n"
-                elif "value" in var_info:
-                    val = str(var_info['value'])[:100].replace('\n', ' ')
-                    md += f"  - Value: `{val}`\n"
-        
-        explorer_el = cl.user_session.get("explorer_el")
-        if explorer_el:
-            explorer_el.content = md
-            await explorer_el.update()
+        await sync_dashboard(payload.get("files", []), payload.get("state", {}))
 
     elif etype == "STEP_COMPLETED":
         await cl.Message(content=f"✅ {payload['message']}").send()
 
 @cl.on_message
 async def main(message: cl.Message):
+    # Immediate ack to unlock UI if it's just an upload
     files = []
     for element in message.elements:
         if isinstance(element, cl.File):
@@ -157,7 +216,6 @@ async def main(message: cl.Message):
             if content is None and element.path:
                 with open(element.path, "rb") as f:
                     content = f.read()
-            
             if content:
                 files.append({
                     "name": element.name,
@@ -165,20 +223,31 @@ async def main(message: cl.Message):
                 })
             
     project_id = cl.user_session.get("current_project_id")
-    
     payload = {
-        "name": "Chat Session Project",
+        "name": "Chat Session",
         "objective": message.content,
         "files": files,
         "existing_project_id": str(project_id) if project_id else None
     }
 
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=60.0) as client:
         try:
-            resp = await client.post(f"{BACKEND_URL}/projects", json=payload)
+            if files and not message.content.strip() and project_id:
+                resp = await client.post(f"{BACKEND_URL}/projects/{project_id}/files", json={"files": files})
+            else:
+                resp = await client.post(f"{BACKEND_URL}/projects", json=payload)
+            
             resp.raise_for_status()
-            project_data = resp.json()
+            data = resp.json()
+            
             if not project_id:
-                cl.user_session.set("current_project_id", project_data["id"])
+                cl.user_session.set("current_project_id", data["project"]["id"])
+            
+            # Sync dashboard
+            await sync_dashboard(data.get("files", []), {})
+            
+            if files and not message.content.strip():
+                await cl.Message(content=f"✅ Uploaded {len(files)} file(s).").send()
+                
         except Exception as e:
-            await cl.Message(content=f"Error communicating with backend: {e}").send()
+            await cl.Message(content=f"Error: {e}").send()

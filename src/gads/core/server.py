@@ -5,7 +5,7 @@ import json
 import base64
 import os
 from typing import List, Dict, Optional
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from gads.core.bus import bus, dispatcher_loop
 from gads.core.execution_hub import watchdog_loop, ExecutionHub
@@ -29,6 +29,13 @@ class ProjectCreateRequest(BaseModel):
     files: List[FileUpload] = []
     existing_project_id: Optional[str] = None
 
+class ProjectResponse(BaseModel):
+    project: Project
+    files: List[str] = []
+
+class FilesUploadRequest(BaseModel):
+    files: List[FileUpload]
+
 @app.on_event("startup")
 async def startup_event():
     init_db()
@@ -43,6 +50,15 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
         executor = ExecutionManager()
         hierarchy = await get_model_hierarchy()
         
+        # 0. SYNC GROUND TRUTH (Ground state from the kernel to avoid semantic drift)
+        print(f"  [Workflow] Grounding session state...", flush=True)
+        current_files = executor.sandbox.list_workspace_files(project_id)
+        # Dummy execute to trigger state introspection
+        res = await executor.sandbox.execute("pass", project_id=project_id, session_id=str(project_id))
+        if res.kernel_state:
+            executor.authoritative_state.update(res.kernel_state)
+            print(f"  [Workflow] Synchronized {len(executor.authoritative_state)} variables from kernel.", flush=True)
+
         # 1. Planning
         t1_models = hierarchy.get("T1", {}).get("models", ["claude-opus-4.7"])
         planner_model = t1_models[0]
@@ -56,7 +72,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
         
         planner_res = await planner.run(PlannerInput(
             objective=objective,
-            available_models_hierarchy=hierarchy
+            available_models_hierarchy=hierarchy,
+            available_files=current_files
         ))
         
         tasks_to_run = []
@@ -164,9 +181,30 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             hub.create_outbox_event("STEP_STARTED", {"message": "Lead Data Scientist is synthesizing the results..."})
             session.commit()
 
-            statement = select(Artifact).where(Artifact.project_id == project_id)
-            artifacts = session.exec(statement).all()
-            context = "\n".join([f"Artifact {a.id} ({a.type}): {a.description}" for a in artifacts])
+            artifacts = session.exec(
+                select(Artifact).where(Artifact.project_id == project_id)
+            ).all()
+            all_tasks = session.exec(
+                select(Task).where(Task.project_id == project_id)
+            ).all()
+
+            context_parts: List[str] = []
+            for t in all_tasks:
+                header = f"Task: {t.description}\nAssigned to: {t.assigned_to}\nStatus: {t.status}"
+                if t.status == "completed":
+                    stdout = (t.result_json or {}).get("stdout", "").strip()
+                    snippet = stdout if len(stdout) < 4000 else stdout[:4000] + "\n...[truncated]"
+                    context_parts.append(f"{header}\nOutput:\n{snippet or '(empty stdout)'}")
+                elif t.status == "failed":
+                    err = (t.error or "unknown error").strip()
+                    err_snippet = err if len(err) < 2000 else err[:2000] + "\n...[truncated]"
+                    context_parts.append(f"{header}\nError:\n{err_snippet}")
+                else:
+                    context_parts.append(header)
+            for a in artifacts:
+                context_parts.append(f"Artifact {a.id} ({a.type}): {a.description}")
+
+            context = "\n\n---\n\n".join(context_parts) if context_parts else "(no task outputs recorded)"
 
         synthesizer = SynthesizerAgent(model=planner_model)
         synth_res = await synthesizer.run(SynthesizerInput(
@@ -198,9 +236,10 @@ async def websocket_endpoint(websocket: WebSocket, last_seq: int = 0):
     except WebSocketDisconnect:
         bus.disconnect(websocket)
 
-@app.post("/projects", response_model=Project)
+@app.post("/projects", response_model=ProjectResponse)
 async def create_project(req: ProjectCreateRequest, background_tasks: BackgroundTasks):
     with Session(engine) as session:
+        hub = ExecutionHub(session)
         if req.existing_project_id:
             project = session.get(Project, uuid.UUID(req.existing_project_id))
             if not project:
@@ -213,19 +252,60 @@ async def create_project(req: ProjectCreateRequest, background_tasks: Background
             session.refresh(project)
             print(f"  [Server] Created new project session: {project.id}", flush=True)
         
-        # Save files to workspace directory (persistent across messages)
+        # Save files to workspace directory
+        workspace_dir = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project.id}"
+        os.makedirs(workspace_dir, exist_ok=True)
         if req.files:
-            workspace_dir = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project.id}"
-            os.makedirs(workspace_dir, exist_ok=True)
             for f in req.files:
                 file_path = os.path.join(workspace_dir, f.name)
                 print(f"  [Server] Saving/Updating file: {file_path}", flush=True)
                 with open(file_path, "wb") as out:
                     out.write(base64.b64decode(f.content_base64))
         
-        # Trigger the workflow for the objective (appends tasks if project exists)
-        background_tasks.add_task(run_agent_workflow, project.id, req.objective)
-        return project
+        current_files = os.listdir(workspace_dir)
+        # Emit event for UI synchronization
+        hub.create_outbox_event("STATE_UPDATED", {
+            "files": current_files,
+            "state": {} 
+        })
+        session.commit()
+        
+        # Trigger the workflow only if an objective is provided
+        if req.objective.strip():
+            background_tasks.add_task(run_agent_workflow, project.id, req.objective)
+        else:
+            print(f"  [Server] Silent upload detected for session {project.id}. Skipping workflow.", flush=True)
+            
+        return ProjectResponse(project=project, files=current_files)
+
+@app.post("/projects/{project_id}/files", response_model=ProjectResponse)
+async def upload_files_to_project(project_id: uuid.UUID, req: FilesUploadRequest):
+    """Dedicated endpoint for silent file uploads without triggering agents."""
+    with Session(engine) as session:
+        project = session.get(Project, project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        workspace_dir = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project.id}"
+        os.makedirs(workspace_dir, exist_ok=True)
+        
+        for f in req.files:
+            file_path = os.path.join(workspace_dir, f.name)
+            print(f"  [Server] [FilesAPI] Saving file: {file_path}", flush=True)
+            with open(file_path, "wb") as out:
+                out.write(base64.b64decode(f.content_base64))
+        
+        current_files = os.listdir(workspace_dir)
+        
+        # Emit STATE_UPDATED event
+        hub = ExecutionHub(session)
+        hub.create_outbox_event("STATE_UPDATED", {
+            "files": current_files,
+            "state": {} # We don't have kernel state here easily, but we have files
+        })
+        session.commit()
+        
+        return ProjectResponse(project=project, files=current_files)
 
 @app.get("/health")
 def health():

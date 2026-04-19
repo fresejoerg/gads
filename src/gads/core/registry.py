@@ -12,7 +12,7 @@ LITELLM_KEY = os.getenv("LITELLM_MASTER_KEY", "sk-1234")
 # Hardcoded rules for mapping model names to Tiers
 TIER_MAPPING = {
     "T1": ["claude-opus-4.7", "gemini-3.1-pro-preview"],
-    "T2": ["claude-sonnet-4.6", "gemini-3.1-flash-preview"],
+    "T2": ["claude-sonnet-4.6", "gemini-3-flash-preview"],
     "T3": ["claude-haiku-4.5", "gemini-3.1-flash-lite-preview"],
     "T4": ["local_model"]
 }
