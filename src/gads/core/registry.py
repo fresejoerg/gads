@@ -1,6 +1,5 @@
 import httpx
 import os
-import random
 from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
 
@@ -10,10 +9,11 @@ LITELLM_URL = os.getenv("LITELLM_BASE_URL", "http://localhost:4000/v1")
 LITELLM_KEY = os.getenv("LITELLM_MASTER_KEY", "sk-1234")
 
 # Hardcoded rules for mapping model names to Tiers
+# Gemini/Local are always index 0 to ensure they are the primary choice.
 TIER_MAPPING = {
-    "T1": ["claude-opus-4.7", "gemini-3.1-pro-preview"],
-    "T2": ["claude-sonnet-4.6", "gemini-3-flash-preview"],
-    "T3": ["claude-haiku-4.5", "gemini-3.1-flash-lite-preview"],
+    "T1": ["gemini-3.1-pro-preview", "claude-opus-4.7"],
+    "T2": ["gemini-3-flash-preview", "claude-sonnet-4.6"],
+    "T3": ["gemini-3.1-flash-lite-preview", "claude-haiku-4.5"],
     "T4": ["local_model"]
 }
 
@@ -40,7 +40,8 @@ async def get_model_hierarchy() -> Dict[str, Any]:
             
             hierarchy = {}
             for tier, keywords in TIER_MAPPING.items():
-                matching_models = [m for m in available_models if m in keywords]
+                # Preservation of order: if gemini is in TIER_MAPPING, it will be first in matching_models
+                matching_models = [m for m in keywords if m in available_models]
                 if matching_models:
                     hierarchy[tier] = {
                         "description": TIER_DESCRIPTIONS[tier],
@@ -54,29 +55,38 @@ async def get_model_hierarchy() -> Dict[str, Any]:
 
 def get_next_model_dynamic(current_model: str, hierarchy: Dict[str, Any]) -> Optional[str]:
     """
-    Finds the next tier up from current_model and picks a random model from it.
+    Deterministic Escalation Logic:
+    1. Try the next model in the SAME tier (e.g. Gemini -> Claude).
+    2. If no more models in tier, move to the first model of the NEXT tier.
     """
-    # 1. Identify current tier
     current_tier = None
+    current_tier_models = []
+    
     for tier, data in hierarchy.items():
         if current_model in data["models"]:
             current_tier = tier
+            current_tier_models = data["models"]
             break
             
     if not current_tier:
-        # If model is unknown, assume it's Tier 4 for safety
-        current_tier = "T4"
-        
-    # 2. Find next tier index
+        return hierarchy.get("T4", {}).get("models", [None])[0]
+
+    # 1. Try to find a fallback model in the SAME tier (Claude fallback)
     try:
-        idx = TIER_ORDER.index(current_tier)
-        if idx + 1 < len(TIER_ORDER):
-            next_tier = TIER_ORDER[idx + 1]
-            
-            # 3. Pick random model from next tier if it exists in hierarchy
+        current_idx = current_tier_models.index(current_model)
+        if current_idx + 1 < len(current_tier_models):
+            return current_tier_models[current_idx + 1]
+    except ValueError:
+        pass
+
+    # 2. No more in current tier? Move to first model of NEXT tier
+    try:
+        tier_idx = TIER_ORDER.index(current_tier)
+        if tier_idx + 1 < len(TIER_ORDER):
+            next_tier = TIER_ORDER[tier_idx + 1]
             if next_tier in hierarchy:
-                models = hierarchy[next_tier]["models"]
-                return random.choice(models)
+                # Return the first model in the next tier (which is Gemini)
+                return hierarchy[next_tier]["models"][0]
     except ValueError:
         pass
         

@@ -22,35 +22,54 @@ def get_action_buttons():
         cl.Action(name="clear_session", label="🗑️ Reset Session", payload={"action": "clear"})
     ]
 
-def _render_state_md(files, state) -> str:
+def _render_state_md(files, state, project_id) -> str:
     md = "### 📁 Workspace Files\n"
     if not files:
         md += "*(No files yet)*\n"
     else:
         for f in files:
-            md += f"- `{f}`\n"
+            is_img = f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp'))
+            icon = "🖼️" if is_img else "📄"
+            # Direct link using BACKEND_URL and project_id as requested
+            md += f"- {icon} `{f}` ([view]({BACKEND_URL}/projects/{project_id}/files/{f}))\n"
 
     md += "\n---\n\n### 🧠 Sandbox Memory\n"
     if not state:
         md += "*(Empty)*\n"
     else:
-        for var_name, var_info in state.items():
+        # Sort and truncate to prevent UI lag if variables exceed 50
+        sorted_vars = sorted(state.items())
+        display_vars = sorted_vars[:50]
+        for var_name, var_info in display_vars:
             vtype = var_info.get("type", "Unknown")
             md += f"- **`{var_name}`** (`{vtype}`)\n"
             if vtype == "DataFrame":
                 md += f"  - Shape: {var_info.get('shape')}\n"
-                cols_str = ", ".join([str(c) for c in var_info.get('columns', [])])
-                md += f"  - Cols: [{cols_str}]\n"
             elif "value" in var_info:
                 val = str(var_info['value'])[:100].replace('\n', ' ')
                 md += f"  - Value: `{val}`\n"
+        
+        if len(sorted_vars) > 50:
+            md += f"\n*(Truncated: {len(sorted_vars) - 50} more variables...)*\n"
+            
     return md
 
 async def sync_dashboard(files, state):
     """Refresh the persistent side panel via Chainlit's ElementSidebar API."""
-    md = _render_state_md(files, state)
-    state_el = cl.Text(name="ProjectState", content=md)
-    await cl.ElementSidebar.set_elements([state_el])
+    project_id = cl.user_session.get("current_project_id")
+    if not project_id:
+        return
+
+    try:
+        # project_id is passed correctly to _render_state_md
+        md = _render_state_md(files, state, project_id)
+        state_el = cl.Text(name="ProjectState", content=md)
+        
+        # FIX: Only pass the state_el in a list. Passing actions here causes a crash.
+        # We also removed the 'actions' list that was previously being constructed/passed.
+        await cl.ElementSidebar.set_elements([state_el])
+    except Exception as e:
+        print(f"Error syncing dashboard: {e}")
 
 @cl.on_chat_start
 async def start():
@@ -61,15 +80,14 @@ async def start():
     # 1. Send the welcome message with actions
     dashboard_msg = cl.Message(
         content="--- 🚀 GADS: Data Science Rockstar Control Center ---\n\n"
-                "Environment Initialized. Track workspace state in the side panel →",
+                "Environment Initialized. Track workspace state and artifacts in the side panel →",
         actions=get_action_buttons()
     )
     await dashboard_msg.send()
 
     # 2. Initialize the persistent side panel
     await cl.ElementSidebar.set_title("Project State")
-    await sync_dashboard([], {})
-
+    
     if not cl.user_session.get("ws_active"):
         cl.user_session.set("ws_active", True)
         asyncio.create_task(ws_listener())
@@ -111,8 +129,8 @@ async def on_upload_action(action: cl.Action):
                     
                     if not project_id:
                         cl.user_session.set("current_project_id", data["project"]["id"])
+                        project_id = data["project"]["id"]
                     
-                    # Update Sidebar
                     await sync_dashboard(data.get("files", []), {})
                     await cl.Message(content=f"✅ Successfully uploaded {len(files)} file(s).").send()
                     
@@ -120,10 +138,7 @@ async def on_upload_action(action: cl.Action):
                     await cl.Message(content=f"❌ Upload failed: {e}").send()
     finally:
         await action.remove()
-        # AskFileMessage.send() ends with an internal task_start() intended to
-        # resume the enclosing message handler. Action callbacks aren't
-        # task-wrapped, so without a matching task_end() the input bar stays
-        # locked in "running" state.
+        # Enforce task end to unlock the chat input
         try:
             await cl.context.emitter.task_end()
         except Exception:
@@ -208,7 +223,7 @@ async def handle_event(event: dict):
 
 @cl.on_message
 async def main(message: cl.Message):
-    # Immediate ack to unlock UI if it's just an upload
+    # Parse attached files
     files = []
     for element in message.elements:
         if isinstance(element, cl.File):
@@ -223,18 +238,18 @@ async def main(message: cl.Message):
                 })
             
     project_id = cl.user_session.get("current_project_id")
-    payload = {
-        "name": "Chat Session",
-        "objective": message.content,
-        "files": files,
-        "existing_project_id": str(project_id) if project_id else None
-    }
-
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    
+    async with httpx.AsyncClient(timeout=120.0) as client:
         try:
             if files and not message.content.strip() and project_id:
                 resp = await client.post(f"{BACKEND_URL}/projects/{project_id}/files", json={"files": files})
             else:
+                payload = {
+                    "name": "Chat Session",
+                    "objective": message.content,
+                    "files": files,
+                    "existing_project_id": str(project_id) if project_id else None
+                }
                 resp = await client.post(f"{BACKEND_URL}/projects", json=payload)
             
             resp.raise_for_status()
@@ -242,8 +257,8 @@ async def main(message: cl.Message):
             
             if not project_id:
                 cl.user_session.set("current_project_id", data["project"]["id"])
+                project_id = data["project"]["id"]
             
-            # Sync dashboard
             await sync_dashboard(data.get("files", []), {})
             
             if files and not message.content.strip():
