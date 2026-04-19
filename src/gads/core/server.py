@@ -257,7 +257,9 @@ async def create_project(req: ProjectCreateRequest, background_tasks: Background
         os.makedirs(workspace_dir, exist_ok=True)
         if req.files:
             for f in req.files:
-                file_path = os.path.join(workspace_dir, f.name)
+                # Security: prevent path-traversal by using os.path.basename
+                safe_name = os.path.basename(f.name)
+                file_path = os.path.join(workspace_dir, safe_name)
                 print(f"  [Server] Saving/Updating file: {file_path}", flush=True)
                 with open(file_path, "wb") as out:
                     out.write(base64.b64decode(f.content_base64))
@@ -290,7 +292,9 @@ async def upload_files_to_project(project_id: uuid.UUID, req: FilesUploadRequest
         os.makedirs(workspace_dir, exist_ok=True)
         
         for f in req.files:
-            file_path = os.path.join(workspace_dir, f.name)
+            # Security: prevent path-traversal by using os.path.basename
+            safe_name = os.path.basename(f.name)
+            file_path = os.path.join(workspace_dir, safe_name)
             print(f"  [Server] [FilesAPI] Saving file: {file_path}", flush=True)
             with open(file_path, "wb") as out:
                 out.write(base64.b64decode(f.content_base64))
