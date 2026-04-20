@@ -79,7 +79,7 @@ async def start():
     
     # 1. Send the welcome message with actions
     dashboard_msg = cl.Message(
-        content="--- 🚀 GADS: Data Science Rockstar Control Center ---\n\n"
+        content="--- 🚀 GADS: Data Science Control Center ---\n\n"
                 "Environment Initialized. Track workspace state and artifacts in the side panel →",
         actions=get_action_buttons()
     )

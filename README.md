@@ -1,6 +1,6 @@
 # GADS: Generative-augmented Data Science
 
-## The "Data Science Rockstar" Multi-Agent System
+## The GADS Multi-Agent System
 
 GADS is a highly capable, multi-agent system designed to act as an end-to-end Data Science copilot. The system utilizes a **Planner-Executor-Blackboard** architecture to orchestrate specialized sub-agents for tasks ranging from exploratory data analysis (EDA) and visualization to complex NLP extraction and model training.
 
@@ -47,7 +47,25 @@ cd GADS
 uv sync
 ```
 
-### 3. Running the Control Center UI
+### 3. Configuration
+Copy `.env.example` to `.env` and fill in your API keys.
+
+#### Local Only Mode
+To run GADS entirely on local models (e.g., via LM Studio), set the following in your `.env`:
+```env
+GADS_LOCAL_ONLY=true
+```
+This will force all agents (Router, Planner, Workers) to use the `local_model` defined in your LiteLLM configuration.
+
+### 4. Running the Stack
+
+**Start the Backend:**
+```bash
+export PYTHONPATH=$PYTHONPATH:$(pwd)/src
+uv run uvicorn gads.core.server:app --host 0.0.0.0 --port 8001
+```
+
+**Start the Control Center UI:**
 ```bash
 uv run chainlit run src/gads/ui/app.py --port 8002
 ```
@@ -63,5 +81,6 @@ uv run chainlit run src/gads/ui/app.py --port 8002
 - [x] **Strict Gemini-First Model Priority.**
 - [x] **Stateful Python Sandbox with automatic plot capture.**
 - [x] **Code-Execution-Feedback Loop for agent self-correction.**
+- [x] **End-to-End Local Model Support (`GADS_LOCAL_ONLY`).**
 - [ ] Implement `DataVizAgent` for automatic chart generation.
 - [ ] Full automated Executor loop for complex multi-step DAGs.
