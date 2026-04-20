@@ -7,6 +7,7 @@ load_dotenv()
 
 LITELLM_URL = os.getenv("LITELLM_BASE_URL", "http://localhost:4000/v1")
 LITELLM_KEY = os.getenv("LITELLM_MASTER_KEY", "sk-1234")
+GADS_LOCAL_ONLY = os.getenv("GADS_LOCAL_ONLY", "false").lower() == "true"
 
 # Hardcoded rules for mapping model names to Tiers
 # Gemini/Local are always index 0 to ensure they are the primary choice.
@@ -28,6 +29,15 @@ TIER_DESCRIPTIONS = {
 
 async def get_model_hierarchy() -> Dict[str, Any]:
     """Fetches models from LiteLLM and organizes them into capability tiers."""
+    if GADS_LOCAL_ONLY:
+        print("  [Registry] 🏠 LOCAL ONLY MODE ENABLED. Overriding all tiers to 'local_model'.")
+        return {
+            tier: {
+                "description": TIER_DESCRIPTIONS[tier],
+                "models": ["local_model"]
+            } for tier in TIER_ORDER
+        }
+
     print(f"  [Registry] Fetching models from: {LITELLM_URL}", flush=True)
     try:
         async with httpx.AsyncClient() as client:

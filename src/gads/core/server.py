@@ -8,6 +8,7 @@ from typing import List, Dict, Optional
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+import uuid
 from gads.core.bus import bus, dispatcher_loop
 from gads.core.execution_hub import watchdog_loop, ExecutionHub
 from gads.core.database import init_db, engine
@@ -16,15 +17,29 @@ from gads.agents.planner import DataSciencePlanner, PlannerInput, Reconciliation
 from gads.agents.router import DataScienceRouter, RouterInput
 from gads.agents.workers.synthesizer import SynthesizerAgent, SynthesizerInput
 from gads.core.executor import ExecutionManager
-from gads.core.registry import get_model_hierarchy
+from gads.core.registry import get_model_hierarchy, GADS_LOCAL_ONLY
 from gads.core.knowledge import KnowledgeRegistry
 from sqlmodel import select, Session
+import base64
+import os
+import asyncio
+import traceback
 
 app = FastAPI(title="GADS Core API")
+registry = KnowledgeRegistry("src/gads/knowledge/recipes")
 
-# Initialize Knowledge Base
-RECIPES_DIR = "/home/jfrese/projects/GADS/src/gads/knowledge/recipes"
-registry = KnowledgeRegistry(RECIPES_DIR)
+# --- RESPONSE MODELS ---
+class ProjectRead(BaseModel):
+    id: uuid.UUID
+    name: str
+    objective: str
+
+    class Config:
+        from_attributes = True
+
+class ProjectResponse(BaseModel):
+    project: ProjectRead
+    files: List[str] = []
 
 class FileUpload(BaseModel):
     name: str
@@ -35,10 +50,6 @@ class ProjectCreateRequest(BaseModel):
     objective: str
     files: List[FileUpload] = []
     existing_project_id: Optional[str] = None
-
-class ProjectResponse(BaseModel):
-    project: Project
-    files: List[str] = []
 
 class FilesUploadRequest(BaseModel):
     files: List[FileUpload]
@@ -69,7 +80,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
         
         # 0. SYNC GROUND TRUTH
         print(f"  [Workflow] Grounding session state...", flush=True)
-        workspace_dir = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project_id}"
+        workspace_dir = f"/home/joergf/projects/MyLocalStack/data/workspaces/{project_id}"
         current_files = _get_recursive_files(workspace_dir)
         
         # Dummy execute to trigger state introspection
@@ -80,7 +91,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
 
         # 1. ROUTING (Full Gemini Priority)
         # Update Routing fallback to Gemini 3.1 Flash Lite
-        router_fallback = ["gemini-3.1-flash-lite-preview"]
+        router_fallback = ["local_model"] if GADS_LOCAL_ONLY else ["gemini-3.1-flash-lite-preview"]
         router_model = hierarchy.get("T3", {}).get("models", router_fallback)[0]
         router = DataScienceRouter(model=router_model)
         
@@ -114,7 +125,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
 
         # 3. PLANNING (Full Gemini Priority)
         # Update Planning fallback to Gemini 3.1 Pro
-        planner_fallback = ["gemini-3.1-pro-preview"]
+        planner_fallback = ["local_model"] if GADS_LOCAL_ONLY else ["gemini-3.1-pro-preview"]
         planner_model = hierarchy.get("T1", {}).get("models", planner_fallback)[0]
         planner = DataSciencePlanner(model=planner_model)
         
@@ -284,7 +295,7 @@ async def create_project(req: ProjectCreateRequest, background_tasks: Background
             session.commit()
             session.refresh(project)
         
-        workspace_dir = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project.id}"
+        workspace_dir = f"/home/joergf/projects/MyLocalStack/data/workspaces/{project.id}"
         os.makedirs(workspace_dir, exist_ok=True)
         if req.files:
             for f in req.files:
@@ -309,7 +320,7 @@ async def upload_files_to_project(project_id: uuid.UUID, req: FilesUploadRequest
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         
-        workspace_dir = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project.id}"
+        workspace_dir = f"/home/joergf/projects/MyLocalStack/data/workspaces/{project.id}"
         os.makedirs(workspace_dir, exist_ok=True)
         for f in req.files:
             safe_name = os.path.basename(f.name)
@@ -326,7 +337,7 @@ async def upload_files_to_project(project_id: uuid.UUID, req: FilesUploadRequest
 @app.get("/projects/{project_id}/files/{file_path:path}")
 async def download_file(project_id: uuid.UUID, file_path: str):
     """Serves a file from the workspace for viewing or download."""
-    workspace_dir = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project_id}"
+    workspace_dir = f"/home/joergf/projects/MyLocalStack/data/workspaces/{project_id}"
     full_path = os.path.join(workspace_dir, file_path)
     
     # Security: Ensure the file is inside the workspace
