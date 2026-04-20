@@ -69,18 +69,3 @@ uv run uvicorn gads.core.server:app --host 0.0.0.0 --port 8001
 ```bash
 uv run chainlit run src/gads/ui/app.py --port 8002
 ```
-
----
-
-## Development Roadmap
-
-- [x] Foundation: custom multi-agent orchestration.
-- [x] Planner-Worker-Blackboard architecture.
-- [x] **Intent Classification & Domain Expert SOPs.**
-- [x] **Interactive Workspace Explorer (View/Download artifacts).**
-- [x] **Strict Gemini-First Model Priority.**
-- [x] **Stateful Python Sandbox with automatic plot capture.**
-- [x] **Code-Execution-Feedback Loop for agent self-correction.**
-- [x] **End-to-End Local Model Support (`GADS_LOCAL_ONLY`).**
-- [ ] Implement `DataVizAgent` for automatic chart generation.
-- [ ] Full automated Executor loop for complex multi-step DAGs.
