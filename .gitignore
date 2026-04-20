@@ -17,3 +17,10 @@ data/
 artifacts/
 .files/
 bin/
+
+# Utilities and temporary code
+consult_ui_crash.py
+stress_test_routing.py
+stress_test_routing_prompt.txt
+main.py
+*.ipynb
