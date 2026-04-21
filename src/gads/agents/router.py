@@ -24,6 +24,10 @@ Your goal is to categorize a user's technical objective into a specific `task_ty
 ### EXAMPLES:
 - "Predict Titanic survival" -> {task_type: 'binary_classification', data_modality: 'tabular'}
 - "Forecast house prices" -> {task_type: 'regression', data_modality: 'tabular'}
+
+### FORMATTING RULE:
+You MUST return a valid JSON object matching the requested schema. 
+Do NOT include any metadata, schema definitions, or 'properties' wrappers.
 """
 
 class DataScienceRouter(BaseAgent[RouterInput, RouterOutput]):

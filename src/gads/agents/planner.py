@@ -73,6 +73,10 @@ You MUST provide a list of steps. For each task:
 
 ## AVAILABLE_MODELS_HIERARCHY:
 {hierarchy_json}
+
+### FORMATTING RULE:
+You MUST return a valid JSON object matching the requested schema. 
+Do NOT include any metadata, schema definitions, or 'properties' wrappers.
 """
 
 class DataSciencePlanner(BaseAgent[PlannerInput, PlannerOutput]):

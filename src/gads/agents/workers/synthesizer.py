@@ -20,6 +20,8 @@ RULES:
 2. Focus on the 'WHY' and 'SO WHAT' of the data.
 3. Refer to specific findings or visualizations mentioned in the context.
 4. If there were errors, explain them simply.
+5. CRITICAL: You MUST return a valid JSON object containing ONLY the 'narrative' and 'key_takeaways' fields. 
+   Do NOT include any metadata, schema definitions, or 'properties' wrappers.
 """
 
 class SynthesizerAgent(BaseAgent[SynthesizerInput, SynthesizerOutput]):
