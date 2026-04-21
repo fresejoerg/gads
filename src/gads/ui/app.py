@@ -1,5 +1,6 @@
 import os
 import base64
+from datetime import datetime
 
 # --- PRE-IMPORT FIX ---
 os.environ.pop("DATABASE_URL", None)
@@ -78,8 +79,9 @@ async def start():
     cl.user_session.set("current_project_id", None)
     
     # 1. Send the welcome message with actions
+    now = datetime.now().strftime("[%H:%M:%S]")
     dashboard_msg = cl.Message(
-        content="--- 🚀 GADS: Data Science Control Center ---\n\n"
+        content=f"{now} --- 🚀 GADS: Data Science Control Center ---\n\n"
                 "Environment Initialized. Track workspace state and artifacts in the side panel →",
         actions=get_action_buttons()
     )
@@ -132,10 +134,12 @@ async def on_upload_action(action: cl.Action):
                         project_id = data["project"]["id"]
                     
                     await sync_dashboard(data.get("files", []), {})
-                    await cl.Message(content=f"✅ Successfully uploaded {len(files)} file(s).").send()
+                    now = datetime.now().strftime("[%H:%M:%S]")
+                    await cl.Message(content=f"{now} ✅ Successfully uploaded {len(files)} file(s).").send()
                     
                 except Exception as e:
-                    await cl.Message(content=f"❌ Upload failed: {e}").send()
+                    now = datetime.now().strftime("[%H:%M:%S]")
+                    await cl.Message(content=f"{now} ❌ Upload failed: {e}").send()
     finally:
         await action.remove()
         # Enforce task end to unlock the chat input
@@ -148,7 +152,8 @@ async def on_upload_action(action: cl.Action):
 async def on_clear_action(action: cl.Action):
     try:
         cl.user_session.set("current_project_id", None)
-        await cl.Message(content="🔄 Session reset.").send()
+        now = datetime.now().strftime("[%H:%M:%S]")
+        await cl.Message(content=f"{now} 🔄 Session reset.").send()
     finally:
         await action.remove()
 
@@ -170,34 +175,35 @@ async def ws_listener():
 async def handle_event(event: dict):
     etype = event["type"]
     payload = event["payload"]
+    now = datetime.now().strftime("[%H:%M:%S]")
     
     if etype == "STEP_STARTED":
-        await cl.Message(content=f"🧠 {payload['message']}").send()
+        await cl.Message(content=f"{now} 🧠 {payload['message']}").send()
 
     elif etype == "TASK_CREATED":
         step = cl.Step(name="Task Planned", type="tool")
-        step.input = payload['description']
+        step.input = f"{now} {payload['description']}"
         await step.send()
         cl.user_session.set(f"step_{payload['task_id']}", step)
     
     elif etype == "TASK_STARTED":
         step = cl.user_session.get(f"step_{payload['task_id']}")
         if step:
-            step.name = "Executing Task"
+            step.name = f"{now} Executing Task"
             await step.update()
     
     elif etype == "TASK_COMPLETED":
         step = cl.user_session.get(f"step_{payload['task_id']}")
         if step:
             model = payload.get("result", {}).get("model_used", "unknown-model")
-            step.name = f"Task Completed ({model})"
+            step.name = f"{now} Task Completed ({model})"
             step.output = f"Result:\n```\n{payload['result'].get('stdout', '')}\n```"
             await step.update()
 
     elif etype == "TASK_FAILED":
         step = cl.user_session.get(f"step_{payload['task_id']}")
         if step:
-            step.name = "Task Failed ❌"
+            step.name = f"{now} Task Failed ❌"
             step.output = f"Error:\n```\n{payload.get('error', 'Unknown error')}\n```"
             await step.update()
             
@@ -205,10 +211,10 @@ async def handle_event(event: dict):
         if payload["type"] == "plot":
             image_bytes = base64.b64decode(payload["content_json"]["image_base64"])
             image = cl.Image(content=image_bytes, name="plot", display="inline")
-            await cl.Message(content=f"🎨 Visualization: {payload['description']}", elements=[image]).send()
+            await cl.Message(content=f"{now} 🎨 Visualization: {payload['description']}", elements=[image]).send()
 
     elif etype == "WORKFLOW_FINAL_RESULT":
-        content = f"### 📖 The Story\n\n{payload['narrative']}\n\n"
+        content = f"{now} ### 📖 The Story\n\n{payload['narrative']}\n\n"
         if payload.get("takeaways"):
             content += "**Key Takeaways:**\n"
             for t in payload["takeaways"]:
@@ -219,7 +225,7 @@ async def handle_event(event: dict):
         await sync_dashboard(payload.get("files", []), payload.get("state", {}))
 
     elif etype == "STEP_COMPLETED":
-        await cl.Message(content=f"✅ {payload['message']}").send()
+        await cl.Message(content=f"{now} ✅ {payload['message']}").send()
 
 @cl.on_message
 async def main(message: cl.Message):
@@ -262,7 +268,9 @@ async def main(message: cl.Message):
             await sync_dashboard(data.get("files", []), {})
             
             if files and not message.content.strip():
-                await cl.Message(content=f"✅ Uploaded {len(files)} file(s).").send()
+                now = datetime.now().strftime("[%H:%M:%S]")
+                await cl.Message(content=f"{now} ✅ Uploaded {len(files)} file(s).").send()
                 
         except Exception as e:
-            await cl.Message(content=f"Error: {e}").send()
+            now = datetime.now().strftime("[%H:%M:%S]")
+            await cl.Message(content=f"{now} Error: {e}").send()
