@@ -335,7 +335,7 @@ async def upload_files_to_project(project_id: uuid.UUID, req: FilesUploadRequest
         return ProjectResponse(project=project, files=current_files)
 
 @app.get("/projects/{project_id}/files/{file_path:path}")
-async def download_file(project_id: uuid.UUID, file_path: str):
+async def download_file(project_id: uuid.UUID, file_path: str, download: bool = False):
     """Serves a file from the workspace for viewing or download."""
     workspace_dir = f"/home/joergf/projects/MyLocalStack/data/workspaces/{project_id}"
     full_path = os.path.join(workspace_dir, file_path)
@@ -347,6 +347,8 @@ async def download_file(project_id: uuid.UUID, file_path: str):
     if not os.path.exists(full_path):
         raise HTTPException(status_code=404, detail="File not found")
         
+    if download:
+        return FileResponse(full_path, filename=os.path.basename(full_path))
     return FileResponse(full_path)
 
 @app.get("/health")
