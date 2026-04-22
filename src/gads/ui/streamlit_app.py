@@ -132,9 +132,8 @@ async def listen_to_ws():
                     
                     # Trigger a rerun to show new state
                     st.rerun()
-    except Exception as e:
-        # In a real app, you'd handle reconnection here
-        pass
+        except Exception:
+            await asyncio.sleep(2)
 
 # --- UI COMPONENTS ---
 
