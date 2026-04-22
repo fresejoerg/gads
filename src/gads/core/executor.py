@@ -45,7 +45,7 @@ class ExecutionManager:
                         previous_code=previous_code,
                         error_feedback=error_feedback
                     )),
-                    timeout=90.0
+                    timeout=180.0
                 )
                 
                 current_code = coder_res.content.code
@@ -73,7 +73,7 @@ class ExecutionManager:
                 return ExecutionResult(
                     stdout="", stderr="", 
                     error={"ename": "TimeoutError", "evalue": "LLM generation timed out"},
-                    execution_time_ms=60000,
+                    execution_time_ms=180000,
                     kernel_state={}
                 ), self.coder.model
             except Exception as e:
