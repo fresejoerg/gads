@@ -14,34 +14,40 @@ WS_URL = os.getenv("GADS_WS_URL", "ws://localhost:8001/ws")
 
 st.set_page_config(
     page_title="GADS Control Center",
-    page_icon="🔬",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# --- CSS FOR STYLING ---
+# --- CSS FOR STYLING (High Contrast / Professional) ---
 st.markdown("""
 <style>
-    .stApp { background-color: #f8fafc; }
+    .stApp { background-color: #f1f5f9; }
     .task-card { 
         background-color: white; 
-        padding: 15px; 
-        border-radius: 8px; 
-        border-left: 5px solid #3b82f6;
-        margin-bottom: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    }
-    .status-pending { color: #64748b; font-weight: bold; }
-    .status-running { color: #3b82f6; font-weight: bold; }
-    .status-completed { color: #10b981; font-weight: bold; }
-    .status-failed { color: #ef4444; font-weight: bold; }
-    .artifact-card {
+        padding: 20px; 
+        border-radius: 4px; 
+        border-left: 6px solid #1e293b;
+        margin-bottom: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        padding: 10px;
-        background: white;
-        margin-top: 10px;
     }
+    .status-label {
+        font-family: monospace;
+        font-size: 0.8rem;
+        padding: 2px 6px;
+        border-radius: 3px;
+        text-transform: uppercase;
+    }
+    .status-pending { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
+    .status-running { background-color: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+    .status-completed { background-color: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+    .status-failed { background-color: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+    
+    .sidebar-project {
+        padding: 10px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    h1, h2, h3 { color: #0f172a !important; font-weight: 700 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -87,15 +93,18 @@ async def start_workflow(objective: str):
 
 # --- WEBSOCKET LISTENER ---
 async def listen_to_ws():
-    try:
-        async with websockets.connect(f"{WS_URL}") as ws:
-            while True:
-                msg = await ws.recv()
-                event = json.loads(msg)
-                
-                # Update local state based on event
-                etype = event["type"]
-                payload = event["payload"]
+    while True:
+        try:
+            last_seq = st.session_state.get("last_seq", 0)
+            async with websockets.connect(f"{WS_URL}?last_seq={last_seq}") as ws:
+                while True:
+                    msg = await ws.recv()
+                    event = json.loads(msg)
+                    st.session_state.last_seq = event["seq"]
+                    
+                    # Update local state based on event
+                    etype = event["type"]
+                    payload = event["payload"]
                 
                 if etype == "TASK_CREATED":
                     st.session_state.tasks[payload["task_id"]] = {
@@ -130,47 +139,47 @@ async def listen_to_ws():
 # --- UI COMPONENTS ---
 
 def render_sidebar():
-    st.sidebar.title("📁 Project Archive")
+    st.sidebar.title("Project Archive")
     projects = asyncio.run(fetch_projects())
     for p in projects:
-        with st.sidebar.expander(f"📝 {p['name'][:30]}..."):
+        with st.sidebar.expander(f"PROJECT: {p['name'][:30]}"):
             st.caption(f"ID: {p['id']}")
-            st.markdown(f"[View Master Dashboard]({BACKEND_URL}/projects/{p['id']}/files/final_dashboard.html)")
-            st.markdown(f"[View Research Report]({BACKEND_URL}/projects/{p['id']}/files/research_report.md)")
+            st.markdown(f"[VIEW DASHBOARD]({BACKEND_URL}/projects/{p['id']}/files/final_dashboard.html)")
+            st.markdown(f"[VIEW REPORT]({BACKEND_URL}/projects/{p['id']}/files/research_report.md)")
 
 def render_main():
-    st.title("🔬 GADS Control Center")
-    st.markdown("### Agentic Data Science Orchestrator")
+    st.title("GADS Control Center")
+    st.markdown("Generative-augmented Data Science Orchestrator")
     
-    objective = st.text_area("What is your research objective?", placeholder="e.g., Run a full EDA and predictive analysis on the Titanic dataset...")
+    objective = st.text_area("Research Objective", placeholder="Describe your data science goal...")
     
-    if st.button("🚀 Launch Expert Workflow", type="primary"):
+    if st.button("Launch Workflow", type="primary"):
         if objective:
             asyncio.run(start_workflow(objective))
-            st.info("Workflow initiated. Monitoring events...")
+            st.info("[SYSTEM] Workflow initiated.")
         else:
-            st.warning("Please enter an objective.")
+            st.warning("[SYSTEM] Objective required.")
 
     col1, col2 = st.columns([1, 1.5])
     
     with col1:
-        st.subheader("📋 Task Tracker")
+        st.subheader("Task Tracking")
         if not st.session_state.tasks:
-            st.info("No active tasks.")
+            st.info("[SYSTEM] No active tasks.")
         for tid, tinfo in st.session_state.tasks.items():
-            status_class = f"status-{tinfo['status']}"
+            status = tinfo['status'].upper()
             st.markdown(f"""
             <div class="task-card">
-                <span class="{status_class}">{tinfo['status'].upper()}</span><br/>
-                {tinfo['description']}
+                <span class="status-label status-{tinfo['status']}">{status}</span><br/>
+                <div style="margin-top: 10px; color: #334155;">{tinfo['description']}</div>
             </div>
             """, unsafe_allow_html=True)
             if tinfo['output']:
-                with st.expander("View Logs"):
+                with st.expander("Logs"):
                     st.code(tinfo['output'])
 
     with col2:
-        st.subheader("🧠 Research Synthesis")
+        st.subheader("Synthesis")
         if st.session_state.narrative:
             st.markdown(st.session_state.narrative)
             if st.session_state.takeaways:
@@ -178,9 +187,9 @@ def render_main():
                 for t in st.session_state.takeaways:
                     st.markdown(f"- {t}")
         else:
-            st.info("Synthesis will appear here once the Lead Data Scientist completes the run.")
+            st.info("[SYSTEM] Synthesis pending completion.")
 
-        st.subheader("📦 Ground Truth")
+        st.subheader("Ground Truth")
         tab1, tab2 = st.tabs(["Files", "Memory"])
         with tab1:
             if not st.session_state.project_files:
