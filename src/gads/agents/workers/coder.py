@@ -29,7 +29,34 @@ STRICT RULES:
      fig.show()
      ```
    - Use descriptive, unique filenames for each HTML file.
-   - CONSOLIDATED DASHBOARD: If you generate more than one plot, you MUST ALSO create a `final_dashboard.html` file that combines all your figures using `plotly.subplots` or by appending HTML strings. This is your "Final Report".
+   - CONSOLIDATED DASHBOARD: If you generate more than one plot, you MUST create a `final_dashboard.html`. 
+     - Use the following pattern to weave multiple figures into a single professional report:
+     ```python
+     import plotly.offline as pyo
+     # Create a list of div strings for each figure
+     divs = [pyo.plot(fig, include_plotlyjs='cdn', output_type='div') for fig in [fig1, fig2, ...]]
+     
+     # Wrap in a professional HTML container
+     html_content = f\"\"\"
+     <html>
+     <head><title>GADS Analytics Report</title>
+     <style>
+       body {{ font-family: sans-serif; margin: 20px; background: #f8f9fa; }}
+       .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 20px; }}
+       .card {{ background: white; border-radius: 8px; padding: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+     </style>
+     </head>
+     <body>
+       <h1>Project Analytics Report</h1>
+       <div class='grid'>
+         {''.join([f\"<div class='card'>{{d}}</div>\" for d in divs])}
+       </div>
+     </body>
+     </html>
+     \"\"\"
+     with open("final_dashboard.html", "w") as f:
+         f.write(html_content)
+     ```
    - DO NOT use matplotlib or seaborn for plotting unless explicitly requested.
 3. NO HALLUCINATIONS: Do not generate mock data. 
 3. DATA PROVENANCE: You MUST use the variables and files listed in the 'RUNTIME STATE' below.
