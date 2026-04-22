@@ -87,6 +87,24 @@ st.markdown("""
     /* Links */
     a { color: #2563eb !important; text-decoration: underline !important; font-weight: 600; }
     section[data-testid="stSidebar"] a { color: #38bdf8 !important; }
+    
+    /* Input & Textarea Contrast Fix */
+    .stTextArea textarea {
+        color: #0f172a !important;
+        background-color: #ffffff !important;
+        -webkit-text-fill-color: #0f172a !important;
+    }
+    
+    .stTextInput input {
+        color: #0f172a !important;
+        background-color: #ffffff !important;
+        -webkit-text-fill-color: #0f172a !important;
+    }
+
+    /* Force all text in the main area to be dark slate */
+    .main .stMarkdown p, .main .stMarkdown li {
+        color: #0f172a !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
