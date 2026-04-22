@@ -36,6 +36,16 @@ st.markdown("""
         border-right: 2px solid #000000 !important;
     }
     
+    /* FIX: Force '>>' collapse icon and all sidebar buttons to be black */
+    [data-testid="stSidebarCollapse"] button,
+    section[data-testid="stSidebar"] button {
+        color: #000000 !important;
+    }
+    [data-testid="stSidebarCollapse"] svg,
+    section[data-testid="stSidebar"] svg {
+        fill: #000000 !important;
+    }
+    
     section[data-testid="stSidebar"] h1, 
     section[data-testid="stSidebar"] h2, 
     section[data-testid="stSidebar"] h3,
@@ -44,16 +54,6 @@ st.markdown("""
     section[data-testid="stSidebar"] label,
     section[data-testid="stSidebar"] .stMarkdown {
         color: #000000 !important;
-    }
-    
-    /* FIX: Visibility for '>>' collapse button and other sidebar controls */
-    section[data-testid="stSidebar"] button, 
-    [data-testid="stSidebarCollapse"] button {
-        color: #000000 !important;
-    }
-    section[data-testid="stSidebar"] svg,
-    [data-testid="stSidebarCollapse"] svg {
-        fill: #000000 !important;
     }
     
     /* Project Archive Cards - High Contrast */
@@ -220,6 +220,14 @@ async def listen_to_ws():
 
 # --- UI COMPONENTS ---
 
+def check_file_exists(project_id: str, filename: str) -> bool:
+    try:
+        with httpx.Client() as client:
+            resp = client.get(f"{BACKEND_URL}/projects/{project_id}/files/{filename}")
+            return resp.status_code == 200
+    except Exception:
+        return False
+
 def render_sidebar():
     st.sidebar.title("Project Archive")
     st.sidebar.markdown("---")
@@ -236,10 +244,19 @@ def render_sidebar():
         except Exception:
             ts_str = "N/A"
         
+        p_id = p['id']
         with st.sidebar.expander(f"{ts_str} | {p.get('name', 'Unnamed')[:20]}"):
-            st.caption(f"PROJECT ID: {p['id']}")
-            st.markdown(f"**[OPEN MASTER DASHBOARD]({BACKEND_URL}/projects/{p['id']}/files/final_dashboard.html)**")
-            st.markdown(f"**[OPEN RESEARCH REPORT]({BACKEND_URL}/projects/{p['id']}/files/research_report.md)**")
+            st.caption(f"PROJECT ID: {p_id}")
+            
+            if check_file_exists(p_id, "final_dashboard.html"):
+                st.markdown(f"**[OPEN MASTER DASHBOARD]({BACKEND_URL}/projects/{p_id}/files/final_dashboard.html)**")
+            else:
+                st.caption("Dashboard not generated")
+                
+            if check_file_exists(p_id, "research_report.md"):
+                st.markdown(f"**[OPEN RESEARCH REPORT]({BACKEND_URL}/projects/{p_id}/files/research_report.md)**")
+            else:
+                st.caption("Report not generated")
 
 def fetch_current_tasks(project_id: str):
     """Fallback to fetch all tasks from DB if WS fails."""
