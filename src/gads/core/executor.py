@@ -62,7 +62,7 @@ class ExecutionManager:
                 else:
                     ename = exec_result.error.get("ename", "Error")
                     evalue = exec_result.error.get("evalue", "Unknown error")
-                    print(f"    [Executor] ❌ Failure: {ename}", flush=True)
+                    print(f"    [Executor] ❌ Failure: {ename} - {evalue}", flush=True)
                     
                     error_feedback = f"{ename}: {evalue}"
                     previous_code = current_code
