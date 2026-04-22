@@ -107,10 +107,10 @@ if "takeaways" not in st.session_state:
     st.session_state.takeaways = []
 
 # --- API HELPERS ---
-async def fetch_projects():
+def fetch_projects():
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.get(f"{BACKEND_URL}/projects")
+        with httpx.Client() as client:
+            resp = client.get(f"{BACKEND_URL}/projects")
             return resp.json()
     except Exception as e:
         st.error(f"Failed to fetch projects: {e}")
@@ -179,7 +179,7 @@ async def listen_to_ws():
 def render_sidebar():
     st.sidebar.title("Project Archive")
     st.sidebar.markdown("---")
-    projects = asyncio.run(fetch_projects())
+    projects = fetch_projects()
     for p in projects:
         # Parse timestamp for display with fallback
         try:
