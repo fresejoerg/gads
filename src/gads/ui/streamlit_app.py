@@ -251,8 +251,16 @@ def render_sidebar():
         p_id = p['id']
         with st.sidebar.expander(f"{ts_str} | {p.get('name', 'Unnamed')[:20]}"):
             st.caption(f"PROJECT ID: {p_id}")
-            st.markdown(f"**[OPEN MASTER DASHBOARD]({BACKEND_URL}/projects/{p_id}/files/final_dashboard.html)**")
-            st.markdown(f"**[OPEN RESEARCH REPORT]({BACKEND_URL}/projects/{p_id}/files/research_report.md)**")
+            
+            if p.get("has_dashboard"):
+                st.markdown(f"**[OPEN MASTER DASHBOARD]({BACKEND_URL}/projects/{p_id}/files/final_dashboard.html)**")
+            else:
+                st.caption("Dashboard: Not Available")
+                
+            if p.get("has_report"):
+                st.markdown(f"**[OPEN RESEARCH REPORT]({BACKEND_URL}/projects/{p_id}/files/research_report.md)**")
+            else:
+                st.caption("Report: Not Available")
 
 def fetch_current_tasks(project_id: str):
     """Fallback to fetch all tasks from DB if WS fails."""

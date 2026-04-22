@@ -37,6 +37,8 @@ class ProjectRead(BaseModel):
     name: str
     objective: str
     created_at: datetime
+    has_dashboard: bool = False
+    has_report: bool = False
 
     class Config:
         from_attributes = True
@@ -359,10 +361,17 @@ async def websocket_endpoint(websocket: WebSocket, last_seq: int = 0):
 
 @app.get("/projects", response_model=List[ProjectRead])
 async def list_projects():
-    """Lists all past and current projects."""
+    """Lists all past and current projects with artifact flags."""
     with Session(engine) as session:
         projects = session.exec(select(Project).order_by(Project.created_at.desc())).all()
-        return projects
+        results = []
+        for p in projects:
+            p_data = ProjectRead.from_orm(p)
+            workspace_dir = f"{WORKSPACE_ROOT}/{p.id}"
+            p_data.has_dashboard = os.path.exists(f"{workspace_dir}/final_dashboard.html")
+            p_data.has_report = os.path.exists(f"{workspace_dir}/research_report.md")
+            results.append(p_data)
+        return results
 
 @app.post("/projects", response_model=ProjectResponse)
 async def create_project(req: ProjectCreateRequest, background_tasks: BackgroundTasks):
