@@ -17,8 +17,9 @@ A foundational requirement of GADS is the ability to run on **local LLMs** and *
 *   **Persistent Control Center (UI)**: Built with **Chainlit 2.11**, featuring a stable, real-time **Project State** side panel and an **Interactive File Explorer** for point-and-click artifact viewing.
 *   **Authoritative Runtime Grounding**: Agents are forced to sync state directly from the sandbox kernel at the start of every request, preventing "semantic drift" or hallucinated data.
 *   **Stateful Python Sandbox**: A secure, Docker-isolated execution environment using **IPython Kernels** to maintain variable state across multiple agent turns.
-    *   **ML Ready**: Pre-installed with `scikit-learn`, `pandas`, and `joblib`.
-    *   **Automatic Plot Capture**: Captures `matplotlib`/`seaborn` figures as base64 artifacts.
+    *   **ML Ready**: Pre-installed with `scikit-learn`, `pandas`, `plotly`, and `joblib`.
+    *   **Automatic Plot Capture**: Captures **Plotly Express** and `matplotlib`/`seaborn` figures as base64 artifacts.
+    *   **Professional Defaults**: Pre-configured with the `plotly_white` template and professional color palettes.
     *   **Self-Correction**: Automatic feedback loop that allows agents to fix their own code bugs via distilled tracebacks.
     *   **Resource Optimized**: Default support for up to 1000 processes/threads.
 
