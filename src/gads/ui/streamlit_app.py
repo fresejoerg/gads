@@ -5,6 +5,7 @@ import asyncio
 import websockets
 import os
 import base64
+import threading
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
@@ -17,6 +18,55 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# --- WEBSOCKET THREAD HANDLER ---
+def run_ws_thread(loop, last_seq):
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(listen_to_ws_background(last_seq))
+
+async def listen_to_ws_background(start_seq):
+    curr_seq = start_seq
+    while True:
+        try:
+            async with websockets.connect(f"{WS_URL}?last_seq={curr_seq}") as ws:
+                while True:
+                    msg = await ws.recv()
+                    event = json.loads(msg)
+                    curr_seq = event["sequence"]
+                    
+                    # Update the global session state from background
+                    etype = event["type"]
+                    payload = event["payload"]
+                    
+                    if etype == "TASK_CREATED":
+                        st.session_state.tasks[payload["task_id"]] = {
+                            "description": payload["description"],
+                            "status": "pending",
+                            "output": ""
+                        }
+                    elif etype == "TASK_STARTED":
+                        if payload["task_id"] in st.session_state.tasks:
+                            st.session_state.tasks[payload["task_id"]]["status"] = "running"
+                    elif etype == "TASK_COMPLETED":
+                        if payload["task_id"] in st.session_state.tasks:
+                            st.session_state.tasks[payload["task_id"]]["status"] = "completed"
+                            st.session_state.tasks[payload["task_id"]]["output"] = payload.get("result", {}).get("stdout", "")
+                    elif etype == "TASK_FAILED":
+                        if payload["task_id"] in st.session_state.tasks:
+                            st.session_state.tasks[payload["task_id"]]["status"] = "failed"
+                            st.session_state.tasks[payload["task_id"]]["output"] = payload.get("error", "")
+                    elif etype == "STATE_UPDATED":
+                        st.session_state.project_files = payload.get("files", [])
+                        st.session_state.project_state = payload.get("state", {})
+                    elif etype == "WORKFLOW_FINAL_RESULT":
+                        st.session_state.narrative = payload["narrative"]
+                        st.session_state.takeaways = payload["takeaways"]
+                    
+                    st.session_state.last_seq = curr_seq
+                    # Signal a refresh
+                    st.session_state.needs_rerun = True
+        except Exception:
+            await asyncio.sleep(2)
 
 # --- CSS FOR STYLING (Strictly Monochromatic High Contrast) ---
 st.markdown("""
@@ -149,6 +199,8 @@ if "takeaways" not in st.session_state:
     st.session_state.takeaways = []
 if "last_seq" not in st.session_state:
     st.session_state.last_seq = 0
+if "needs_rerun" not in st.session_state:
+    st.session_state.needs_rerun = False
 
 # --- API HELPERS ---
 def fetch_projects():
@@ -173,50 +225,6 @@ async def start_workflow(objective: str):
             return data
     except Exception as e:
         st.error(f"Failed to start workflow: {e}")
-
-# --- WEBSOCKET LISTENER ---
-async def listen_to_ws():
-    while True:
-        try:
-            curr_seq = st.session_state.last_seq
-            async with websockets.connect(f"{WS_URL}?last_seq={curr_seq}") as ws:
-                while True:
-                    msg = await ws.recv()
-                    event = json.loads(msg)
-                    st.session_state.last_seq = event["sequence"] # Backend uses 'sequence'
-                    
-                    # Update local state based on event
-                    etype = event["type"]
-                    payload = event["payload"]
-                    
-                    if etype == "TASK_CREATED":
-                        st.session_state.tasks[payload["task_id"]] = {
-                            "description": payload["description"],
-                            "status": "pending",
-                            "output": ""
-                        }
-                    elif etype == "TASK_STARTED":
-                        if payload["task_id"] in st.session_state.tasks:
-                            st.session_state.tasks[payload["task_id"]]["status"] = "running"
-                    elif etype == "TASK_COMPLETED":
-                        if payload["task_id"] in st.session_state.tasks:
-                            st.session_state.tasks[payload["task_id"]]["status"] = "completed"
-                            st.session_state.tasks[payload["task_id"]]["output"] = payload.get("result", {}).get("stdout", "")
-                    elif etype == "TASK_FAILED":
-                        if payload["task_id"] in st.session_state.tasks:
-                            st.session_state.tasks[payload["task_id"]]["status"] = "failed"
-                            st.session_state.tasks[payload["task_id"]]["output"] = payload.get("error", "")
-                    elif etype == "STATE_UPDATED":
-                        st.session_state.project_files = payload.get("files", [])
-                        st.session_state.project_state = payload.get("state", {})
-                    elif etype == "WORKFLOW_FINAL_RESULT":
-                        st.session_state.narrative = payload["narrative"]
-                        st.session_state.takeaways = payload["takeaways"]
-                    
-                    # Trigger a rerun to show new state
-                    st.rerun()
-        except Exception:
-            await asyncio.sleep(2)
 
 # --- UI COMPONENTS ---
 
@@ -368,8 +376,15 @@ def render_main():
 render_sidebar()
 render_main()
 
-# Start WS listener in a way that Streamlit can handle
-# Note: This POC uses a background task. For production, a more robust event loop would be needed.
-if st.session_state.current_project_id and not st.session_state.get("ws_started"):
-    st.session_state.ws_started = True
-    asyncio.run(listen_to_ws())
+# Initialize background listener once
+if "ws_thread" not in st.session_state:
+    # Create a persistent loop for the thread
+    new_loop = asyncio.new_event_loop()
+    t = threading.Thread(target=run_ws_thread, args=(new_loop, st.session_state.last_seq), daemon=True)
+    t.start()
+    st.session_state.ws_thread = t
+
+# Handle background-triggered reruns
+if st.session_state.needs_rerun:
+    st.session_state.needs_rerun = False
+    st.rerun()
