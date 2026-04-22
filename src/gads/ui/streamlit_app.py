@@ -388,6 +388,8 @@ def render_main():
                     st.session_state.tasks = {}
                     st.session_state.narrative = ""
                     st.session_state.takeaways = []
+                    st.session_state.project_files = []
+                    st.session_state.project_state = {}
                     st.rerun()
 
     # Place Objective input ABOVE the dynamic fragment so it doesn't reset every 2s
