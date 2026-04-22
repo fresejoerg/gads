@@ -66,16 +66,16 @@ The following artifacts were generated during this analysis:
     <head>
         <title>GADS Research Synthesis</title>
         <style>
-            body {{{{ font-family: 'Segoe UI', system-ui, sans-serif; margin: 40px auto; max-width: 1000px; background: #f8fafc; color: #1e293b; line-height: 1.6; }}}}
-            .report-header {{{{ background: #ffffff; color: #0f172a; padding: 40px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }}}}
-            .report-header h1 {{{{ margin-top: 0; border-bottom: 3px solid #3b82f6; display: inline-block; padding-bottom: 5px; }}}}
-            .report-body {{{{ background: #ffffff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }}}}
-            .card {{{{ border: 1px solid #cbd5e1; border-radius: 12px; padding: 25px; margin: 30px 0; background: #ffffff; }}}}
-            .plot-container {{{{ min-height: 400px; }}}}
-            .card-footer {{{{ margin-top: 15px; font-size: 0.9rem; color: #64748b; font-style: italic; border-top: 1px solid #f1f5f9; padding-top: 10px; }}}}
-            h1, h2, h3 {{{{ color: #0f172a; }}}}
-            .takeaways {{{{ background: #eff6ff; border-left: 4px solid #3b82f6; padding: 25px; margin: 30px 0; border-radius: 0 8px 8px 0; }}}}
-            .narrative {{{{ font-size: 1.15rem; color: #334155; margin-bottom: 40px; white-space: pre-wrap; background: #fff; }}}}
+            body {{ font-family: 'Segoe UI', system-ui, sans-serif; margin: 40px auto; max-width: 1000px; background: #f8fafc; color: #1e293b; line-height: 1.6; }}
+            .report-header {{ background: #ffffff; color: #0f172a; padding: 40px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }}
+            .report-header h1 {{ margin-top: 0; border-bottom: 3px solid #3b82f6; display: inline-block; padding-bottom: 5px; }}
+            .report-body {{ background: #ffffff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }}
+            .card {{ border: 1px solid #cbd5e1; border-radius: 12px; padding: 25px; margin: 30px 0; background: #ffffff; }}
+            .plot-container {{ min-height: 400px; }}
+            .card-footer {{ margin-top: 15px; font-size: 0.9rem; color: #64748b; font-style: italic; border-top: 1px solid #f1f5f9; padding-top: 10px; }}
+            h1, h2, h3 {{ color: #0f172a; }}
+            .takeaways {{ background: #eff6ff; border-left: 4px solid #3b82f6; padding: 25px; margin: 30px 0; border-radius: 0 8px 8px 0; }}
+            .narrative {{ font-size: 1.15rem; color: #334155; margin-bottom: 40px; white-space: pre-wrap; background: #fff; }}
         </style>
     </head>
     <body>
@@ -103,7 +103,7 @@ The following artifacts were generated during this analysis:
         </div>
     </body>
     </html>
-    \"\"\"
+    """
     
     with open(os.path.join(workspace_dir, "final_dashboard.html"), "w") as f:
         f.write(html_content)
