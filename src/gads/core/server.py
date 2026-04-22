@@ -83,7 +83,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
         
         # 0. SYNC GROUND TRUTH
         print(f"  [Workflow] Grounding session state...", flush=True)
-        workspace_dir = f"/home/joergf/projects/MyLocalStack/data/workspaces/{project_id}"
+        workspace_dir = f"/home/joergf/projects/GADS/data/workspaces/{project_id}"
         current_files = _get_recursive_files(workspace_dir)
         
         # Dummy execute to trigger state introspection
@@ -377,7 +377,7 @@ async def create_project(req: ProjectCreateRequest, background_tasks: Background
             session.commit()
             session.refresh(project)
         
-        workspace_dir = f"/home/joergf/projects/MyLocalStack/data/workspaces/{project.id}"
+        workspace_dir = f"/home/joergf/projects/GADS/data/workspaces/{project.id}"
         os.makedirs(workspace_dir, exist_ok=True)
         if req.files:
             for f in req.files:
@@ -402,7 +402,7 @@ async def upload_files_to_project(project_id: uuid.UUID, req: FilesUploadRequest
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
         
-        workspace_dir = f"/home/joergf/projects/MyLocalStack/data/workspaces/{project.id}"
+        workspace_dir = f"/home/joergf/projects/GADS/data/workspaces/{project.id}"
         os.makedirs(workspace_dir, exist_ok=True)
         for f in req.files:
             safe_name = os.path.basename(f.name)
@@ -419,7 +419,7 @@ async def upload_files_to_project(project_id: uuid.UUID, req: FilesUploadRequest
 @app.get("/projects/{project_id}/files/{file_path:path}")
 async def download_file(project_id: uuid.UUID, file_path: str, download: bool = False):
     """Serves a file from the workspace for viewing or download."""
-    workspace_dir = f"/home/joergf/projects/MyLocalStack/data/workspaces/{project_id}"
+    workspace_dir = f"/home/joergf/projects/GADS/data/workspaces/{project_id}"
     full_path = os.path.join(workspace_dir, file_path)
     
     # Security: Ensure the file is inside the workspace
