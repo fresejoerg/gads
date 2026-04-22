@@ -354,6 +354,13 @@ async def websocket_endpoint(websocket: WebSocket, last_seq: int = 0):
     except WebSocketDisconnect:
         bus.disconnect(websocket)
 
+@app.get("/projects", response_model=List[ProjectRead])
+async def list_projects():
+    """Lists all past and current projects."""
+    with Session(engine) as session:
+        projects = session.exec(select(Project).order_by(Project.created_at.desc())).all()
+        return projects
+
 @app.post("/projects", response_model=ProjectResponse)
 async def create_project(req: ProjectCreateRequest, background_tasks: BackgroundTasks):
     with Session(engine) as session:
