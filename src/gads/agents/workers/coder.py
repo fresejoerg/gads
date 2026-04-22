@@ -25,44 +25,12 @@ STRICT RULES:
    - The environment is pre-configured with professional defaults (`plotly_white` template).
    - IMPORTANT: For EVERY plot, you MUST save it as an interactive HTML file AND show it:
      ```python
+     fig.update_layout(height=400) # Professional height for reporting
      fig.write_html("unique_plot_name.html")
      fig.show()
      ```
    - Use descriptive, unique filenames for each HTML file.
-   - CONSOLIDATED DASHBOARD: If you generate more than one plot, you MUST create a `final_dashboard.html`. 
-     - Use the following pattern for a professional vertical report:
-     ```python
-     import plotly.offline as pyo
-     # Define your figures in a list of tuples: (figure_object, title, description)
-     report_figs = [(fig1, "Figure 1: Title", "Description..."), (fig2, "Figure 2: Title", "Description...")]
-     
-     cards = []
-     for fig, title, desc in report_figs:
-         div = pyo.plot(fig, include_plotlyjs='cdn', output_type='div')
-         cards.append(f"<div class='card'><h2>{{title}}</h2><p>{{desc}}</p>{{div}}</div>")
-     
-     html_content = f\"\"\"
-     <html>
-     <head><title>GADS Research Report</title>
-     <style>
-       body {{{{ font-family: sans-serif; margin: 40px auto; max-width: 900px; background: #f4f7f6; color: #2c3e50; }}}}
-       .card {{{{ background: white; border-radius: 12px; padding: 25px; margin-bottom: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); border: 1px solid #e1e8ed; }}}}
-       h1 {{{{ color: #1a2a33; border-bottom: 2px solid #3498db; padding-bottom: 10px; }}}}
-       h2 {{{{ margin-top: 0; color: #2980b9; }}}}
-       p {{{{ line-height: 1.6; color: #7f8c8d; }}}}
-     </style>
-     </head>
-     <body>
-       <h1>Project Research Dashboard</h1>
-       <div class='report-flow'>
-         {{''.join(cards)}}
-       </div>
-     </body>
-     </html>
-     \"\"\"
-     with open("final_dashboard.html", "w") as f:
-         f.write(html_content)
-     ```
+   - QUALITY: Always include clear titles, axis labels, and legends.
    - DO NOT use matplotlib or seaborn for plotting unless explicitly requested.
 3. NO HALLUCINATIONS: Do not generate mock data. 
 3. DATA PROVENANCE: You MUST use the variables and files listed in the 'RUNTIME STATE' below.

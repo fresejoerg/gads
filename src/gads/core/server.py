@@ -19,6 +19,7 @@ from gads.agents.workers.synthesizer import SynthesizerAgent, SynthesizerInput
 from gads.core.executor import ExecutionManager
 from gads.core.registry import get_model_hierarchy, GADS_LOCAL_ONLY
 from gads.core.knowledge import KnowledgeRegistry
+from gads.core.reporting import create_master_reports
 from sqlmodel import select, Session
 import base64
 import os
@@ -305,7 +306,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                 else:
                     context_parts.append(header)
             for a in artifacts:
-                context_parts.append(f"Artifact {a.id} ({a.type}): {a.description}")
+                filename = a.content_json.get("filename", "N/A")
+                context_parts.append(f"Artifact {a.id} ({a.type}): {a.description} (File: {filename})")
 
             context = "\n\n---\n\n".join(context_parts) if context_parts else "(no outputs)"
 
@@ -313,13 +315,28 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
         synthesizer = SynthesizerAgent(model=planner_model)
         synth_res = await synthesizer.run(SynthesizerInput(objective=objective, context_artifacts=context))
         
+        # --- NEW: SYSTEM-LED MASTER REPORTING ---
+        print(f"  [Workflow] Assembling final research report and dashboard...", flush=True)
+        create_master_reports(
+            project_id=project_id,
+            workspace_dir=workspace_dir,
+            narrative=synth_res.content.narrative,
+            takeaways=synth_res.content.key_takeaways,
+            artifacts=artifacts
+        )
+
         with Session(engine) as session:
             hub = ExecutionHub(session)
             hub.create_outbox_event("WORKFLOW_FINAL_RESULT", {
                 "narrative": synth_res.content.narrative,
                 "takeaways": synth_res.content.key_takeaways
             })
-            hub.create_outbox_event("STEP_COMPLETED", {"message": "Project complete."})
+            
+            # Emit an extra update so the UI sees the new master files immediately
+            current_files = _get_recursive_files(workspace_dir)
+            hub.create_outbox_event("STATE_UPDATED", {"files": current_files, "state": executor.authoritative_state})
+            
+            hub.create_outbox_event("STEP_COMPLETED", {"message": "Project complete. Reports generated."})
             session.commit()
             
     except Exception as e:
