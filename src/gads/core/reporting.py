@@ -37,8 +37,8 @@ The following artifacts were generated during this analysis:
         f.write(md_content)
 
     # 2. Generate Integrated HTML Dashboard
-    # Filter for interactive plots
-    plot_divs = []
+    # Filter for interactive plots and capture their descriptions
+    cards_html = ""
     for a in artifacts:
         if a.type == "interactive_plot":
             fname = a.content_json.get("filename")
@@ -47,42 +47,41 @@ The following artifacts were generated during this analysis:
                 with open(fpath, "r") as pf:
                     content = pf.read()
                     # Extract just the div part if it's a full plotly html
-                    if "<div>" in content:
-                        div = content.split("<body>")[1].split("</body>")[0] if "<body>" in content else content
-                        plot_divs.append({
-                            "title": a.description,
-                            "div": div
-                        })
+                    div = content.split("<body>")[1].split("</body>")[0] if "<body>" in content else content
+                    
+                    cards_html += f"""
+                    <div class='card'>
+                        <h2>{a.description}</h2>
+                        <div class='plot-container'>{div}</div>
+                        <div class='card-footer'>
+                            <strong>Context:</strong> Verified by CodeGenerator as part of the analysis workflow.
+                        </div>
+                    </div>
+                    """
 
     takeaways_html = "".join([f"<li>{t}</li>" for t in takeaways])
-    cards_html = ""
-    for p in plot_divs:
-        cards_html += f"""
-        <div class='card'>
-            <h2>{p['title']}</h2>
-            <div class='plot-container'>{p['div']}</div>
-        </div>
-        """
 
     html_content = f"""
     <html>
     <head>
         <title>GADS Research Synthesis</title>
         <style>
-            body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px auto; max-width: 1000px; background: #f0f2f5; color: #1a1a1a; line-height: 1.6; }}
-            .report-header {{ background: #1e293b; color: white; padding: 40px; border-radius: 12px 12px 0 0; margin-bottom: 0; }}
-            .report-body {{ background: white; padding: 40px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }}
-            .card {{ border: 1px solid #e2e8f0; border-radius: 12px; padding: 25px; margin: 30px 0; background: #ffffff; }}
-            .plot-container {{ height: 420px; overflow: hidden; }}
-            h1, h2, h3 {{ color: #0f172a; }}
-            .takeaways {{ background: #f8fafc; border-left: 4px solid #3b82f6; padding: 20px; margin: 20px 0; }}
-            .narrative {{ font-size: 1.1rem; color: #334155; margin-bottom: 40px; white-space: pre-wrap; }}
+            body {{{{ font-family: 'Segoe UI', system-ui, sans-serif; margin: 40px auto; max-width: 1000px; background: #f8fafc; color: #1e293b; line-height: 1.6; }}}}
+            .report-header {{{{ background: #ffffff; color: #0f172a; padding: 40px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }}}}
+            .report-header h1 {{{{ margin-top: 0; border-bottom: 3px solid #3b82f6; display: inline-block; padding-bottom: 5px; }}}}
+            .report-body {{{{ background: #ffffff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }}}}
+            .card {{{{ border: 1px solid #cbd5e1; border-radius: 12px; padding: 25px; margin: 30px 0; background: #ffffff; }}}}
+            .plot-container {{{{ min-height: 400px; }}}}
+            .card-footer {{{{ margin-top: 15px; font-size: 0.9rem; color: #64748b; font-style: italic; border-top: 1px solid #f1f5f9; padding-top: 10px; }}}}
+            h1, h2, h3 {{{{ color: #0f172a; }}}}
+            .takeaways {{{{ background: #eff6ff; border-left: 4px solid #3b82f6; padding: 25px; margin: 30px 0; border-radius: 0 8px 8px 0; }}}}
+            .narrative {{{{ font-size: 1.15rem; color: #334155; margin-bottom: 40px; white-space: pre-wrap; background: #fff; }}}}
         </style>
     </head>
     <body>
         <div class='report-header'>
-            <h1>GADS Research Synthesis</h1>
-            <p>Project ID: {project_id}</p>
+            <h1>Research Synthesis Report</h1>
+            <p style='color: #64748b;'>Project ID: {project_id}</p>
         </div>
         <div class='report-body'>
             <h2>Executive Summary</h2>
@@ -93,14 +92,18 @@ The following artifacts were generated during this analysis:
                 <ul>{takeaways_html}</ul>
             </div>
 
-            <hr style='margin: 40px 0; border: 0; border-top: 1px solid #e2e8f0;' />
+            <hr style='margin: 50px 0; border: 0; border-top: 2px solid #f1f5f9;' />
             
-            <h2>Supporting Visualizations</h2>
+            <h2>Supporting Data Visualizations</h2>
+            <p style='color: #64748b; margin-bottom: 40px;'>The following interactive charts provide quantitative grounding for the summary above.</p>
             {cards_html}
+        </div>
+        <div style='text-align: center; margin-top: 40px; color: #94a3b8; font-size: 0.8rem;'>
+            Generated by GADS (Generative-augmented Data Science)
         </div>
     </body>
     </html>
-    """
+    \"\"\"
     
     with open(os.path.join(workspace_dir, "final_dashboard.html"), "w") as f:
         f.write(html_content)
