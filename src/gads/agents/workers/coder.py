@@ -41,15 +41,15 @@ STRICT RULES:
      <html>
      <head><title>GADS Analytics Report</title>
      <style>
-       body {{ font-family: sans-serif; margin: 20px; background: #f8f9fa; }}
-       .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 20px; }}
-       .card {{ background: white; border-radius: 8px; padding: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+       body {{{{ font-family: sans-serif; margin: 20px; background: #f8f9fa; }}}}
+       .grid {{{{ display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 20px; }}}}
+       .card {{{{ background: white; border-radius: 8px; padding: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}}}
      </style>
      </head>
      <body>
        <h1>Project Analytics Report</h1>
        <div class='grid'>
-         {''.join([f\"<div class='card'>{{d}}</div>\" for d in divs])}
+         {{''.join([f\"<div class='card'>{{d}}</div>\" for d in divs])}}
        </div>
      </body>
      </html>
