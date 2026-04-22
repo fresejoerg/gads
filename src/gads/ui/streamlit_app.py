@@ -147,6 +147,8 @@ if "narrative" not in st.session_state:
     st.session_state.narrative = ""
 if "takeaways" not in st.session_state:
     st.session_state.takeaways = []
+if "last_seq" not in st.session_state:
+    st.session_state.last_seq = 0
 
 # --- API HELPERS ---
 def fetch_projects():
@@ -176,12 +178,12 @@ async def start_workflow(objective: str):
 async def listen_to_ws():
     while True:
         try:
-            last_seq = st.session_state.get("last_seq", 0)
-            async with websockets.connect(f"{WS_URL}?last_seq={last_seq}") as ws:
+            curr_seq = st.session_state.last_seq
+            async with websockets.connect(f"{WS_URL}?last_seq={curr_seq}") as ws:
                 while True:
                     msg = await ws.recv()
                     event = json.loads(msg)
-                    st.session_state.last_seq = event["seq"]
+                    st.session_state.last_seq = event["sequence"] # Backend uses 'sequence'
                     
                     # Update local state based on event
                     etype = event["type"]
@@ -239,6 +241,15 @@ def render_sidebar():
             st.markdown(f"**[OPEN MASTER DASHBOARD]({BACKEND_URL}/projects/{p['id']}/files/final_dashboard.html)**")
             st.markdown(f"**[OPEN RESEARCH REPORT]({BACKEND_URL}/projects/{p['id']}/files/research_report.md)**")
 
+def fetch_current_tasks(project_id: str):
+    """Fallback to fetch all tasks from DB if WS fails."""
+    try:
+        with httpx.Client() as client:
+            # We'll need to add a backend endpoint for this or just rely on state
+            pass
+    except Exception:
+        pass
+
 def render_main():
     st.title("GADS Control Center")
     st.markdown("**Generative-augmented Data Science Orchestrator**")
@@ -286,7 +297,7 @@ def render_main():
                 st.markdown(f"""
                 <div class="task-card">
                     <span class="status-label status-{tinfo['status']}">{status}</span><br/>
-                    <div style="margin-top: 10px; color: #0f172a; font-weight: 500;">{tinfo['description']}</div>
+                    <div style="margin-top: 10px; color: #000000; font-weight: 500;">{tinfo['description']}</div>
                 </div>
                 """, unsafe_allow_html=True)
                 if tinfo['output']:
@@ -308,6 +319,11 @@ def render_main():
                 st.json(st.session_state.project_state)
 
         with action_tab:
+            if st.button("Manual State Refresh", use_container_width=True):
+                # Trigger a rerun which will sync projects/files
+                st.rerun()
+            
+            st.markdown("---")
             st.markdown("#### Upload to Workspace")
             uploaded_files = st.file_uploader("Upload local files", accept_multiple_files=True)
             if uploaded_files:
