@@ -21,33 +21,64 @@ st.set_page_config(
 # --- CSS FOR STYLING (High Contrast / Professional) ---
 st.markdown("""
 <style>
-    .stApp { background-color: #f1f5f9; }
-    .task-card { 
-        background-color: white; 
-        padding: 20px; 
-        border-radius: 4px; 
-        border-left: 6px solid #1e293b;
-        margin-bottom: 12px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-        border: 1px solid #e2e8f0;
+    /* Global Overrides */
+    html, body, [class*="st-"] {
+        font-size: 1.1rem;
+        color: #0f172a;
     }
-    .status-label {
-        font-family: monospace;
-        font-size: 0.8rem;
-        padding: 2px 6px;
-        border-radius: 3px;
-        text-transform: uppercase;
-    }
-    .status-pending { background-color: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; }
-    .status-running { background-color: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
-    .status-completed { background-color: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
-    .status-failed { background-color: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
     
-    .sidebar-project {
-        padding: 10px;
+    .stApp { background-color: #ffffff; }
+    
+    /* Sidebar Styling */
+    section[data-testid="stSidebar"] {
+        background-color: #0f172a;
+        color: #ffffff;
+    }
+    section[data-testid="stSidebar"] h1, 
+    section[data-testid="stSidebar"] h2, 
+    section[data-testid="stSidebar"] h3,
+    section[data-testid="stSidebar"] .stMarkdown {
+        color: #ffffff !important;
+    }
+    
+    /* Project Archive Cards */
+    .stExpander {
+        border: 1px solid #334155 !important;
+        background-color: #1e293b !important;
+        margin-bottom: 5px !important;
+    }
+    
+    /* Task Tracking */
+    .task-card { 
+        background-color: #f8fafc; 
+        padding: 24px; 
+        border-radius: 2px; 
+        border-left: 8px solid #0f172a;
+        margin-bottom: 16px;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+        border-top: 1px solid #e2e8f0;
+        border-right: 1px solid #e2e8f0;
         border-bottom: 1px solid #e2e8f0;
     }
-    h1, h2, h3 { color: #0f172a !important; font-weight: 700 !important; }
+    
+    .status-label {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.85rem;
+        padding: 4px 8px;
+        border-radius: 2px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+    }
+    .status-pending { background-color: #e2e8f0; color: #0f172a; }
+    .status-running { background-color: #2563eb; color: #ffffff; }
+    .status-completed { background-color: #059669; color: #ffffff; }
+    .status-failed { background-color: #dc2626; color: #ffffff; }
+    
+    h1, h2, h3 { color: #0f172a !important; font-weight: 800 !important; }
+    
+    /* Links */
+    a { color: #2563eb !important; text-decoration: underline !important; font-weight: 600; }
+    section[data-testid="stSidebar"] a { color: #38bdf8 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -139,26 +170,33 @@ async def listen_to_ws():
 
 def render_sidebar():
     st.sidebar.title("Project Archive")
+    st.sidebar.markdown("---")
     projects = asyncio.run(fetch_projects())
     for p in projects:
-        with st.sidebar.expander(f"PROJECT: {p['name'][:30]}"):
-            st.caption(f"ID: {p['id']}")
-            st.markdown(f"[VIEW DASHBOARD]({BACKEND_URL}/projects/{p['id']}/files/final_dashboard.html)")
-            st.markdown(f"[VIEW REPORT]({BACKEND_URL}/projects/{p['id']}/files/research_report.md)")
+        # Parse timestamp for display
+        dt = datetime.fromisoformat(p["created_at"].replace("Z", ""))
+        ts_str = dt.strftime("%Y-%m-%d %H:%M")
+        
+        with st.sidebar.expander(f"{ts_str} | {p['name'][:20]}"):
+            st.caption(f"PROJECT ID: {p['id']}")
+            st.markdown(f"**[OPEN MASTER DASHBOARD]({BACKEND_URL}/projects/{p['id']}/files/final_dashboard.html)**")
+            st.markdown(f"**[OPEN RESEARCH REPORT]({BACKEND_URL}/projects/{p['id']}/files/research_report.md)**")
 
 def render_main():
     st.title("GADS Control Center")
-    st.markdown("Generative-augmented Data Science Orchestrator")
+    st.markdown("**Generative-augmented Data Science Orchestrator**")
     
-    objective = st.text_area("Research Objective", placeholder="Describe your data science goal...")
+    st.markdown("---")
+    objective = st.text_area("**Research Objective**", placeholder="Describe your data science goal...")
     
-    if st.button("Launch Workflow", type="primary"):
+    if st.button("Launch Workflow", type="primary", use_container_width=True):
         if objective:
             asyncio.run(start_workflow(objective))
             st.info("[SYSTEM] Workflow initiated.")
         else:
             st.warning("[SYSTEM] Objective required.")
 
+    st.markdown("---")
     col1, col2 = st.columns([1, 1.5])
     
     with col1:
@@ -170,25 +208,25 @@ def render_main():
             st.markdown(f"""
             <div class="task-card">
                 <span class="status-label status-{tinfo['status']}">{status}</span><br/>
-                <div style="margin-top: 10px; color: #334155;">{tinfo['description']}</div>
+                <div style="margin-top: 15px; color: #0f172a; font-weight: 500; font-size: 1.15rem;">{tinfo['description']}</div>
             </div>
             """, unsafe_allow_html=True)
             if tinfo['output']:
-                with st.expander("Logs"):
+                with st.expander("View Execution Logs"):
                     st.code(tinfo['output'])
 
     with col2:
-        st.subheader("Synthesis")
+        st.subheader("Analysis Synthesis")
         if st.session_state.narrative:
-            st.markdown(st.session_state.narrative)
+            st.markdown(f"<div style='background-color: #f8fafc; padding: 25px; border: 1px solid #e2e8f0;'>{st.session_state.narrative}</div>", unsafe_allow_html=True)
             if st.session_state.takeaways:
                 st.markdown("#### Key Takeaways")
                 for t in st.session_state.takeaways:
-                    st.markdown(f"- {t}")
+                    st.markdown(f"- **{t}**")
         else:
-            st.info("[SYSTEM] Synthesis pending completion.")
+            st.info("[SYSTEM] Synthesis pending completion of the workflow.")
 
-        st.subheader("Ground Truth")
+        st.markdown("### Ground Truth")
         tab1, tab2 = st.tabs(["Files", "Memory"])
         with tab1:
             if not st.session_state.project_files:
