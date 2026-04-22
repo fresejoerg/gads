@@ -27,3 +27,4 @@ main.py
 
 # Architecture and design notes
 approach_docs/
+.streamlit/

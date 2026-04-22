@@ -14,8 +14,9 @@ A foundational requirement of GADS is the ability to run on **local LLMs** and *
 *   **Project Manager (The Planner)**: A high-reasoning agent that decomposes user objectives into a deterministic task list with strict postcondition contracts.
 *   **Architect (The Router)**: Classifies user objectives into structured intents (e.g., `binary_classification.tabular`) to fetch matching expert SOPs.
 *   **Domain Expert SOPs (The Registry)**: Uses a YAML-backed library of Data Science best practices ("Recipes") to guide the Project Manager toward optimal workflows.
-*   **Persistent Control Center (UI)**: Built with **Chainlit 2.11**, featuring a stable, real-time **Project State** side panel and an **Interactive File Explorer** for point-and-click artifact viewing.
+*   **GADS Control Center (UI)**: Built with **Streamlit**, featuring a professional, wide-layout dashboard with a persistent **Project Archive** and a real-time **Task Tracker**.
 *   **Authoritative Runtime Grounding**: Agents are forced to sync state directly from the sandbox kernel at the start of every request, preventing "semantic drift" or hallucinated data.
+
 *   **Stateful Python Sandbox**: A secure, Docker-isolated execution environment using **IPython Kernels** to maintain variable state across multiple agent turns.
     *   **ML Ready**: Pre-installed with `scikit-learn`, `pandas`, `plotly`, and `joblib`.
     *   **Automatic Plot Capture**: Captures **Plotly Express** and `matplotlib`/`seaborn` figures as base64 artifacts.
@@ -66,7 +67,8 @@ export PYTHONPATH=$PYTHONPATH:$(pwd)/src
 uv run uvicorn gads.core.server:app --host 0.0.0.0 --port 8001
 ```
 
-**Start the Control Center UI:**
+**Start the GADS Control Center (Streamlit):**
 ```bash
-uv run chainlit run src/gads/ui/app.py --port 8002
+./scripts/run_streamlit.sh
 ```
+The UI will be available at `http://localhost:8003`.
