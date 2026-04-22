@@ -55,7 +55,7 @@ STRICT RULES:
      <body>
        <h1>Project Research Dashboard</h1>
        <div class='report-flow'>
-         {''.join(cards)}
+         {{''.join(cards)}}
        </div>
      </body>
      </html>
