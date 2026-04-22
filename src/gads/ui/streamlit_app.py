@@ -285,36 +285,32 @@ def render_main():
     
     st.markdown("---")
     
-    # 3-Panel Layout Configuration
-    center_col, right_col = st.columns([1.5, 1])
+    # 1. Static Header (Inputs)
+    objective = st.text_area("Research Objective", placeholder="Describe your data science goal...", height=150)
     
-    with center_col:
-        st.subheader("Objective & Synthesis")
-        objective = st.text_area("Research Objective", placeholder="Describe your data science goal...", height=150)
-        
-        launch_btn = st.button("Launch Workflow", type="primary", use_container_width=True)
-        if launch_btn:
-            if objective:
-                asyncio.run(start_workflow(objective))
-                st.info("[SYSTEM] Workflow initiated.")
-            else:
-                st.warning("[SYSTEM] Objective required.")
+    if st.button("Launch Workflow", type="primary", use_container_width=True):
+        if objective:
+            asyncio.run(start_workflow(objective))
+            st.info("[SYSTEM] Workflow initiated.")
+        else:
+            st.warning("[SYSTEM] Objective required.")
 
-        st.markdown("---")
+    st.markdown("---")
+
+    # 2. Fragment: Auto-refreshing 2-Column Dashboard
+    @st.fragment(run_every=2)
+    def render_dynamic_dashboard():
+        # Fetch truth from DB
+        if st.session_state.current_project_id:
+            details = fetch_project_details(st.session_state.current_project_id)
+            if details:
+                st.session_state.tasks = {t["id"]: t for t in details["tasks"]}
         
-        # FRAGMENT: Auto-refreshing Synthesis and Tracking
-        @st.fragment(run_every=2)
-        def render_dynamic_panels():
-            if st.session_state.current_project_id:
-                details = fetch_project_details(st.session_state.current_project_id)
-                if details:
-                    # Sync local session state with DB truth
-                    st.session_state.tasks = {t["id"]: t for t in details["tasks"]}
-                    # If project has a narrative, update it
-                    # Note: We need to check the actual Project object for narrative field
-                    # or handle it via a task marked as synthesis. For now, we trust the DB state.
-            
-            # --- Synthesis Render ---
+        # Split into Center and Right within the fragment to avoid scoping error
+        center_col, right_col = st.columns([1.5, 1])
+
+        with center_col:
+            st.subheader("Analysis Synthesis")
             if st.session_state.narrative:
                 st.markdown(f"<div style='background-color: #ffffff; padding: 30px; border: 2px solid #000000;'>{st.session_state.narrative}</div>", unsafe_allow_html=True)
                 if st.session_state.takeaways:
@@ -324,50 +320,65 @@ def render_main():
             else:
                 st.info("[SYSTEM] Analysis synthesis pending completion.")
 
-            # --- Right Column (Nested in fragment for sync) ---
-            with right_col:
-                st.subheader("System Status")
-                track_tab, grounding_tab, action_tab = st.tabs(["Tasks", "Grounding", "Management"])
+        with right_col:
+            st.subheader("System Status")
+            track_tab, grounding_tab, action_tab = st.tabs(["Tasks", "Grounding", "Management"])
+            
+            with track_tab:
+                if not st.session_state.tasks:
+                    st.info("No active tasks.")
+                for tid, tinfo in sorted(st.session_state.tasks.items()):
+                    status = tinfo['status'].upper()
+                    st.markdown(f"""
+                    <div class="task-card">
+                        <span class="status-label status-{tinfo['status']}">{status}</span><br/>
+                        <div style="margin-top: 10px; color: #000000; font-weight: 500;">{tinfo['description']}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    if tinfo.get('result_json') and tinfo['result_json'].get('stdout'):
+                        with st.expander("Logs"):
+                            st.code(tinfo['result_json']['stdout'])
+
+            with grounding_tab:
+                st.markdown("#### Workspace Files")
+                if not st.session_state.project_files:
+                    st.write("*(Empty)*")
+                for f in st.session_state.project_files:
+                    st.markdown(f"- `{f}` ([view]({BACKEND_URL}/projects/{st.session_state.current_project_id}/files/{f}))")
                 
-                with track_tab:
-                    if not st.session_state.tasks:
-                        st.info("No active tasks.")
-                    # Sort tasks by created_at if possible, or just list
-                    for tid, tinfo in st.session_state.tasks.items():
-                        status = tinfo['status'].upper()
-                        st.markdown(f"""
-                        <div class="task-card">
-                            <span class="status-label status-{tinfo['status']}">{status}</span><br/>
-                            <div style="margin-top: 10px; color: #000000; font-weight: 500;">{tinfo['description']}</div>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        if tinfo.get('result_json') and tinfo['result_json'].get('stdout'):
-                            with st.expander("Logs"):
-                                st.code(tinfo['result_json']['stdout'])
+                st.markdown("---")
+                st.markdown("#### Sandbox Memory")
+                if not st.session_state.project_state:
+                    st.write("*(Empty)*")
+                else:
+                    st.json(st.session_state.project_state)
 
-                with grounding_tab:
-                    st.markdown("#### Workspace Files")
-                    if not st.session_state.project_files:
-                        st.write("*(Empty)*")
-                    for f in st.session_state.project_files:
-                        st.markdown(f"- `{f}` ([view]({BACKEND_URL}/projects/{st.session_state.current_project_id}/files/{f}))")
-                    
-                    st.markdown("---")
-                    st.markdown("#### Sandbox Memory")
-                    if not st.session_state.project_state:
-                        st.write("*(Empty)*")
-                    else:
-                        st.json(st.session_state.project_state)
+            with action_tab:
+                # File uploader inside fragment
+                uploaded_files = st.file_uploader("Upload local files", accept_multiple_files=True)
+                if uploaded_files and st.button("Sync Uploads"):
+                    payload = [{"name": f.name, "content_base64": base64.b64encode(f.getvalue()).decode("utf-8")} for f in uploaded_files]
+                    try:
+                        project_id = st.session_state.current_project_id
+                        with httpx.Client(timeout=30.0) as client:
+                            if project_id:
+                                resp = client.post(f"{BACKEND_URL}/projects/{project_id}/files", json={"files": payload})
+                            else:
+                                resp = client.post(f"{BACKEND_URL}/projects", json={"name": "Upload Session", "objective": "", "files": payload})
+                            resp.raise_for_status()
+                            st.success(f"Uploaded {len(uploaded_files)} file(s).")
+                    except Exception as e:
+                        st.error(f"Upload failed: {e}")
 
-                with action_tab:
-                    if st.button("Reset Global Session", use_container_width=True):
-                        st.session_state.current_project_id = None
-                        st.session_state.tasks = {}
-                        st.session_state.narrative = ""
-                        st.session_state.takeaways = []
-                        st.rerun()
+                st.markdown("---")
+                if st.button("Reset Global Session", use_container_width=True):
+                    st.session_state.current_project_id = None
+                    st.session_state.tasks = {}
+                    st.session_state.narrative = ""
+                    st.session_state.takeaways = []
+                    st.rerun()
 
-        render_dynamic_panels()
+    render_dynamic_dashboard()
 
 # --- EXECUTION ---
 render_sidebar()
