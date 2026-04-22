@@ -212,6 +212,12 @@ async def handle_event(event: dict):
             image_bytes = base64.b64decode(payload["content_json"]["image_base64"])
             image = cl.Image(content=image_bytes, name="plot", display="inline")
             await cl.Message(content=f"{now} [VISUALIZATION] {payload['description']}", elements=[image]).send()
+        
+        elif payload["type"] == "interactive_plot":
+            project_id = payload.get("project_id")
+            filename = payload["content_json"].get("filename")
+            url = f"{BACKEND_URL}/projects/{project_id}/files/{filename}"
+            await cl.Message(content=f"{now} [VISUALIZATION] {payload['description']} ([view interactive]({url}))").send()
 
     elif etype == "WORKFLOW_FINAL_RESULT":
         content = f"{now} ### Project Narrative\n\n{payload['narrative']}\n\n"

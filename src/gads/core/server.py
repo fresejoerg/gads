@@ -227,12 +227,14 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                                 "content_json": art.content_json
                             })
 
-                        # 2. Capture newly created PNG files (Plotly write_image)
+                        # 2. Capture newly created disk artifacts (Plotly write_image / write_html)
                         new_files = set(files_after) - set(current_files)
                         for nf in new_files:
+                            full_path = os.path.join(workspace_dir, nf)
+                            
+                            # PNG: Convert to base64 for inline display
                             if nf.lower().endswith(".png"):
                                 try:
-                                    full_path = os.path.join(workspace_dir, nf)
                                     with open(full_path, "rb") as img_file:
                                         img_b64 = base64.b64encode(img_file.read()).decode("utf-8")
                                     
@@ -252,7 +254,29 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                                         "content_json": art.content_json
                                     })
                                 except Exception as e:
-                                    print(f"  [Workflow] Warning: Failed to capture disk artifact {nf}: {e}")
+                                    print(f"  [Workflow] Warning: Failed to capture PNG artifact {nf}: {e}")
+                            
+                            # HTML: Record as interactive plot
+                            elif nf.lower().endswith(".html"):
+                                try:
+                                    art = Artifact(
+                                        project_id=project_id,
+                                        type="interactive_plot",
+                                        description=f"Interactive visualization: {nf}",
+                                        content_json={"filename": nf},
+                                        agent_id="CodeGenerator"
+                                    )
+                                    session.add(art)
+                                    session.commit()
+                                    session.refresh(art)
+                                    hub.create_outbox_event("ARTIFACT_CREATED", {
+                                        "type": "interactive_plot",
+                                        "description": art.description,
+                                        "content_json": art.content_json,
+                                        "project_id": str(project_id) # Needed for the link
+                                    })
+                                except Exception as e:
+                                    print(f"  [Workflow] Warning: Failed to capture HTML artifact {nf}: {e}")
 
                         # Update ground truth for next task
                         current_files = files_after
