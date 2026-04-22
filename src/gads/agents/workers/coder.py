@@ -29,6 +29,7 @@ STRICT RULES:
      fig.show()
      ```
    - Use descriptive, unique filenames for each HTML file.
+   - CONSOLIDATED DASHBOARD: If you generate more than one plot, you MUST ALSO create a `final_dashboard.html` file that combines all your figures using `plotly.subplots` or by appending HTML strings. This is your "Final Report".
    - DO NOT use matplotlib or seaborn for plotting unless explicitly requested.
 3. NO HALLUCINATIONS: Do not generate mock data. 
 3. DATA PROVENANCE: You MUST use the variables and files listed in the 'RUNTIME STATE' below.

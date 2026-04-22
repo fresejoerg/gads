@@ -59,18 +59,19 @@ async def sync_dashboard(files, state):
     """Refresh the persistent side panel via Chainlit's ElementSidebar API."""
     project_id = cl.user_session.get("current_project_id")
     if not project_id:
+        print("[UI] Warning: Sync attempted but no current_project_id found.")
         return
 
     try:
-        # project_id is passed correctly to _render_state_md
         md = _render_state_md(files, state, project_id)
         state_el = cl.Text(name="ProjectState", content=md)
         
-        # FIX: Only pass the state_el in a list. Passing actions here causes a crash.
-        # We also removed the 'actions' list that was previously being constructed/passed.
+        # Update elements and ensure it is open
         await cl.ElementSidebar.set_elements([state_el])
+        # Force the sidebar to stay open if it's hidden
+        await cl.ElementSidebar.open()
     except Exception as e:
-        print(f"Error syncing dashboard: {e}")
+        print(f"[UI] Error syncing dashboard: {e}")
 
 @cl.on_chat_start
 async def start():
