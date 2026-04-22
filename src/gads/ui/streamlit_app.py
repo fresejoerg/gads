@@ -220,18 +220,14 @@ async def listen_to_ws():
 
 # --- UI COMPONENTS ---
 
-def check_file_exists(project_id: str, filename: str) -> bool:
-    try:
-        with httpx.Client() as client:
-            resp = client.get(f"{BACKEND_URL}/projects/{project_id}/files/{filename}")
-            return resp.status_code == 200
-    except Exception:
-        return False
-
 def render_sidebar():
     st.sidebar.title("Project Archive")
     st.sidebar.markdown("---")
     projects = fetch_projects()
+    if not projects:
+        st.sidebar.caption("No projects found.")
+        return
+
     for p in projects:
         # Parse timestamp for display with fallback
         try:
@@ -247,16 +243,8 @@ def render_sidebar():
         p_id = p['id']
         with st.sidebar.expander(f"{ts_str} | {p.get('name', 'Unnamed')[:20]}"):
             st.caption(f"PROJECT ID: {p_id}")
-            
-            if check_file_exists(p_id, "final_dashboard.html"):
-                st.markdown(f"**[OPEN MASTER DASHBOARD]({BACKEND_URL}/projects/{p_id}/files/final_dashboard.html)**")
-            else:
-                st.caption("Dashboard not generated")
-                
-            if check_file_exists(p_id, "research_report.md"):
-                st.markdown(f"**[OPEN RESEARCH REPORT]({BACKEND_URL}/projects/{p_id}/files/research_report.md)**")
-            else:
-                st.caption("Report not generated")
+            st.markdown(f"**[OPEN MASTER DASHBOARD]({BACKEND_URL}/projects/{p_id}/files/final_dashboard.html)**")
+            st.markdown(f"**[OPEN RESEARCH REPORT]({BACKEND_URL}/projects/{p_id}/files/research_report.md)**")
 
 def fetch_current_tasks(project_id: str):
     """Fallback to fetch all tasks from DB if WS fails."""
