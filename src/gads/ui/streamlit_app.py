@@ -18,29 +18,22 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CSS FOR STYLING (High Contrast / Professional) ---
+# --- CSS FOR STYLING (Strictly Monochromatic High Contrast) ---
 st.markdown("""
 <style>
     /* Global Overrides */
     html, body, [class*="st-"] {
         font-size: 1.1rem;
-        color: #0f172a;
+        color: #000000 !important;
+        background-color: #ffffff !important;
     }
     
-    .stApp { background-color: #ffffff; }
+    .stApp { background-color: #ffffff !important; }
     
     /* Sidebar Styling */
     section[data-testid="stSidebar"] {
-        background-color: #0f172a;
-        color: #ffffff !important;
-    }
-    
-    /* FIX: Visibility for '>>' collapse button and other sidebar controls */
-    section[data-testid="stSidebar"] button {
-        color: #ffffff !important;
-    }
-    section[data-testid="stSidebar"] svg {
-        fill: #ffffff !important;
+        background-color: #ffffff !important;
+        border-right: 2px solid #000000 !important;
     }
     
     section[data-testid="stSidebar"] h1, 
@@ -48,71 +41,93 @@ st.markdown("""
     section[data-testid="stSidebar"] h3,
     section[data-testid="stSidebar"] p,
     section[data-testid="stSidebar"] span,
-    section[data-testid="stSidebar"] label {
-        color: #ffffff !important;
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] .stMarkdown {
+        color: #000000 !important;
     }
     
-    /* Project Archive Cards - Improved Contrast */
+    /* FIX: Visibility for '>>' collapse button and other sidebar controls */
+    section[data-testid="stSidebar"] button, 
+    [data-testid="stSidebarCollapse"] button {
+        color: #000000 !important;
+    }
+    section[data-testid="stSidebar"] svg,
+    [data-testid="stSidebarCollapse"] svg {
+        fill: #000000 !important;
+    }
+    
+    /* Project Archive Cards - High Contrast */
     .stExpander {
-        border: 1px solid #475569 !important;
-        background-color: #1e293b !important;
-        margin-bottom: 8px !important;
+        border: 2px solid #000000 !important;
+        background-color: #ffffff !important;
+        margin-bottom: 10px !important;
     }
     
-    /* Force text inside sidebar expanders to be white */
+    /* Force text inside sidebar expanders to be black */
     section[data-testid="stSidebar"] .stExpander div[data-testid="stExpanderDetails"] p,
     section[data-testid="stSidebar"] .stExpander div[data-testid="stExpanderDetails"] span {
-        color: #ffffff !important;
+        color: #000000 !important;
     }
     
     /* Task Tracking */
     .task-card { 
-        background-color: #f8fafc; 
+        background-color: #ffffff; 
         padding: 16px; 
-        border-radius: 2px; 
-        border-left: 6px solid #0f172a;
+        border-radius: 0; 
+        border: 2px solid #000000;
         margin-bottom: 12px;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        border: 1px solid #e2e8f0;
     }
     
     .status-label {
         font-family: 'IBM Plex Mono', monospace;
-        font-size: 0.75rem;
-        padding: 3px 6px;
-        border-radius: 2px;
-        font-weight: 700;
-        letter-spacing: 0.05em;
+        font-size: 0.8rem;
+        padding: 4px 8px;
+        border-radius: 0;
+        font-weight: 900;
+        border: 2px solid #000000;
+        display: inline-block;
+        color: #000000 !important;
     }
-    .status-pending { background-color: #e2e8f0; color: #0f172a; }
-    .status-running { background-color: #2563eb; color: #ffffff; }
-    .status-completed { background-color: #059669; color: #ffffff; }
-    .status-failed { background-color: #dc2626; color: #ffffff; }
+    /* Monochromatic Status indicators */
+    .status-pending { background-color: #ffffff; }
+    .status-running { background-color: #ffffff; text-decoration: underline; }
+    .status-completed { background-color: #ffffff; font-style: italic; }
+    .status-failed { background-color: #ffffff; border-style: dashed; }
     
-    h1, h2, h3 { color: #0f172a !important; font-weight: 800 !important; }
+    h1, h2, h3 { color: #000000 !important; font-weight: 900 !important; }
     
     /* Links */
-    a { color: #2563eb !important; text-decoration: underline !important; font-weight: 600; }
-    section[data-testid="stSidebar"] a { color: #38bdf8 !important; }
+    a { color: #000000 !important; text-decoration: underline !important; font-weight: 700; }
+    section[data-testid="stSidebar"] a { color: #000000 !important; }
     
     /* Input & Textarea Contrast Fix */
     .stTextArea textarea {
-        color: #0f172a !important;
+        color: #000000 !important;
         background-color: #ffffff !important;
-        -webkit-text-fill-color: #0f172a !important;
-        border: 2px solid #cbd5e1 !important;
+        -webkit-text-fill-color: #000000 !important;
+        border: 3px solid #000000 !important;
     }
     
     .stTextInput input {
-        color: #0f172a !important;
+        color: #000000 !important;
         background-color: #ffffff !important;
-        -webkit-text-fill-color: #0f172a !important;
-        border: 2px solid #cbd5e1 !important;
+        -webkit-text-fill-color: #000000 !important;
+        border: 2px solid #000000 !important;
     }
 
-    /* Force all text in the main area to be dark slate */
+    /* Tabs */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        border: 1px solid #000000 !important;
+        padding: 8px 16px;
+        background-color: #ffffff;
+    }
+
+    /* Force all text in the main area to be black */
     .main .stMarkdown p, .main .stMarkdown li {
-        color: #0f172a !important;
+        color: #000000 !important;
     }
 </style>
 """, unsafe_allow_html=True)
