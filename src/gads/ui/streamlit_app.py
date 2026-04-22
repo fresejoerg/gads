@@ -105,33 +105,33 @@ async def listen_to_ws():
                     # Update local state based on event
                     etype = event["type"]
                     payload = event["payload"]
-                
-                if etype == "TASK_CREATED":
-                    st.session_state.tasks[payload["task_id"]] = {
-                        "description": payload["description"],
-                        "status": "pending",
-                        "output": ""
-                    }
-                elif etype == "TASK_STARTED":
-                    if payload["task_id"] in st.session_state.tasks:
-                        st.session_state.tasks[payload["task_id"]]["status"] = "running"
-                elif etype == "TASK_COMPLETED":
-                    if payload["task_id"] in st.session_state.tasks:
-                        st.session_state.tasks[payload["task_id"]]["status"] = "completed"
-                        st.session_state.tasks[payload["task_id"]]["output"] = payload.get("result", {}).get("stdout", "")
-                elif etype == "TASK_FAILED":
-                    if payload["task_id"] in st.session_state.tasks:
-                        st.session_state.tasks[payload["task_id"]]["status"] = "failed"
-                        st.session_state.tasks[payload["task_id"]]["output"] = payload.get("error", "")
-                elif etype == "STATE_UPDATED":
-                    st.session_state.project_files = payload.get("files", [])
-                    st.session_state.project_state = payload.get("state", {})
-                elif etype == "WORKFLOW_FINAL_RESULT":
-                    st.session_state.narrative = payload["narrative"]
-                    st.session_state.takeaways = payload["takeaways"]
-                
-                # Trigger a rerun to show new state
-                st.rerun()
+                    
+                    if etype == "TASK_CREATED":
+                        st.session_state.tasks[payload["task_id"]] = {
+                            "description": payload["description"],
+                            "status": "pending",
+                            "output": ""
+                        }
+                    elif etype == "TASK_STARTED":
+                        if payload["task_id"] in st.session_state.tasks:
+                            st.session_state.tasks[payload["task_id"]]["status"] = "running"
+                    elif etype == "TASK_COMPLETED":
+                        if payload["task_id"] in st.session_state.tasks:
+                            st.session_state.tasks[payload["task_id"]]["status"] = "completed"
+                            st.session_state.tasks[payload["task_id"]]["output"] = payload.get("result", {}).get("stdout", "")
+                    elif etype == "TASK_FAILED":
+                        if payload["task_id"] in st.session_state.tasks:
+                            st.session_state.tasks[payload["task_id"]]["status"] = "failed"
+                            st.session_state.tasks[payload["task_id"]]["output"] = payload.get("error", "")
+                    elif etype == "STATE_UPDATED":
+                        st.session_state.project_files = payload.get("files", [])
+                        st.session_state.project_state = payload.get("state", {})
+                    elif etype == "WORKFLOW_FINAL_RESULT":
+                        st.session_state.narrative = payload["narrative"]
+                        st.session_state.takeaways = payload["takeaways"]
+                    
+                    # Trigger a rerun to show new state
+                    st.rerun()
     except Exception as e:
         # In a real app, you'd handle reconnection here
         pass
