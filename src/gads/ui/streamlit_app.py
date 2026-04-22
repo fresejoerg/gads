@@ -34,6 +34,15 @@ st.markdown("""
         background-color: #0f172a;
         color: #ffffff !important;
     }
+    
+    /* FIX: Visibility for '>>' collapse button and other sidebar controls */
+    section[data-testid="stSidebar"] button {
+        color: #ffffff !important;
+    }
+    section[data-testid="stSidebar"] svg {
+        fill: #ffffff !important;
+    }
+    
     section[data-testid="stSidebar"] h1, 
     section[data-testid="stSidebar"] h2, 
     section[data-testid="stSidebar"] h3,
@@ -59,20 +68,18 @@ st.markdown("""
     /* Task Tracking */
     .task-card { 
         background-color: #f8fafc; 
-        padding: 24px; 
+        padding: 16px; 
         border-radius: 2px; 
-        border-left: 8px solid #0f172a;
-        margin-bottom: 16px;
+        border-left: 6px solid #0f172a;
+        margin-bottom: 12px;
         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-        border-top: 1px solid #e2e8f0;
-        border-right: 1px solid #e2e8f0;
-        border-bottom: 1px solid #e2e8f0;
+        border: 1px solid #e2e8f0;
     }
     
     .status-label {
         font-family: 'IBM Plex Mono', monospace;
-        font-size: 0.85rem;
-        padding: 4px 8px;
+        font-size: 0.75rem;
+        padding: 3px 6px;
         border-radius: 2px;
         font-weight: 700;
         letter-spacing: 0.05em;
@@ -93,12 +100,14 @@ st.markdown("""
         color: #0f172a !important;
         background-color: #ffffff !important;
         -webkit-text-fill-color: #0f172a !important;
+        border: 2px solid #cbd5e1 !important;
     }
     
     .stTextInput input {
         color: #0f172a !important;
         background-color: #ffffff !important;
         -webkit-text-fill-color: #0f172a !important;
+        border: 2px solid #cbd5e1 !important;
     }
 
     /* Force all text in the main area to be dark slate */
@@ -220,57 +229,104 @@ def render_main():
     st.markdown("**Generative-augmented Data Science Orchestrator**")
     
     st.markdown("---")
-    objective = st.text_area("**Research Objective**", placeholder="Describe your data science goal...")
     
-    if st.button("Launch Workflow", type="primary", use_container_width=True):
-        if objective:
-            asyncio.run(start_workflow(objective))
-            st.info("[SYSTEM] Workflow initiated.")
-        else:
-            st.warning("[SYSTEM] Objective required.")
-
-    st.markdown("---")
-    col1, col2 = st.columns([1, 1.5])
+    # 3-Panel Layout Configuration
+    # Left is Sidebar (st.sidebar)
+    # Center is research and objective
+    # Right is tracking and grounding
+    center_col, right_col = st.columns([1.5, 1])
     
-    with col1:
-        st.subheader("Task Tracking")
-        if not st.session_state.tasks:
-            st.info("[SYSTEM] No active tasks.")
-        for tid, tinfo in st.session_state.tasks.items():
-            status = tinfo['status'].upper()
-            st.markdown(f"""
-            <div class="task-card">
-                <span class="status-label status-{tinfo['status']}">{status}</span><br/>
-                <div style="margin-top: 15px; color: #0f172a; font-weight: 500; font-size: 1.15rem;">{tinfo['description']}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            if tinfo['output']:
-                with st.expander("View Execution Logs"):
-                    st.code(tinfo['output'])
+    with center_col:
+        st.subheader("Objective & Synthesis")
+        objective = st.text_area("Research Objective", placeholder="Describe your data science goal...", height=150)
+        
+        launch_btn = st.button("Launch Workflow", type="primary", use_container_width=True)
+        if launch_btn:
+            if objective:
+                asyncio.run(start_workflow(objective))
+                st.info("[SYSTEM] Workflow initiated.")
+            else:
+                st.warning("[SYSTEM] Objective required.")
 
-    with col2:
-        st.subheader("Analysis Synthesis")
+        st.markdown("---")
         if st.session_state.narrative:
-            st.markdown(f"<div style='background-color: #f8fafc; padding: 25px; border: 1px solid #e2e8f0;'>{st.session_state.narrative}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div style='background-color: #ffffff; padding: 30px; border: 2px solid #e2e8f0;'>{st.session_state.narrative}</div>", unsafe_allow_html=True)
             if st.session_state.takeaways:
                 st.markdown("#### Key Takeaways")
                 for t in st.session_state.takeaways:
                     st.markdown(f"- **{t}**")
         else:
-            st.info("[SYSTEM] Synthesis pending completion of the workflow.")
+            st.info("[SYSTEM] Analysis synthesis will be displayed here.")
 
-        st.markdown("### Ground Truth")
-        tab1, tab2 = st.tabs(["Files", "Memory"])
-        with tab1:
+    with right_col:
+        st.subheader("System Status")
+        
+        track_tab, grounding_tab, action_tab = st.tabs(["Tasks", "Grounding", "Management"])
+        
+        with track_tab:
+            if not st.session_state.tasks:
+                st.info("No active tasks.")
+            for tid, tinfo in st.session_state.tasks.items():
+                status = tinfo['status'].upper()
+                st.markdown(f"""
+                <div class="task-card">
+                    <span class="status-label status-{tinfo['status']}">{status}</span><br/>
+                    <div style="margin-top: 10px; color: #0f172a; font-weight: 500;">{tinfo['description']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                if tinfo['output']:
+                    with st.expander("Logs"):
+                        st.code(tinfo['output'])
+
+        with grounding_tab:
+            st.markdown("#### Workspace Files")
             if not st.session_state.project_files:
-                st.write("No files in workspace.")
+                st.write("*(Empty)*")
             for f in st.session_state.project_files:
                 st.markdown(f"- `{f}` ([view]({BACKEND_URL}/projects/{st.session_state.current_project_id}/files/{f}))")
-        with tab2:
+            
+            st.markdown("---")
+            st.markdown("#### Sandbox Memory")
             if not st.session_state.project_state:
-                st.write("Sandbox memory is empty.")
+                st.write("*(Empty)*")
             else:
                 st.json(st.session_state.project_state)
+
+        with action_tab:
+            st.markdown("#### Upload to Workspace")
+            uploaded_files = st.file_uploader("Upload local files", accept_multiple_files=True)
+            if uploaded_files:
+                if st.button("Sync Uploads"):
+                    # Implementation for backend file upload
+                    payload = []
+                    for f in uploaded_files:
+                        payload.append({
+                            "name": f.name,
+                            "content_base64": base64.b64encode(f.getvalue()).decode("utf-8")
+                        })
+                    
+                    try:
+                        project_id = st.session_state.current_project_id
+                        with httpx.Client(timeout=30.0) as client:
+                            if project_id:
+                                url = f"{BACKEND_URL}/projects/{project_id}/files"
+                                resp = client.post(url, json={"files": payload})
+                            else:
+                                data = {"name": "Upload Session", "objective": "", "files": payload}
+                                resp = client.post(f"{BACKEND_URL}/projects", json=data)
+                            
+                            resp.raise_for_status()
+                            st.success(f"Successfully uploaded {len(uploaded_files)} file(s).")
+                    except Exception as e:
+                        st.error(f"Upload failed: {e}")
+            
+            st.markdown("---")
+            if st.button("Reset Global Session", use_container_width=True):
+                st.session_state.current_project_id = None
+                st.session_state.tasks = {}
+                st.session_state.narrative = ""
+                st.session_state.takeaways = []
+                st.rerun()
 
 # --- EXECUTION ---
 render_sidebar()
