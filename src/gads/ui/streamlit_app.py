@@ -173,11 +173,18 @@ def render_sidebar():
     st.sidebar.markdown("---")
     projects = asyncio.run(fetch_projects())
     for p in projects:
-        # Parse timestamp for display
-        dt = datetime.fromisoformat(p["created_at"].replace("Z", ""))
-        ts_str = dt.strftime("%Y-%m-%d %H:%M")
+        # Parse timestamp for display with fallback
+        try:
+            raw_ts = p.get("created_at")
+            if raw_ts:
+                dt = datetime.fromisoformat(raw_ts.replace("Z", ""))
+                ts_str = dt.strftime("%Y-%m-%d %H:%M")
+            else:
+                ts_str = "N/A"
+        except Exception:
+            ts_str = "N/A"
         
-        with st.sidebar.expander(f"{ts_str} | {p['name'][:20]}"):
+        with st.sidebar.expander(f"{ts_str} | {p.get('name', 'Unnamed')[:20]}"):
             st.caption(f"PROJECT ID: {p['id']}")
             st.markdown(f"**[OPEN MASTER DASHBOARD]({BACKEND_URL}/projects/{p['id']}/files/final_dashboard.html)**")
             st.markdown(f"**[OPEN RESEARCH REPORT]({BACKEND_URL}/projects/{p['id']}/files/research_report.md)**")

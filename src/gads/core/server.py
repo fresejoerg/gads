@@ -34,6 +34,7 @@ class ProjectRead(BaseModel):
     id: uuid.UUID
     name: str
     objective: str
+    created_at: datetime
 
     class Config:
         from_attributes = True
