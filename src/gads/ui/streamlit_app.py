@@ -32,20 +32,28 @@ st.markdown("""
     /* Sidebar Styling */
     section[data-testid="stSidebar"] {
         background-color: #0f172a;
-        color: #ffffff;
+        color: #ffffff !important;
     }
     section[data-testid="stSidebar"] h1, 
     section[data-testid="stSidebar"] h2, 
     section[data-testid="stSidebar"] h3,
-    section[data-testid="stSidebar"] .stMarkdown {
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] span,
+    section[data-testid="stSidebar"] label {
         color: #ffffff !important;
     }
     
-    /* Project Archive Cards */
+    /* Project Archive Cards - Improved Contrast */
     .stExpander {
-        border: 1px solid #334155 !important;
+        border: 1px solid #475569 !important;
         background-color: #1e293b !important;
-        margin-bottom: 5px !important;
+        margin-bottom: 8px !important;
+    }
+    
+    /* Force text inside sidebar expanders to be white */
+    section[data-testid="stSidebar"] .stExpander div[data-testid="stExpanderDetails"] p,
+    section[data-testid="stSidebar"] .stExpander div[data-testid="stExpanderDetails"] span {
+        color: #ffffff !important;
     }
     
     /* Task Tracking */
