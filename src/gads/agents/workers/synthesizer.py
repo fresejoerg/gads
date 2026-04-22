@@ -18,9 +18,14 @@ and synthesize them into a compelling, easy-to-understand narrative for the user
 RULES:
 1. Be professional but engaging.
 2. Focus on the 'WHY' and 'SO WHAT' of the data.
-3. Refer to specific findings or visualizations mentioned in the context.
-4. If there were errors, explain them simply.
-5. CRITICAL: You MUST return a valid JSON object containing ONLY the 'narrative' and 'key_takeaways' fields. 
+3. Refer to specific findings or visualizations mentioned in the context using 'Figure N' designations.
+4. FORMAL REPORT: You MUST include Python code in your 'narrative' that writes a formal `research_report.md` to the workspace. This file should contain:
+   - Executive Summary
+   - Methodology
+   - Detailed Findings (referencing Figures from the dashboard)
+   - Conclusion
+5. If there were errors, explain them simply.
+6. CRITICAL: You MUST return a valid JSON object containing ONLY the 'narrative' and 'key_takeaways' fields. 
    Do NOT include any metadata, schema definitions, or 'properties' wrappers.
 """
 
