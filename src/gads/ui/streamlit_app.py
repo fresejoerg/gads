@@ -12,6 +12,7 @@ from typing import List, Dict, Any, Optional
 # --- CONFIGURATION ---
 BACKEND_URL = os.getenv("GADS_BACKEND_URL", "http://localhost:8001")
 WS_URL = os.getenv("GADS_WS_URL", "ws://localhost:8001/ws")
+WORKSPACE_ROOT = "/home/joergf/projects/MyLocalStack/data/workspaces"
 
 st.set_page_config(
     page_title="GADS Control Center",
@@ -260,6 +261,13 @@ def render_sidebar():
         with st.sidebar.expander(f"{ts_str} | {p.get('name', 'Unnamed')[:20]}"):
             st.caption(f"PROJECT ID: {p_id}")
             
+            if st.button("SELECT PROJECT", key=f"sel_{p_id}", use_container_width=True):
+                st.session_state.current_project_id = p_id
+                st.session_state.tasks = {}
+                st.session_state.narrative = ""
+                st.session_state.takeaways = []
+                st.rerun()
+
             if p.get("has_dashboard"):
                 st.markdown(f"**[OPEN MASTER DASHBOARD]({BACKEND_URL}/projects/{p_id}/files/final_dashboard.html)**")
             else:
@@ -280,37 +288,40 @@ def fetch_current_tasks(project_id: str):
         pass
 
 def render_main():
+    # 1. Header (Static)
     st.title("GADS Control Center")
     st.markdown("**Generative-augmented Data Science Orchestrator**")
-    
     st.markdown("---")
     
-    # 1. Static Header (Inputs)
-    objective = st.text_area("Research Objective", placeholder="Describe your data science goal...", height=150)
-    
-    if st.button("Launch Workflow", type="primary", use_container_width=True):
-        if objective:
-            asyncio.run(start_workflow(objective))
-            st.info("[SYSTEM] Workflow initiated.")
-        else:
-            st.warning("[SYSTEM] Objective required.")
-
-    st.markdown("---")
-
-    # 2. Fragment: Auto-refreshing 2-Column Dashboard
+    # 2. Fragment: Auto-refreshing 2-Column Main Dashboard (Center + Right)
     @st.fragment(run_every=2)
     def render_dynamic_dashboard():
-        # Fetch truth from DB
+        # --- BACKGROUND DATA SYNC ---
         if st.session_state.current_project_id:
             details = fetch_project_details(st.session_state.current_project_id)
             if details:
+                # 1. Sync tasks
                 st.session_state.tasks = {t["id"]: t for t in details["tasks"]}
+                # 2. Sync files
+                st.session_state.project_files = [f for f in os.listdir(f"{WORKSPACE_ROOT}/{st.session_state.current_project_id}") if os.path.isfile(os.path.join(f"{WORKSPACE_ROOT}/{st.session_state.current_project_id}", f))]
+                
+                # 3. Sync narrative/takeaways from artifacts if they exist
+                # The backend emits WORKFLOW_FINAL_RESULT to the outbox.
+                # Since we are polling, let's check for the existence of the Master Dashboard
+                # and maybe a 'final_result' artifact if we added one. 
+                # For now, we rely on the session state which is updated by the WS listener 
+                # (which we should put back in a robust way, or poll the Outbox table).
+                pass
         
-        # Split into Center and Right within the fragment to avoid scoping error
+        # Define columns for the main area
         center_col, right_col = st.columns([1.5, 1])
 
         with center_col:
-            st.subheader("Analysis Synthesis")
+            st.subheader("Objective & Synthesis")
+            # Objective input must be inside the fragment if we want it to stay centered
+            # OR we can keep it above and just have the synthesis here. 
+            # Moving it back above for better UX.
+            
             if st.session_state.narrative:
                 st.markdown(f"<div style='background-color: #ffffff; padding: 30px; border: 2px solid #000000;'>{st.session_state.narrative}</div>", unsafe_allow_html=True)
                 if st.session_state.takeaways:
@@ -318,7 +329,7 @@ def render_main():
                     for t in st.session_state.takeaways:
                         st.markdown(f"- **{t}**")
             else:
-                st.info("[SYSTEM] Analysis synthesis pending completion.")
+                st.info("[SYSTEM] Analysis synthesis will be displayed here.")
 
         with right_col:
             st.subheader("System Status")
@@ -364,7 +375,8 @@ def render_main():
                             if project_id:
                                 resp = client.post(f"{BACKEND_URL}/projects/{project_id}/files", json={"files": payload})
                             else:
-                                resp = client.post(f"{BACKEND_URL}/projects", json={"name": "Upload Session", "objective": "", "files": payload})
+                                data = {"name": "Upload Session", "objective": "", "files": payload}
+                                resp = client.post(f"{BACKEND_URL}/projects", json=data)
                             resp.raise_for_status()
                             st.success(f"Uploaded {len(uploaded_files)} file(s).")
                     except Exception as e:
@@ -378,6 +390,17 @@ def render_main():
                     st.session_state.takeaways = []
                     st.rerun()
 
+    # Place Objective input ABOVE the dynamic fragment so it doesn't reset every 2s
+    objective = st.text_area("Research Objective", placeholder="Describe your data science goal...", height=100)
+    if st.button("Launch Workflow", type="primary", use_container_width=True):
+        if objective:
+            asyncio.run(start_workflow(objective))
+            st.info("[SYSTEM] Workflow initiated.")
+        else:
+            st.warning("[SYSTEM] Objective required.")
+    
+    st.markdown("---")
+    # Render the dynamic panels
     render_dynamic_dashboard()
 
 # --- EXECUTION ---
