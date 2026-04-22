@@ -59,25 +59,33 @@ async def sync_dashboard(files, state):
     """Refresh the persistent side panel via Chainlit's ElementSidebar API."""
     project_id = cl.user_session.get("current_project_id")
     if not project_id:
-        print("[UI] Warning: Sync attempted but no current_project_id found.")
+        print(f"[UI] {datetime.now().strftime('[%H:%M:%S]')} Warning: Sync attempted but no current_project_id found.")
         return
 
     try:
         md = _render_state_md(files, state, project_id)
         state_el = cl.Text(name="ProjectState", content=md)
         
-        # Update elements and ensure it is open
+        # Update elements
         await cl.ElementSidebar.set_elements([state_el])
-        # Force the sidebar to stay open if it's hidden
-        await cl.ElementSidebar.open()
+        
+        # Persistence check: Only force open if we haven't successfully synced in this session
+        # or if the user explicitly reset. This prevents rapid "re-opening" jitter.
+        if not cl.user_session.get("sidebar_initialized"):
+            await cl.ElementSidebar.open()
+            cl.user_session.set("sidebar_initialized", True)
+            
     except Exception as e:
-        print(f"[UI] Error syncing dashboard: {e}")
+        print(f"[UI] {datetime.now().strftime('[%H:%M:%S]')} Error syncing dashboard: {e}")
 
 @cl.on_chat_start
 async def start():
     # Clear any previous session state to prevent bleeding
     cl.user_session.set("last_seq", 0)
     cl.user_session.set("current_project_id", None)
+    cl.user_session.set("sidebar_initialized", False)
+    
+    print(f"[UI] {datetime.now().strftime('[%H:%M:%S]')} New chat session started.")
     
     # 1. Send the welcome message with actions
     now = datetime.now().strftime("[%H:%M:%S]")
