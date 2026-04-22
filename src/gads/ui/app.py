@@ -20,8 +20,34 @@ WS_URL = os.getenv("GADS_WS_URL", "ws://localhost:8001/ws")
 def get_action_buttons():
     return [
         cl.Action(name="upload_data", label="Upload to Workspace", payload={"action": "upload"}),
-        cl.Action(name="clear_session", label="Reset Session", payload={"action": "clear"})
+        cl.Action(name="clear_session", label="Reset Session", payload={"action": "clear"}),
+        cl.Action(name="refresh_archive", label="Refresh Archive", payload={"action": "refresh"})
     ]
+
+async def sync_archive():
+    """Fetch all past projects and display them in a persistent message."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{BACKEND_URL}/projects")
+            resp.raise_for_status()
+            projects = resp.json()
+
+        if not projects:
+            md = "### Project Archive\n*(No past projects found)*"
+        else:
+            md = "### Project Archive\n"
+            # Show last 10 projects for context efficiency
+            for p in projects[:10]:
+                p_id = p["id"]
+                p_name = p["name"] or "Unnamed"
+                md += f"- **{p_name}** (`{p_id[:8]}`) [view dashboard]({BACKEND_URL}/projects/{p_id}/files/final_dashboard.html)\n"
+            
+            if len(projects) > 10:
+                md += f"\n*(Showing 10 of {len(projects)} total projects)*"
+
+        await cl.Message(content=md, author="System Archive").send()
+    except Exception as e:
+        print(f"[UI] Error syncing archive: {e}")
 
 def _render_state_md(files, state, project_id) -> str:
     md = "### Workspace Files\n"
@@ -96,12 +122,22 @@ async def start():
     )
     await dashboard_msg.send()
 
-    # 2. Initialize the persistent side panel
+    # 2. Sync and show the Project Archive
+    await sync_archive()
+
+    # 3. Initialize the persistent side panel
     await cl.ElementSidebar.set_title("Project State")
     
     if not cl.user_session.get("ws_active"):
         cl.user_session.set("ws_active", True)
         asyncio.create_task(ws_listener())
+
+@cl.action_callback("refresh_archive")
+async def on_refresh_archive(action: cl.Action):
+    try:
+        await sync_archive()
+    finally:
+        await action.remove()
 
 @cl.action_callback("upload_data")
 async def on_upload_action(action: cl.Action):
