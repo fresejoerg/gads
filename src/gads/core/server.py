@@ -203,17 +203,19 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                             break
                     else:
                         hub.complete_task(task_id, {"stdout": res.stdout, "model_used": model_used})
-                        files = _get_recursive_files(workspace_dir)
+                        files_after = _get_recursive_files(workspace_dir)
                         hub.create_outbox_event("STATE_UPDATED", {
-                            "files": files,
+                            "files": files_after,
                             "state": executor.authoritative_state
                         })
-                        if res.plots:
+                        
+                        # 1. Capture in-memory plots (Matplotlib/Plotly display_data)
+                        for i, plot_b64 in enumerate(res.plots):
                             art = Artifact(
                                 project_id=project_id,
                                 type="plot",
-                                description=f"Visualization for: {task_obj.description[:50]}",
-                                content_json={"image_base64": res.plots[0]},
+                                description=f"In-memory visualization {i+1} for: {task_obj.description[:50]}",
+                                content_json={"image_base64": plot_b64},
                                 agent_id="CodeGenerator"
                             )
                             session.add(art)
@@ -224,6 +226,36 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                                 "description": art.description,
                                 "content_json": art.content_json
                             })
+
+                        # 2. Capture newly created PNG files (Plotly write_image)
+                        new_files = set(files_after) - set(current_files)
+                        for nf in new_files:
+                            if nf.lower().endswith(".png"):
+                                try:
+                                    full_path = os.path.join(workspace_dir, nf)
+                                    with open(full_path, "rb") as img_file:
+                                        img_b64 = base64.b64encode(img_file.read()).decode("utf-8")
+                                    
+                                    art = Artifact(
+                                        project_id=project_id,
+                                        type="plot",
+                                        description=f"Workspace artifact: {nf}",
+                                        content_json={"image_base64": img_b64},
+                                        agent_id="CodeGenerator"
+                                    )
+                                    session.add(art)
+                                    session.commit()
+                                    session.refresh(art)
+                                    hub.create_outbox_event("ARTIFACT_CREATED", {
+                                        "type": "plot",
+                                        "description": art.description,
+                                        "content_json": art.content_json
+                                    })
+                                except Exception as e:
+                                    print(f"  [Workflow] Warning: Failed to capture disk artifact {nf}: {e}")
+
+                        # Update ground truth for next task
+                        current_files = files_after
                         session.commit()
                         break
 

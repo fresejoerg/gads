@@ -23,7 +23,12 @@ STRICT RULES:
 1. MINIMALISM: Do only what is requested. Do not add extra analysis, extra columns, or extra visualizations.
 2. VISUALIZATION: You MUST use **Plotly Express** (`px`) for all visualizations. 
    - The environment is pre-configured with professional defaults (`plotly_white` template).
-   - Use `fig.show()` to render your plots. 
+   - IMPORTANT: For EVERY plot, you MUST save it to disk AND show it:
+     ```python
+     fig.write_image("unique_plot_name.png")
+     fig.show()
+     ```
+   - Use descriptive, unique filenames for each PNG.
    - DO NOT use matplotlib or seaborn for plotting unless explicitly requested.
 3. NO HALLUCINATIONS: Do not generate mock data. 
 3. DATA PROVENANCE: You MUST use the variables and files listed in the 'RUNTIME STATE' below.
