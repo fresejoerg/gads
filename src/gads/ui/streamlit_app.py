@@ -212,6 +212,14 @@ def fetch_projects():
         st.error(f"Failed to fetch projects: {e}")
         return []
 
+def fetch_project_details(project_id: str):
+    try:
+        with httpx.Client() as client:
+            resp = client.get(f"{BACKEND_URL}/projects/{project_id}")
+            return resp.json()
+    except Exception:
+        return None
+
 async def start_workflow(objective: str):
     try:
         async with httpx.AsyncClient() as client:
@@ -278,9 +286,6 @@ def render_main():
     st.markdown("---")
     
     # 3-Panel Layout Configuration
-    # Left is Sidebar (st.sidebar)
-    # Center is research and objective
-    # Right is tracking and grounding
     center_col, right_col = st.columns([1.5, 1])
     
     with center_col:
@@ -296,103 +301,74 @@ def render_main():
                 st.warning("[SYSTEM] Objective required.")
 
         st.markdown("---")
-        if st.session_state.narrative:
-            st.markdown(f"<div style='background-color: #ffffff; padding: 30px; border: 2px solid #e2e8f0;'>{st.session_state.narrative}</div>", unsafe_allow_html=True)
-            if st.session_state.takeaways:
-                st.markdown("#### Key Takeaways")
-                for t in st.session_state.takeaways:
-                    st.markdown(f"- **{t}**")
-        else:
-            st.info("[SYSTEM] Analysis synthesis will be displayed here.")
-
-    with right_col:
-        st.subheader("System Status")
         
-        track_tab, grounding_tab, action_tab = st.tabs(["Tasks", "Grounding", "Management"])
-        
-        with track_tab:
-            if not st.session_state.tasks:
-                st.info("No active tasks.")
-            for tid, tinfo in st.session_state.tasks.items():
-                status = tinfo['status'].upper()
-                st.markdown(f"""
-                <div class="task-card">
-                    <span class="status-label status-{tinfo['status']}">{status}</span><br/>
-                    <div style="margin-top: 10px; color: #000000; font-weight: 500;">{tinfo['description']}</div>
-                </div>
-                """, unsafe_allow_html=True)
-                if tinfo['output']:
-                    with st.expander("Logs"):
-                        st.code(tinfo['output'])
-
-        with grounding_tab:
-            st.markdown("#### Workspace Files")
-            if not st.session_state.project_files:
-                st.write("*(Empty)*")
-            for f in st.session_state.project_files:
-                st.markdown(f"- `{f}` ([view]({BACKEND_URL}/projects/{st.session_state.current_project_id}/files/{f}))")
+        # FRAGMENT: Auto-refreshing Synthesis and Tracking
+        @st.fragment(run_every=2)
+        def render_dynamic_panels():
+            if st.session_state.current_project_id:
+                details = fetch_project_details(st.session_state.current_project_id)
+                if details:
+                    # Sync local session state with DB truth
+                    st.session_state.tasks = {t["id"]: t for t in details["tasks"]}
+                    # If project has a narrative, update it
+                    # Note: We need to check the actual Project object for narrative field
+                    # or handle it via a task marked as synthesis. For now, we trust the DB state.
             
-            st.markdown("---")
-            st.markdown("#### Sandbox Memory")
-            if not st.session_state.project_state:
-                st.write("*(Empty)*")
+            # --- Synthesis Render ---
+            if st.session_state.narrative:
+                st.markdown(f"<div style='background-color: #ffffff; padding: 30px; border: 2px solid #000000;'>{st.session_state.narrative}</div>", unsafe_allow_html=True)
+                if st.session_state.takeaways:
+                    st.markdown("#### Key Takeaways")
+                    for t in st.session_state.takeaways:
+                        st.markdown(f"- **{t}**")
             else:
-                st.json(st.session_state.project_state)
+                st.info("[SYSTEM] Analysis synthesis pending completion.")
 
-        with action_tab:
-            if st.button("Manual State Refresh", use_container_width=True):
-                # Trigger a rerun which will sync projects/files
-                st.rerun()
-            
-            st.markdown("---")
-            st.markdown("#### Upload to Workspace")
-            uploaded_files = st.file_uploader("Upload local files", accept_multiple_files=True)
-            if uploaded_files:
-                if st.button("Sync Uploads"):
-                    # Implementation for backend file upload
-                    payload = []
-                    for f in uploaded_files:
-                        payload.append({
-                            "name": f.name,
-                            "content_base64": base64.b64encode(f.getvalue()).decode("utf-8")
-                        })
+            # --- Right Column (Nested in fragment for sync) ---
+            with right_col:
+                st.subheader("System Status")
+                track_tab, grounding_tab, action_tab = st.tabs(["Tasks", "Grounding", "Management"])
+                
+                with track_tab:
+                    if not st.session_state.tasks:
+                        st.info("No active tasks.")
+                    # Sort tasks by created_at if possible, or just list
+                    for tid, tinfo in st.session_state.tasks.items():
+                        status = tinfo['status'].upper()
+                        st.markdown(f"""
+                        <div class="task-card">
+                            <span class="status-label status-{tinfo['status']}">{status}</span><br/>
+                            <div style="margin-top: 10px; color: #000000; font-weight: 500;">{tinfo['description']}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        if tinfo.get('result_json') and tinfo['result_json'].get('stdout'):
+                            with st.expander("Logs"):
+                                st.code(tinfo['result_json']['stdout'])
+
+                with grounding_tab:
+                    st.markdown("#### Workspace Files")
+                    if not st.session_state.project_files:
+                        st.write("*(Empty)*")
+                    for f in st.session_state.project_files:
+                        st.markdown(f"- `{f}` ([view]({BACKEND_URL}/projects/{st.session_state.current_project_id}/files/{f}))")
                     
-                    try:
-                        project_id = st.session_state.current_project_id
-                        with httpx.Client(timeout=30.0) as client:
-                            if project_id:
-                                url = f"{BACKEND_URL}/projects/{project_id}/files"
-                                resp = client.post(url, json={"files": payload})
-                            else:
-                                data = {"name": "Upload Session", "objective": "", "files": payload}
-                                resp = client.post(f"{BACKEND_URL}/projects", json=data)
-                            
-                            resp.raise_for_status()
-                            st.success(f"Successfully uploaded {len(uploaded_files)} file(s).")
-                    except Exception as e:
-                        st.error(f"Upload failed: {e}")
-            
-            st.markdown("---")
-            if st.button("Reset Global Session", use_container_width=True):
-                st.session_state.current_project_id = None
-                st.session_state.tasks = {}
-                st.session_state.narrative = ""
-                st.session_state.takeaways = []
-                st.rerun()
+                    st.markdown("---")
+                    st.markdown("#### Sandbox Memory")
+                    if not st.session_state.project_state:
+                        st.write("*(Empty)*")
+                    else:
+                        st.json(st.session_state.project_state)
+
+                with action_tab:
+                    if st.button("Reset Global Session", use_container_width=True):
+                        st.session_state.current_project_id = None
+                        st.session_state.tasks = {}
+                        st.session_state.narrative = ""
+                        st.session_state.takeaways = []
+                        st.rerun()
+
+        render_dynamic_panels()
 
 # --- EXECUTION ---
 render_sidebar()
 render_main()
-
-# Initialize background listener once
-if "ws_thread" not in st.session_state:
-    # Create a persistent loop for the thread
-    new_loop = asyncio.new_event_loop()
-    t = threading.Thread(target=run_ws_thread, args=(new_loop, st.session_state.last_seq), daemon=True)
-    t.start()
-    st.session_state.ws_thread = t
-
-# Handle background-triggered reruns
-if st.session_state.needs_rerun:
-    st.session_state.needs_rerun = False
-    st.rerun()

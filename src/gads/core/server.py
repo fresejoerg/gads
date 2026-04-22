@@ -359,6 +359,23 @@ async def websocket_endpoint(websocket: WebSocket, last_seq: int = 0):
     except WebSocketDisconnect:
         bus.disconnect(websocket)
 
+@app.get("/projects/{project_id}", response_model=Dict[str, Any])
+async def get_project_details(project_id: uuid.UUID):
+    """Returns full project details including tasks and artifacts."""
+    with Session(engine) as session:
+        project = session.get(Project, project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
+        artifacts = session.exec(select(Artifact).where(Artifact.project_id == project_id)).all()
+        
+        return {
+            "project": ProjectRead.from_orm(project),
+            "tasks": tasks,
+            "artifacts": artifacts
+        }
+
 @app.get("/projects", response_model=List[ProjectRead])
 async def list_projects():
     """Lists all past and current projects with artifact flags."""
