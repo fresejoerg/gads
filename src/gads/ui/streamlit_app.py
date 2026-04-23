@@ -224,16 +224,22 @@ def fetch_project_details(project_id: str):
     except Exception:
         return None
 
-async def start_workflow(objective: str):
+async def start_workflow(objective: str, project_id: Optional[str] = None):
     try:
         async with httpx.AsyncClient() as client:
-            payload = {"name": f"Project {datetime.now().strftime('%Y-%m-%d %H:%M')}", "objective": objective}
+            payload = {
+                "name": f"Project {datetime.now().strftime('%Y-%m-%d %H:%M')}", 
+                "objective": objective,
+                "existing_project_id": project_id
+            }
             resp = await client.post(f"{BACKEND_URL}/projects", json=payload)
             data = resp.json()
             st.session_state.current_project_id = data["project"]["id"]
-            st.session_state.tasks = {}
-            st.session_state.narrative = ""
-            st.session_state.takeaways = []
+            # Clear local state only if it's a brand new workflow instruction
+            if objective.strip():
+                st.session_state.tasks = {}
+                st.session_state.narrative = ""
+                st.session_state.takeaways = []
             return data
     except Exception as e:
         st.error(f"Failed to start workflow: {e}")
@@ -407,38 +413,34 @@ def render_main():
                 
                 if available_host_files:
                     selected_file = st.selectbox("Pick Dataset from Host", options=["--- Select File ---"] + available_host_files)
-                    if st.button("Mount Selected Dataset", use_container_width=True):
+                    if st.button("Mount Selected Dataset", key="btn_mount", use_container_width=True):
                         if selected_file != "--- Select File ---":
                             try:
                                 project_id = st.session_state.current_project_id
-                                # If no project active, create one on the fly
+                                # If no project active, create one on the fly with NO objective
                                 if not project_id:
                                     with httpx.Client(timeout=30.0) as client:
                                         payload = {
                                             "name": f"Analysis: {selected_file}",
-                                            "objective": f"Explore and analyze the dataset: {selected_file}"
+                                            "objective": "" # SILENT: Don't trigger workflow yet
                                         }
                                         resp = client.post(f"{BACKEND_URL}/projects", json=payload)
                                         resp.raise_for_status()
                                         project_data = resp.json()
                                         project_id = project_data["project"]["id"]
                                         st.session_state.current_project_id = project_id
-                                        st.info(f"[SYSTEM] Created new project context: {project_id}")
+                                        st.info(f"[SYSTEM] Created project context: {project_id}")
 
                                 full_host_path = os.path.join(host_datasets_root, selected_file)
                                 with httpx.Client(timeout=30.0) as client:
                                     resp = client.post(f"{BACKEND_URL}/projects/{project_id}/register-external", json={"path": full_host_path})
                                     resp.raise_for_status()
-                                    st.success(f"[SYSTEM] Dataset '{selected_file}' mounted successfully.")
+                                    st.success(f"[SYSTEM] Dataset '{selected_file}' mounted.")
                                     st.session_state.needs_rerun = True
                             except Exception as e:
                                 st.error(f"Mount failed: {e}")
                 else:
                     st.info(f"No files found in {host_datasets_root}")
-                    host_path = st.text_input("Manual Host Path", placeholder="/absolute/path/to/dataset.csv")
-                    if st.button("Mount Manual Path", use_container_width=True):
-                        # ... fallback logic
-                        pass
 
                 st.markdown("---")
                 # 2. File uploader inside fragment
@@ -481,7 +483,8 @@ def render_main():
     objective = st.text_area("Research Objective", placeholder="Describe your data science goal...", height=100)
     if st.button("Launch Workflow", type="primary", use_container_width=True):
         if objective:
-            asyncio.run(start_workflow(objective))
+            # Use current project context if it exists
+            asyncio.run(start_workflow(objective, project_id=st.session_state.current_project_id))
             st.info("[SYSTEM] Workflow initiated.")
         else:
             st.warning("[SYSTEM] Objective required.")
