@@ -22,6 +22,7 @@ class Task(SQLModel, table=True):
     escalation_count: int = 0
     postcondition_json: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     heartbeat: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.now)
     error: Optional[str] = None
     result_json: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     

@@ -351,7 +351,7 @@ def render_main():
                 if not st.session_state.tasks:
                     st.info("No active tasks.")
                 
-                # Sort tasks by created_at (most professional)
+                # Sort tasks by created_at (now that we have the field)
                 sorted_tasks = sorted(st.session_state.tasks.values(), key=lambda x: x.get("created_at", ""))
                 
                 for tinfo in sorted_tasks:
@@ -363,11 +363,13 @@ def render_main():
                     </div>
                     """, unsafe_allow_html=True)
                     
-                    # Robust log extraction
-                    res = tinfo.get('result_json')
-                    if res and isinstance(res, dict) and res.get('stdout'):
-                        with st.expander("View Logs"):
-                            st.code(res['stdout'])
+                    # Robust log extraction for ALL completed tasks
+                    res_data = tinfo.get('result_json')
+                    if res_data and isinstance(res_data, dict):
+                        stdout = res_data.get('stdout', '')
+                        if stdout:
+                            with st.expander("View Execution Logs"):
+                                st.code(stdout)
 
             with grounding_tab:
                 st.markdown("#### Workspace Files")
