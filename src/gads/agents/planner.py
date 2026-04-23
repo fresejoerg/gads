@@ -18,11 +18,16 @@ class PlannerTask(BaseModel):
         description="Structural contract for success. E.g., {'output_type': 'dataframe', 'min_rows': 1, 'required_columns': ['name']}"
     )
 
+class FileMetadata(BaseModel):
+    name: str
+    size_mb: float
+
 class PlannerInput(BaseModel):
     objective: str
     available_models_hierarchy: Dict[str, Any]
-    available_files: List[str] = []
+    available_files: List[FileMetadata]
     knowledge_report: Optional[ReconciliationReport] = None
+
 
 class PlannerOutput(BaseModel):
     steps: List[PlannerTask] = Field(description="A list of discrete steps with postcondition contracts.")
@@ -91,7 +96,13 @@ class DataSciencePlanner(BaseAgent[PlannerInput, PlannerOutput]):
 
     async def run(self, input_data: PlannerInput) -> Any:
         hierarchy_str = json.dumps(input_data.available_models_hierarchy, indent=2)
-        files_str = ", ".join(input_data.available_files) if input_data.available_files else "None"
+        
+        # Format files with size for agent awareness
+        files_info = []
+        for f in input_data.available_files:
+            files_info.append(f"{f.name} ({f.size_mb:.2f} MB)")
+        files_str = ", ".join(files_info) if files_info else "None"
+        
         knowledge_str = json.dumps(input_data.knowledge_report.dict(), indent=2) if input_data.knowledge_report else "No matching SOP found. Use generic data science reasoning."
         
         formatted_prompt = self.system_prompt.format(
