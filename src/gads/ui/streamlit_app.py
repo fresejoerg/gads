@@ -393,25 +393,41 @@ def render_main():
                     st.json(st.session_state.project_state)
 
             with action_tab:
-                # 1. External Path Registration
+                # 1. External Path Registration (Local Picker)
                 st.markdown("#### Register External Dataset")
-                host_path = st.text_input("Host File Path", placeholder="/absolute/path/to/dataset.csv")
-                if st.button("Mount Dataset", use_container_width=True):
-                    if host_path:
-                        try:
-                            project_id = st.session_state.current_project_id
-                            if not project_id:
-                                st.error("Please create or select a project first.")
-                            else:
-                                with httpx.Client(timeout=30.0) as client:
-                                    resp = client.post(f"{BACKEND_URL}/projects/{project_id}/register-external", json={"path": host_path})
-                                    resp.raise_for_status()
-                                    st.success(f"[SYSTEM] Dataset mounted successfully via symlink.")
-                                    st.session_state.needs_rerun = True
-                        except Exception as e:
-                            st.error(f"Mount failed: {e}")
-                    else:
-                        st.warning("Please provide a valid path.")
+                
+                # Scan host datasets directory
+                host_datasets_root = "/home/joergf/datasets"
+                available_host_files = []
+                if os.path.exists(host_datasets_root):
+                    try:
+                        available_host_files = sorted([f for f in os.listdir(host_datasets_root) if os.path.isfile(os.path.join(host_datasets_root, f))])
+                    except Exception:
+                        pass
+                
+                if available_host_files:
+                    selected_file = st.selectbox("Pick Dataset from Host", options=["--- Select File ---"] + available_host_files)
+                    if st.button("Mount Selected Dataset", use_container_width=True):
+                        if selected_file != "--- Select File ---":
+                            try:
+                                project_id = st.session_state.current_project_id
+                                if not project_id:
+                                    st.error("Please create or select a project first.")
+                                else:
+                                    full_host_path = os.path.join(host_datasets_root, selected_file)
+                                    with httpx.Client(timeout=30.0) as client:
+                                        resp = client.post(f"{BACKEND_URL}/projects/{project_id}/register-external", json={"path": full_host_path})
+                                        resp.raise_for_status()
+                                        st.success(f"[SYSTEM] Dataset '{selected_file}' mounted.")
+                                        st.session_state.needs_rerun = True
+                            except Exception as e:
+                                st.error(f"Mount failed: {e}")
+                else:
+                    st.info(f"No files found in {host_datasets_root}")
+                    host_path = st.text_input("Manual Host Path", placeholder="/absolute/path/to/dataset.csv")
+                    if st.button("Mount Manual Path", use_container_width=True):
+                        # ... fallback logic
+                        pass
 
                 st.markdown("---")
                 # 2. File uploader inside fragment
