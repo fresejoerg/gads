@@ -406,6 +406,16 @@ def render_main():
                         st.error(f"Upload failed: {e}")
 
                 st.markdown("---")
+                if st.button("Purge Old Projects (>30d)", use_container_width=True):
+                    try:
+                        with httpx.Client(timeout=60.0) as client:
+                            resp = client.post(f"{BACKEND_URL}/maintenance/cleanup")
+                            resp.raise_for_status()
+                            data = resp.json()
+                            st.success(f"[SYSTEM] Cleanup complete. Removed {data['removed_projects']} projects.")
+                    except Exception as e:
+                        st.error(f"Cleanup failed: {e}")
+
                 if st.button("Reset Global Session", use_container_width=True):
                     st.session_state.current_project_id = None
                     st.session_state.tasks = {}

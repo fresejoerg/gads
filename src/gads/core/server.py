@@ -65,6 +65,50 @@ async def startup_event():
     init_db()
     asyncio.create_task(dispatcher_loop())
     asyncio.create_task(watchdog_loop())
+    asyncio.create_task(archive_cleanup_loop())
+
+async def archive_cleanup_loop():
+    """Background task to delete project artifacts older than 30 days."""
+    while True:
+        try:
+            print("  [Maintenance] Starting automated archive cleanup...", flush=True)
+            count = await perform_cleanup()
+            print(f"  [Maintenance] Cleanup complete. Removed {count} old projects.", flush=True)
+        except Exception as e:
+            print(f"  [Maintenance] Error during cleanup: {e}", flush=True)
+        
+        await asyncio.sleep(86400) # Run every 24 hours
+
+async def perform_cleanup() -> int:
+    """Logic to identify and delete projects older than 30 days."""
+    import shutil
+    from datetime import datetime, timedelta
+    
+    threshold = datetime.now() - timedelta(days=30)
+    removed_count = 0
+    
+    with Session(engine) as session:
+        # Find old projects
+        old_projects = session.exec(select(Project).where(Project.created_at < threshold)).all()
+        
+        for p in old_projects:
+            # 1. Delete workspace on disk
+            workspace_dir = f"{WORKSPACE_ROOT}/{p.id}"
+            if os.path.exists(workspace_dir):
+                shutil.rmtree(workspace_dir)
+            
+            # 2. Delete project from DB (cascading will handle tasks/artifacts)
+            session.delete(p)
+            removed_count += 1
+            
+        session.commit()
+    return removed_count
+
+@app.post("/maintenance/cleanup")
+async def manual_cleanup():
+    """Manually trigger project archive cleanup."""
+    count = await perform_cleanup()
+    return {"status": "success", "removed_projects": count}
 
 def _get_recursive_files(workspace_dir: str) -> List[str]:
     """Helper to list all files in workspace recursively, relative to root."""
