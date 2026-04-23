@@ -314,15 +314,16 @@ def render_main():
                     st.session_state.project_files = os.listdir(ws_path)
 
                 # 3. Detect completion and sync narrative
-                completed_tasks = [t for t in details["tasks"] if t["status"] == "completed"]
-                for t in completed_tasks:
-                    if "Synthesize" in t.get("description", ""):
-                        res = t.get("result_json")
-                        if res and "narrative" in res:
-                            st.session_state.narrative = res["narrative"]
-                            st.session_state.takeaways = res.get("takeaways", [])
+                # Check ALL tasks for synthesis output
+                for t in details["tasks"]:
+                    res = t.get("result_json")
+                    if res and isinstance(res, dict) and "narrative" in res:
+                        st.session_state.narrative = res["narrative"]
+                        st.session_state.takeaways = res.get("takeaways", [])
                 
-                if all(t["status"] in ["completed", "failed"] for t in details["tasks"]) and details["tasks"]:
+                # Terminal state check
+                if details["tasks"] and all(t["status"] in ["completed", "failed"] for t in details["tasks"]):
+                    # If we have no narrative yet, but tasks are done, it's a failure or pure technical run
                     project_complete = True
         
         # Split into Center and Right
@@ -340,6 +341,8 @@ def render_main():
                 
                 if project_complete:
                     st.success("[SYSTEM] Project complete. Final reports generated and saved to workspace.")
+            elif project_complete:
+                st.warning("[SYSTEM] Workflow finished but no analytical synthesis was produced.")
             else:
                 st.info("[SYSTEM] Analysis synthesis pending completion.")
 
