@@ -425,4 +425,5 @@ def render_main():
     render_dynamic_dashboard()
 
 # --- EXECUTION ---
+render_sidebar()
 render_main()
