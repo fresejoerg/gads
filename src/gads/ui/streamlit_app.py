@@ -240,46 +240,48 @@ async def start_workflow(objective: str):
 
 # --- UI COMPONENTS ---
 
+@st.fragment(run_every=10)
 def render_sidebar():
-    st.sidebar.title("Project Archive")
-    st.sidebar.markdown("---")
-    projects = fetch_projects()
-    if not projects:
-        st.sidebar.caption("No projects found.")
-        return
+    with st.sidebar:
+        st.title("Project Archive")
+        st.markdown("---")
+        projects = fetch_projects()
+        if not projects:
+            st.caption("No projects found.")
+            return
 
-    for p in projects:
-        # Parse timestamp for display with fallback
-        try:
-            raw_ts = p.get("created_at")
-            if raw_ts:
-                dt = datetime.fromisoformat(raw_ts.replace("Z", ""))
-                ts_str = dt.strftime("%Y-%m-%d %H:%M")
-            else:
+        for p in projects:
+            # Parse timestamp for display with fallback
+            try:
+                raw_ts = p.get("created_at")
+                if raw_ts:
+                    dt = datetime.fromisoformat(raw_ts.replace("Z", ""))
+                    ts_str = dt.strftime("%Y-%m-%d %H:%M")
+                else:
+                    ts_str = "N/A"
+            except Exception:
                 ts_str = "N/A"
-        except Exception:
-            ts_str = "N/A"
-        
-        p_id = p['id']
-        with st.sidebar.expander(f"{ts_str} | {p.get('name', 'Unnamed')[:20]}"):
-            st.caption(f"PROJECT ID: {p_id}")
             
-            if st.button("SELECT PROJECT", key=f"sel_{p_id}", use_container_width=True):
-                st.session_state.current_project_id = p_id
-                st.session_state.tasks = {}
-                st.session_state.narrative = ""
-                st.session_state.takeaways = []
-                st.rerun()
-
-            if p.get("has_dashboard"):
-                st.markdown(f"**[OPEN MASTER DASHBOARD]({BACKEND_URL}/projects/{p_id}/files/final_dashboard.html)**")
-            else:
-                st.caption("Dashboard: Not Available")
+            p_id = p['id']
+            with st.expander(f"{ts_str} | {p.get('name', 'Unnamed')[:20]}"):
+                st.caption(f"PROJECT ID: {p_id}")
                 
-            if p.get("has_report"):
-                st.markdown(f"**[OPEN RESEARCH REPORT]({BACKEND_URL}/projects/{p_id}/files/research_report.md)**")
-            else:
-                st.caption("Report: Not Available")
+                if st.button("SELECT PROJECT", key=f"sel_{p_id}", use_container_width=True):
+                    st.session_state.current_project_id = p_id
+                    st.session_state.tasks = {}
+                    st.session_state.narrative = ""
+                    st.session_state.takeaways = []
+                    st.rerun()
+
+                if p.get("has_dashboard"):
+                    st.markdown(f"**[OPEN MASTER DASHBOARD]({BACKEND_URL}/projects/{p_id}/files/final_dashboard.html)**")
+                else:
+                    st.caption("Dashboard: Not Available")
+                    
+                if p.get("has_report"):
+                    st.markdown(f"**[OPEN RESEARCH REPORT]({BACKEND_URL}/projects/{p_id}/files/research_report.md)**")
+                else:
+                    st.caption("Report: Not Available")
 
 def fetch_current_tasks(project_id: str):
     """Fallback to fetch all tasks from DB if WS fails."""
@@ -323,9 +325,6 @@ def render_main():
                 
                 if all(t["status"] in ["completed", "failed"] for t in details["tasks"]) and details["tasks"]:
                     project_complete = True
-        
-        # --- RENDER SIDEBAR INSIDE FRAGMENT FOR INSTANT REFRESH ---
-        render_sidebar()
         
         # Split into Center and Right
         center_col, right_col = st.columns([1.5, 1])
