@@ -36,6 +36,8 @@ class ProjectRead(BaseModel):
     id: uuid.UUID
     name: str
     objective: str
+    narrative: Optional[str] = None
+    takeaways: Optional[List[str]] = None
     last_state_json: Optional[Dict[str, Any]] = None
     created_at: datetime
     has_dashboard: bool = False
@@ -390,6 +392,13 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
         )
 
         with Session(engine) as session:
+            project = session.get(Project, project_id)
+            if project:
+                project.narrative = synth_res.content.narrative
+                project.takeaways = synth_res.content.key_takeaways
+                session.add(project)
+                session.commit()
+
             hub = ExecutionHub(session)
             hub.create_outbox_event("WORKFLOW_FINAL_RESULT", {
                 "narrative": synth_res.content.narrative,

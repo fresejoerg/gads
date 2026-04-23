@@ -310,6 +310,8 @@ def render_main():
                 
                 # 2. Sync files and memory state
                 st.session_state.project_state = details["project"].get("last_state_json", {})
+                st.session_state.narrative = details["project"].get("narrative", "")
+                st.session_state.takeaways = details["project"].get("takeaways", [])
                 
                 ws_path = f"{WORKSPACE_ROOT}/{st.session_state.current_project_id}"
                 if os.path.exists(ws_path):
