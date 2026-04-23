@@ -570,6 +570,10 @@ async def register_external_file(project_id: uuid.UUID, req: ExternalPathRequest
         if not os.path.lexists(host_path):
             raise HTTPException(status_code=400, detail=f"Host path does not exist: {host_path}")
             
+        # Translate Host Path to Sandbox Path for the symlink target
+        # Host: /home/joergf/datasets/... -> Sandbox: /app/datasets/...
+        sandbox_path = host_path.replace("/home/joergf/datasets", "/app/datasets")
+            
         workspace_dir = f"{WORKSPACE_ROOT}/{project_id}"
         os.makedirs(workspace_dir, exist_ok=True)
         
@@ -584,8 +588,9 @@ async def register_external_file(project_id: uuid.UUID, req: ExternalPathRequest
                 else:
                     os.remove(target_path)
                     
-            os.symlink(host_path, target_path)
-            print(f"  [Server] Registered external file: {host_path} -> {target_path}", flush=True)
+            # Use the sandbox-relative path as the link target
+            os.symlink(sandbox_path, target_path)
+            print(f"  [Server] Registered external file (Sandbox Aware): {sandbox_path} -> {target_path}", flush=True)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to create symlink: {e}")
             

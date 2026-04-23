@@ -43,10 +43,12 @@ STRICT RULES:
 ## AUTHORITATIVE RUNTIME STATE (Source of Truth)
 The following variables and data structures ALREADY EXIST in your stateful kernel memory. 
 {state_summary}
-
 ### FORMATTING RULE:
 You MUST return a valid JSON object matching the requested schema. 
-Do NOT include any metadata, schema definitions, or 'properties' wrappers.
+Do NOT include any metadata, schema definitions, or 'properties' wrappers. 
+Do NOT repeat the JSON object multiple times.
+"""
+
 Ensure you use double quotes for keys and string values.
 """
 
