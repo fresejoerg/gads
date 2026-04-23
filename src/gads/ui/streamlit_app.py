@@ -393,7 +393,28 @@ def render_main():
                     st.json(st.session_state.project_state)
 
             with action_tab:
-                # File uploader inside fragment
+                # 1. External Path Registration
+                st.markdown("#### Register External Dataset")
+                host_path = st.text_input("Host File Path", placeholder="/absolute/path/to/dataset.csv")
+                if st.button("Mount Dataset", use_container_width=True):
+                    if host_path:
+                        try:
+                            project_id = st.session_state.current_project_id
+                            if not project_id:
+                                st.error("Please create or select a project first.")
+                            else:
+                                with httpx.Client(timeout=30.0) as client:
+                                    resp = client.post(f"{BACKEND_URL}/projects/{project_id}/register-external", json={"path": host_path})
+                                    resp.raise_for_status()
+                                    st.success(f"[SYSTEM] Dataset mounted successfully via symlink.")
+                                    st.session_state.needs_rerun = True
+                        except Exception as e:
+                            st.error(f"Mount failed: {e}")
+                    else:
+                        st.warning("Please provide a valid path.")
+
+                st.markdown("---")
+                # 2. File uploader inside fragment
                 uploaded_files = st.file_uploader("Upload local files", accept_multiple_files=True)
                 if uploaded_files and st.button("Sync Uploads"):
                     payload = [{"name": f.name, "content_base64": base64.b64encode(f.getvalue()).decode("utf-8")} for f in uploaded_files]

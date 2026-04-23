@@ -63,6 +63,9 @@ class ProjectCreateRequest(BaseModel):
 class FilesUploadRequest(BaseModel):
     files: List[FileUpload]
 
+class ExternalPathRequest(BaseModel):
+    path: str
+
 @app.on_event("startup")
 async def startup_event():
     init_db()
