@@ -22,6 +22,8 @@ async def get_structured_completion(model: str, response_model, messages: list, 
         kwargs["base_url"] = LITELLM_BASE_URL
     if "api_key" not in kwargs:
         kwargs["api_key"] = LITELLM_MASTER_KEY
+    if "max_tokens" not in kwargs:
+        kwargs["max_tokens"] = 8192
         
     return await client(
         model=model,
