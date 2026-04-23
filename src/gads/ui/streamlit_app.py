@@ -411,15 +411,26 @@ def render_main():
                         if selected_file != "--- Select File ---":
                             try:
                                 project_id = st.session_state.current_project_id
+                                # If no project active, create one on the fly
                                 if not project_id:
-                                    st.error("Please create or select a project first.")
-                                else:
-                                    full_host_path = os.path.join(host_datasets_root, selected_file)
                                     with httpx.Client(timeout=30.0) as client:
-                                        resp = client.post(f"{BACKEND_URL}/projects/{project_id}/register-external", json={"path": full_host_path})
+                                        payload = {
+                                            "name": f"Analysis: {selected_file}",
+                                            "objective": f"Explore and analyze the dataset: {selected_file}"
+                                        }
+                                        resp = client.post(f"{BACKEND_URL}/projects", json=payload)
                                         resp.raise_for_status()
-                                        st.success(f"[SYSTEM] Dataset '{selected_file}' mounted.")
-                                        st.session_state.needs_rerun = True
+                                        project_data = resp.json()
+                                        project_id = project_data["project"]["id"]
+                                        st.session_state.current_project_id = project_id
+                                        st.info(f"[SYSTEM] Created new project context: {project_id}")
+
+                                full_host_path = os.path.join(host_datasets_root, selected_file)
+                                with httpx.Client(timeout=30.0) as client:
+                                    resp = client.post(f"{BACKEND_URL}/projects/{project_id}/register-external", json={"path": full_host_path})
+                                    resp.raise_for_status()
+                                    st.success(f"[SYSTEM] Dataset '{selected_file}' mounted successfully.")
+                                    st.session_state.needs_rerun = True
                             except Exception as e:
                                 st.error(f"Mount failed: {e}")
                 else:
