@@ -36,6 +36,7 @@ class ProjectRead(BaseModel):
     id: uuid.UUID
     name: str
     objective: str
+    last_state_json: Optional[Dict[str, Any]] = None
     created_at: datetime
     has_dashboard: bool = False
     has_report: bool = False
@@ -138,6 +139,12 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
         if res.kernel_state:
             executor.authoritative_state.update(res.kernel_state)
             print(f"  [Workflow] Synchronized {len(executor.authoritative_state)} variables from kernel.", flush=True)
+            with Session(engine) as session:
+                project = session.get(Project, project_id)
+                if project:
+                    project.last_state_json = executor.authoritative_state
+                    session.add(project)
+                    session.commit()
 
         # 1. ROUTING (Full Gemini Priority)
         # Update Routing fallback to Gemini 3.1 Flash Lite
@@ -258,6 +265,14 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                             "files": files_after,
                             "state": executor.authoritative_state
                         })
+                        
+                        # Sync state to DB Project object for durable memory
+                        with Session(engine) as session:
+                            project = session.get(Project, project_id)
+                            if project:
+                                project.last_state_json = executor.authoritative_state
+                                session.add(project)
+                                session.commit()
                         
                         # 1. Capture in-memory plots (Matplotlib/Plotly display_data)
                         for i, plot_b64 in enumerate(res.plots):

@@ -308,7 +308,9 @@ def render_main():
                 # 1. Sync tasks
                 st.session_state.tasks = {t["id"]: t for t in details["tasks"]}
                 
-                # 2. Sync files
+                # 2. Sync files and memory state
+                st.session_state.project_state = details["project"].get("last_state_json", {})
+                
                 ws_path = f"{WORKSPACE_ROOT}/{st.session_state.current_project_id}"
                 if os.path.exists(ws_path):
                     st.session_state.project_files = os.listdir(ws_path)
