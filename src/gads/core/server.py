@@ -155,32 +155,61 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
         router = DataScienceRouter(model=router_model)
         
         with Session(engine) as session:
-            hub = ExecutionHub(session)
-            hub.create_outbox_event("STEP_STARTED", {"message": f"Architect ({router_model}) is classifying intent..."})
+            # Create Routing Task
+            route_task = Task(
+                project_id=project_id,
+                description=f"Architect ({router_model}) is classifying intent and data modality...",
+                assigned_to="Router",
+                status="running"
+            )
+            session.add(route_task)
+            session.commit()
+            session.refresh(route_task)
+            
+            router_res = await router.run(RouterInput(objective=objective))
+            intent = router_res.content
+            
+            route_task.status = "completed"
+            route_task.result_json = {"stdout": f"Task Type: {intent.task_type}\nModality: {intent.data_modality}\nConfidence: {intent.confidence}"}
+            session.add(route_task)
             session.commit()
             
-        router_res = await router.run(RouterInput(objective=objective))
-        intent = router_res.content
         print(f"  [Router] Intent: {intent.task_type} on {intent.data_modality} (Conf: {intent.confidence})", flush=True)
 
         # 2. KNOWLEDGE RETRIEVAL
         knowledge_report = None
-        matches = registry.find_matches({"task_type": intent.task_type, "data_modality": intent.data_modality})
         
-        if matches and intent.confidence > 0.7:
-            recipe = matches[0]
-            knowledge_report = ReconciliationReport(
-                recipe_id=recipe.id,
-                rationale=recipe.rationale,
-                recommended_dag_nodes=[node.dict() for node in recipe.dag],
-                skippable_nodes=[],
-                schema_warnings=[]
+        with Session(engine) as session:
+            # Create a task for Knowledge Retrieval visibility
+            search_task = Task(
+                project_id=project_id,
+                description="Consulting Best Practices Wiki for matching Data Science recipes...",
+                assigned_to="KnowledgeRegistry",
+                status="running"
             )
+            session.add(search_task)
+            session.commit()
+            session.refresh(search_task)
             
-            with Session(engine) as session:
-                hub = ExecutionHub(session)
-                hub.create_outbox_event("STEP_STARTED", {"message": f"Consulting Best Practices Wiki: Applied '{recipe.id}' SOP."})
-                session.commit()
+            matches = registry.find_matches({"task_type": intent.task_type, "data_modality": intent.data_modality})
+            
+            if matches and intent.confidence > 0.7:
+                recipe = matches[0]
+                knowledge_report = ReconciliationReport(
+                    recipe_id=recipe.id,
+                    rationale=recipe.rationale,
+                    recommended_dag_nodes=[node.dict() for node in recipe.dag],
+                    skippable_nodes=[],
+                    schema_warnings=[]
+                )
+                search_task.status = "completed"
+                search_task.result_json = {"stdout": f"Applied SOP: {recipe.id}\nRationale: {recipe.rationale}"}
+            else:
+                search_task.status = "completed"
+                search_task.result_json = {"stdout": "No specific recipe found. Proceeding with general data science reasoning."}
+            
+            session.add(search_task)
+            session.commit()
 
         # 3. PLANNING (Full Gemini Priority)
         # Update Planning fallback to Gemini 3.1 Pro
@@ -352,9 +381,16 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
 
         # 5. SYNTHESIS (Full Gemini Priority)
         with Session(engine) as session:
-            hub = ExecutionHub(session)
-            hub.create_outbox_event("STEP_STARTED", {"message": "Lead Data Scientist is synthesizing results..."})
+            # Create Synthesis Task
+            synth_task = Task(
+                project_id=project_id,
+                description="Lead Data Scientist is synthesizing final results into a research report...",
+                assigned_to="Synthesizer",
+                status="running"
+            )
+            session.add(synth_task)
             session.commit()
+            session.refresh(synth_task)
 
             artifacts = session.exec(select(Artifact).where(Artifact.project_id == project_id)).all()
             all_tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
@@ -392,12 +428,20 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
         )
 
         with Session(engine) as session:
+            # Update Synthesis Task status
+            synth_task_db = session.get(Task, synth_task.id)
+            if synth_task_db:
+                synth_task_db.status = "completed"
+                synth_task_db.result_json = {"stdout": "Narrative generated and master documents assembled.", "narrative": synth_res.content.narrative, "takeaways": synth_res.content.key_takeaways}
+                session.add(synth_task_db)
+
             project = session.get(Project, project_id)
             if project:
                 project.narrative = synth_res.content.narrative
                 project.takeaways = synth_res.content.key_takeaways
                 session.add(project)
-                session.commit()
+            
+            session.commit()
 
             hub = ExecutionHub(session)
             hub.create_outbox_event("WORKFLOW_FINAL_RESULT", {
