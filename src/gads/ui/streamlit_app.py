@@ -156,15 +156,18 @@ st.markdown("""
         color: #000000 !important;
         background-color: #ffffff !important;
         -webkit-text-fill-color: #000000 !important;
+        caret-color: #000000 !important;
         border: 3px solid #000000 !important;
     }
-    
+
     .stTextInput input {
         color: #000000 !important;
         background-color: #ffffff !important;
         -webkit-text-fill-color: #000000 !important;
-        border: 2px solid #000000 !important;
+        caret-color: #000000 !important;
+        border: 3px solid #000000 !important;
     }
+
 
     /* Tabs */
     .stTabs [data-baseweb="tab-list"] {
@@ -293,34 +296,42 @@ def render_main():
     st.markdown("**Generative-augmented Data Science Orchestrator**")
     st.markdown("---")
     
-    # 2. Fragment: Auto-refreshing 2-Column Main Dashboard (Center + Right)
+    # 2. Fragment: Auto-refreshing Dashboard (Sidebar + Center + Right)
     @st.fragment(run_every=2)
     def render_dynamic_dashboard():
         # --- BACKGROUND DATA SYNC ---
+        project_complete = False
         if st.session_state.current_project_id:
             details = fetch_project_details(st.session_state.current_project_id)
             if details:
                 # 1. Sync tasks
                 st.session_state.tasks = {t["id"]: t for t in details["tasks"]}
-                # 2. Sync files
-                st.session_state.project_files = [f for f in os.listdir(f"{WORKSPACE_ROOT}/{st.session_state.current_project_id}") if os.path.isfile(os.path.join(f"{WORKSPACE_ROOT}/{st.session_state.current_project_id}", f))]
                 
-                # 3. Sync narrative/takeaways from artifacts if they exist
-                # The backend emits WORKFLOW_FINAL_RESULT to the outbox.
-                # Since we are polling, let's check for the existence of the Master Dashboard
-                # and maybe a 'final_result' artifact if we added one. 
-                # For now, we rely on the session state which is updated by the WS listener 
-                # (which we should put back in a robust way, or poll the Outbox table).
-                pass
+                # 2. Sync files
+                ws_path = f"{WORKSPACE_ROOT}/{st.session_state.current_project_id}"
+                if os.path.exists(ws_path):
+                    st.session_state.project_files = os.listdir(ws_path)
+
+                # 3. Detect completion and sync narrative
+                completed_tasks = [t for t in details["tasks"] if t["status"] == "completed"]
+                for t in completed_tasks:
+                    if "Synthesize" in t.get("description", ""):
+                        res = t.get("result_json")
+                        if res and "narrative" in res:
+                            st.session_state.narrative = res["narrative"]
+                            st.session_state.takeaways = res.get("takeaways", [])
+                
+                if all(t["status"] in ["completed", "failed"] for t in details["tasks"]) and details["tasks"]:
+                    project_complete = True
         
-        # Define columns for the main area
+        # --- RENDER SIDEBAR INSIDE FRAGMENT FOR INSTANT REFRESH ---
+        render_sidebar()
+        
+        # Split into Center and Right
         center_col, right_col = st.columns([1.5, 1])
 
         with center_col:
             st.subheader("Objective & Synthesis")
-            # Objective input must be inside the fragment if we want it to stay centered
-            # OR we can keep it above and just have the synthesis here. 
-            # Moving it back above for better UX.
             
             if st.session_state.narrative:
                 st.markdown(f"<div style='background-color: #ffffff; padding: 30px; border: 2px solid #000000;'>{st.session_state.narrative}</div>", unsafe_allow_html=True)
@@ -328,8 +339,11 @@ def render_main():
                     st.markdown("#### Key Takeaways")
                     for t in st.session_state.takeaways:
                         st.markdown(f"- **{t}**")
+                
+                if project_complete:
+                    st.success("[SYSTEM] Project complete. Final reports generated and saved to workspace.")
             else:
-                st.info("[SYSTEM] Analysis synthesis will be displayed here.")
+                st.info("[SYSTEM] Analysis synthesis pending completion.")
 
         with right_col:
             st.subheader("System Status")
@@ -338,7 +352,11 @@ def render_main():
             with track_tab:
                 if not st.session_state.tasks:
                     st.info("No active tasks.")
-                for tid, tinfo in sorted(st.session_state.tasks.items()):
+                
+                # Sort tasks by created_at (most professional)
+                sorted_tasks = sorted(st.session_state.tasks.values(), key=lambda x: x.get("created_at", ""))
+                
+                for tinfo in sorted_tasks:
                     status = tinfo['status'].upper()
                     st.markdown(f"""
                     <div class="task-card">
@@ -346,9 +364,12 @@ def render_main():
                         <div style="margin-top: 10px; color: #000000; font-weight: 500;">{tinfo['description']}</div>
                     </div>
                     """, unsafe_allow_html=True)
-                    if tinfo.get('result_json') and tinfo['result_json'].get('stdout'):
-                        with st.expander("Logs"):
-                            st.code(tinfo['result_json']['stdout'])
+                    
+                    # Robust log extraction
+                    res = tinfo.get('result_json')
+                    if res and isinstance(res, dict) and res.get('stdout'):
+                        with st.expander("View Logs"):
+                            st.code(res['stdout'])
 
             with grounding_tab:
                 st.markdown("#### Workspace Files")
@@ -375,8 +396,7 @@ def render_main():
                             if project_id:
                                 resp = client.post(f"{BACKEND_URL}/projects/{project_id}/files", json={"files": payload})
                             else:
-                                data = {"name": "Upload Session", "objective": "", "files": payload}
-                                resp = client.post(f"{BACKEND_URL}/projects", json=data)
+                                resp = client.post(f"{BACKEND_URL}/projects", json={"name": "Upload Session", "objective": "", "files": payload})
                             resp.raise_for_status()
                             st.success(f"Uploaded {len(uploaded_files)} file(s).")
                     except Exception as e:
@@ -406,5 +426,4 @@ def render_main():
     render_dynamic_dashboard()
 
 # --- EXECUTION ---
-render_sidebar()
 render_main()
