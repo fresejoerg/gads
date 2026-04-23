@@ -558,6 +558,43 @@ async def upload_files_to_project(project_id: uuid.UUID, req: FilesUploadRequest
         session.commit()
         return ProjectResponse(project=project, files=current_files)
 
+@app.post("/projects/{project_id}/register-external", response_model=ProjectResponse)
+async def register_external_file(project_id: uuid.UUID, req: ExternalPathRequest):
+    """Registers an external host file by creating a symlink in the workspace."""
+    with Session(engine) as session:
+        project = session.get(Project, project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        host_path = req.path
+        if not os.path.lexists(host_path):
+            raise HTTPException(status_code=400, detail=f"Host path does not exist: {host_path}")
+            
+        workspace_dir = f"{WORKSPACE_ROOT}/{project_id}"
+        os.makedirs(workspace_dir, exist_ok=True)
+        
+        filename = os.path.basename(host_path)
+        target_path = os.path.join(workspace_dir, filename)
+        
+        try:
+            # Remove existing file/symlink if it exists
+            if os.path.lexists(target_path):
+                if os.path.islink(target_path):
+                    os.unlink(target_path)
+                else:
+                    os.remove(target_path)
+                    
+            os.symlink(host_path, target_path)
+            print(f"  [Server] Registered external file: {host_path} -> {target_path}", flush=True)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to create symlink: {e}")
+            
+        current_files = _get_recursive_files(workspace_dir)
+        hub = ExecutionHub(session)
+        hub.create_outbox_event("STATE_UPDATED", {"files": current_files, "state": project.last_state_json or {}})
+        session.commit()
+        return ProjectResponse(project=ProjectRead.from_orm(project), files=current_files)
+
 @app.get("/projects/{project_id}/files/{file_path:path}")
 async def download_file(project_id: uuid.UUID, file_path: str, download: bool = False):
     """Serves a file from the workspace for viewing or download."""
