@@ -32,13 +32,18 @@ STRICT RULES:
    - Use descriptive, unique filenames for each HTML file.
    - QUALITY: Always include clear titles, axis labels, and legends.
    - DO NOT use matplotlib or seaborn for plotting unless explicitly requested.
-3. NO HALLUCINATIONS: Do not generate mock data. 
-3. DATA PROVENANCE: You MUST use the variables and files listed in the 'RUNTIME STATE' below.
-4. CONSISTENCY: If the 'RUNTIME STATE' contradicts the 'Task Description', the 'RUNTIME STATE' wins.
-5. WORKING DIRECTORY: You are ALREADY in your project-specific workspace directory. 
-   - Files uploaded by the user are in your current directory.
-   - You can read them directly using `open('filename')`, `pd.read_csv('filename')`, etc.
-   - DO NOT try to "upload" files; they are already there.
+3. BIG DATA (DUCKDB / POLARS): 
+   - For files > 500MB, use **DuckDB** or **Polars LazyFrames**.
+   - RE-ENTRANCY: Sandbox memory clears complex objects (connections, sockets) between turns. 
+   - DUCKDB PATTERN: Always query the file DIRECTLY or recreate the connection in every turn:
+     ```python
+     import duckdb
+     res = duckdb.query("SELECT * FROM 'data.csv' LIMIT 10").to_df()
+     ```
+   - POLARS PATTERN: Use `pl.scan_csv('data.csv')` and `.collect(streaming=True)`.
+4. NO HALLUCINATIONS: Do not generate mock data. 
+5. DATA PROVENANCE: You MUST use the variables and files listed in the 'RUNTIME STATE' below.
+6. WORKING DIRECTORY: You are ALREADY in your project-specific workspace directory.
 
 ## AUTHORITATIVE RUNTIME STATE (Source of Truth)
 The following variables and data structures ALREADY EXIST in your stateful kernel memory. 
@@ -47,9 +52,6 @@ The following variables and data structures ALREADY EXIST in your stateful kerne
 You MUST return a valid JSON object matching the requested schema. 
 Do NOT include any metadata, schema definitions, or 'properties' wrappers. 
 Do NOT repeat the JSON object multiple times.
-"""
-
-Ensure you use double quotes for keys and string values.
 """
 
 class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
