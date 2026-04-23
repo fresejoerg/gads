@@ -2,7 +2,7 @@
 
 ## The GADS Multi-Agent System
 
-GADS is a highly capable, multi-agent system designed to act as an end-to-end Data Science copilot. The system utilizes a **Planner-Executor-Blackboard** architecture to orchestrate specialized sub-agents for tasks ranging from exploratory data analysis (EDA) and visualization to complex NLP extraction and model training.
+GADS is a professional, multi-agent system designed to act as an end-to-end Data Science copilot. The system utilizes a **Planner-Executor-Blackboard** architecture to orchestrate specialized sub-agents for tasks ranging from exploratory data analysis (EDA) and visualization to complex NLP extraction and model training.
 
 ### Core Philosophy: "Gemini First, Local Focused"
 A foundational requirement of GADS is the ability to run on **local LLMs** and **Gemini models** (via LiteLLM) as the primary brains, with Claude models serving as an architectural safety net (fallback).
@@ -11,27 +11,25 @@ A foundational requirement of GADS is the ability to run on **local LLMs** and *
 
 ## Key Features
 
-*   **Project Manager (The Planner)**: A high-reasoning agent that decomposes user objectives into a deterministic task list with strict postcondition contracts.
+*   **Project Manager (The Planner)**: A high-reasoning agent that decomposes user objectives into a deterministic task list with unique "Figure N" assignments and strict postcondition contracts.
 *   **Architect (The Router)**: Classifies user objectives into structured intents (e.g., `binary_classification.tabular`) to fetch matching expert SOPs.
-*   **Domain Expert SOPs (The Registry)**: Uses a YAML-backed library of Data Science best practices ("Recipes") to guide the Project Manager toward optimal workflows.
-*   **GADS Control Center (UI)**: Built with **Streamlit**, featuring a professional, wide-layout dashboard with a persistent **Project Archive** and a real-time **Task Tracker**.
-*   **Authoritative Runtime Grounding**: Agents are forced to sync state directly from the sandbox kernel at the start of every request, preventing "semantic drift" or hallucinated data.
-
+*   **GADS Control Center (UI)**: A 3-panel **Streamlit** IDE featuring a strictly monochromatic high-contrast theme, persistent **Project Archive** with timestamps, and real-time **Task Tracking** via auto-refreshing fragments.
+*   **Professional Reporting Engine**: Automatically assembles an integrated **Interactive HTML Dashboard** and a formal **Markdown Research Report** (anchored by Figure numbers) at the end of every analysis.
+*   **Durable Project Memory**: All analytical results (Narratives, Takeaways) and Sandbox Variable States are persisted in a PostgreSQL database, ensuring projects are fully reloadable and stateful.
+*   **Automated Maintenance**: Background tasks for periodic archive cleanup of old artifacts (>30 days) and orphaned task detection.
 *   **Stateful Python Sandbox**: A secure, Docker-isolated execution environment using **IPython Kernels** to maintain variable state across multiple agent turns.
-    *   **ML Ready**: Pre-installed with `scikit-learn`, `pandas`, `plotly`, and `joblib`.
-    *   **Automatic Plot Capture**: Captures **Plotly Express** and `matplotlib`/`seaborn` figures as base64 artifacts.
+    *   **ML Ready**: Pre-installed with `scikit-learn`, `pandas`, `plotly`, `kaleido`, and `joblib`.
+    *   **Automatic Plot Capture**: Captures **Plotly Express** and `matplotlib`/`seaborn` figures as interactive HTML or base64 artifacts.
     *   **Professional Defaults**: Pre-configured with the `plotly_white` template and professional color palettes.
-    *   **Self-Correction**: Automatic feedback loop that allows agents to fix their own code bugs via distilled tracebacks.
-    *   **Resource Optimized**: Default support for up to 1000 processes/threads.
 
 ---
 
 ## Project Structure
 
-- `src/gads/core/`: Foundation logic (LLM connectors, Blackboard state, Execution Hub, Model Registry, Knowledge Base).
+- `src/gads/core/`: Foundation logic (LLM connectors, Blackboard state, Execution Hub, Database Models, Reporting Engine).
 - `src/gads/agents/`: Agent definitions (Router, Planner, Worker implementations).
 - `src/gads/knowledge/recipes/`: YAML-backed Markdown recipes for data science best practices.
-- `src/gads/ui/`: Chainlit-based control center with WebSocket event orchestration.
+- `src/gads/ui/`: Streamlit-based control center with real-time state polling.
 - `src/gads/tools/`: Sandbox client and security validators.
 
 ---
@@ -57,7 +55,6 @@ To run GADS entirely on local models (e.g., via LM Studio), set the following in
 ```env
 GADS_LOCAL_ONLY=true
 ```
-This will force all agents (Router, Planner, Workers) to use the `local_model` defined in your LiteLLM configuration.
 
 ### 4. Running the Stack
 
