@@ -46,13 +46,17 @@ The following artifacts were generated during this analysis:
             if os.path.exists(fpath):
                 with open(fpath, "r") as pf:
                     content = pf.read()
-                    # Extract just the div part if it's a full plotly html
-                    div = content.split("<body>")[1].split("</body>")[0] if "<body>" in content else content
+                    # Extract the Plotly div AND the script part
+                    # Plotly HTMLs usually look like: ...<div>...</div> <script>...</script> ...
+                    if "<body" in content:
+                        inner = content.split("<body")[1].split(">", 1)[1].split("</body>")[0]
+                    else:
+                        inner = content
                     
                     cards_html += f"""
                     <div class='card'>
                         <h2>{a.description}</h2>
-                        <div class='plot-container'>{div}</div>
+                        <div class='plot-container'>{inner}</div>
                         <div class='card-footer'>
                             <strong>Context:</strong> Verified by CodeGenerator as part of the analysis workflow.
                         </div>
@@ -65,6 +69,7 @@ The following artifacts were generated during this analysis:
     <html>
     <head>
         <title>GADS Research Synthesis</title>
+        <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
         <style>
             body {{ font-family: 'Segoe UI', system-ui, sans-serif; margin: 40px auto; max-width: 1000px; background: #f8fafc; color: #1e293b; line-height: 1.6; }}
             .report-header {{ background: #ffffff; color: #0f172a; padding: 40px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }}

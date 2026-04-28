@@ -57,11 +57,11 @@ class SandboxClient:
     
     def __init__(self, base_url: str = "http://localhost:8000"):
         self.base_url = base_url
-        self.client = httpx.AsyncClient(timeout=120.0) # Longer timeout for introspection
+        self.client = httpx.AsyncClient(timeout=300.0) # Extended timeout for massive datasets
 
     def list_workspace_files(self, project_id: uuid.UUID) -> List[str]:
         """Lists files available in the project's host workspace directory."""
-        host_path = f"/home/jfrese/projects/MyLocalStack/data/workspaces/{project_id}"
+        host_path = f"/home/joergf/projects/MyLocalStack/data/workspaces/{project_id}"
         if not os.path.exists(host_path):
             return []
         return os.listdir(host_path)

@@ -266,7 +266,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                 with Session(engine) as session:
                     hub = ExecutionHub(session)
                     task_obj = session.get(Task, task_id)
-                    error_msg = res.error.get("evalue", "Unknown error") if res.error else hub.validate_contract(task_obj, res.stdout)
+                    error_msg = res.error.get("evalue", "Unknown error") if res.error else hub.validate_contract(task_obj, res.stdout, executor.authoritative_state)
 
                     if error_msg:
                         if hub.escalate_task(task_id, error_msg, hierarchy):

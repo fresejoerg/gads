@@ -15,7 +15,7 @@ class PlannerTask(BaseModel):
     description: str
     assigned_to: str
     postcondition: Dict[str, Any] = Field(
-        description="Structural contract for success. E.g., {'output_type': 'dataframe', 'min_rows': 1, 'required_columns': ['name']}"
+        description="Structural contract for success. MUST be a valid JSON object with key:value pairs. E.g., {'output_type': 'dataframe', 'required_columns': ['name']}"
     )
 
 class FileMetadata(BaseModel):
@@ -68,7 +68,10 @@ You MUST provide a list of steps. For each task:
 - Set `assigned_to` to the EXACT verbatim model ID from the 'models' list in the chosen Tier.
 - **PREFERENCE**: You MUST prefer **Gemini** models and the **local_model** over Claude models whenever possible within the same tier.
 - You MUST select a model that is explicitly listed in the hierarchy below.
-- Define a structural contract for every task to detect "silent failures."
+- **POSTCONDITION CONTRACT**: Define a structural contract for every task to detect "silent failures." 
+  - This MUST be a JSON object (Dict), NOT a list or set.
+  - Supported keys: `output_type` ('dataframe' or 'list'), `required_columns` (list of strings), `min_rows` (integer).
+  - EXAMPLE: `{{"output_type": "dataframe", "required_columns": ["theme", "score"], "min_rows": 10}}`
 - **FIGURE NUMBERING**: For every task that generates a visualization, you MUST explicitly assign a unique number in the description (e.g., "Analyze target balance. Save as Figure 1."). This ensures a professional thread through the final report.
 
 ## AVAILABLE FILES:

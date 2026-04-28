@@ -42,15 +42,22 @@ STRICT RULES:
      ```
    - POLARS PATTERN: Use `pl.scan_csv('data.csv')` and `.collect(streaming=True)`.
 4. NO HALLUCINATIONS: Do not generate mock data. 
-5. DATA PROVENANCE: You MUST use the variables and files listed in the 'RUNTIME STATE' below.
+5. DATA PROVENANCE: You MUST use the variables and files listed in the sections below.
 6. WORKING DIRECTORY: You are ALREADY in your project-specific workspace directory.
 
 ## AUTHORITATIVE RUNTIME STATE (Source of Truth)
 The following variables and data structures ALREADY EXIST in your stateful kernel memory. 
 {state_summary}
+
+## AVAILABLE FILES
+The following files are available in your current working directory:
+{files_list}
+
 ### FORMATTING RULE:
 You MUST return a valid JSON object matching the requested schema. 
 Do NOT include any metadata, schema definitions, or 'properties' wrappers. 
+Your output must be a FLAT JSON object containing ONLY the fields defined in the schema.
+DO NOT add stray strings like '"code",' between fields.
 Do NOT repeat the JSON object multiple times.
 """
 
@@ -65,11 +72,25 @@ class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
 
     async def run(self, input_data: CoderInput) -> Any:
         state_summary = json.dumps(input_data.authoritative_state, indent=2)
-        formatted_prompt = self.system_prompt.format(state_summary=state_summary)
+        files_summary = ", ".join([f"'{f}'" for f in input_data.available_files]) if input_data.available_files else "None"
         
+        print(f"    [Coder] Preparing prompt. Available files: {files_summary}", flush=True)
+
+        formatted_prompt = self.system_prompt.format(
+            state_summary=state_summary,
+            files_list=files_summary
+        )
+        
+        # Strengthen file awareness in the user message
+        user_content = (
+            f"TASK: {input_data.task_description}\n\n"
+            f"CRITICAL: You MUST use the correct filenames. Available files are: {files_summary}\n\n"
+            "Return the required FLAT JSON object."
+        )
+
         messages = [
             {"role": "system", "content": formatted_prompt},
-            {"role": "user", "content": input_data.model_dump_json()}
+            {"role": "user", "content": user_content}
         ]
         
         from gads.core.llm import get_structured_completion

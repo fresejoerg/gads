@@ -4,6 +4,9 @@
 
 GADS is a professional, multi-agent system designed to act as an end-to-end Data Science copilot. The system utilizes a **Planner-Executor-Blackboard** architecture to orchestrate specialized sub-agents for tasks ranging from exploratory data analysis (EDA) and visualization to complex NLP extraction and model training.
 
+### 📖 User Guide
+For best practices on how to write optimal instructions for GADS, please refer to the **[User Guide](USER_GUIDE.md)**.
+
 ### Core Philosophy: "Gemini First, Local Focused"
 A foundational requirement of GADS is the ability to run on **local LLMs** and **Gemini models** (via LiteLLM) as the primary brains, with Claude models serving as an architectural safety net (fallback).
 

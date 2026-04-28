@@ -6,8 +6,8 @@ class RouterInput(BaseModel):
     objective: str
 
 class RouterOutput(BaseModel):
-    task_type: str = Field(description="One of: binary_classification, regression, time_series, eda, clustering, or 'unknown'")
-    data_modality: str = Field(description="One of: tabular, image, text, audio, or 'unknown'")
+    task_type: str = Field(description="One of: binary_classification, regression, time_series, eda, clustering, thematic_analysis, or 'unknown'")
+    data_modality: str = Field(description="One of: tabular, image, text, unstructured_text, audio, or 'unknown'")
     confidence: float = Field(description="Score between 0.0 and 1.0")
     reasoning: str = Field(description="Brief justification for the classification.")
 
@@ -16,14 +16,15 @@ You are a Senior Data Science Architect.
 Your goal is to categorize a user's technical objective into a specific `task_type` and `data_modality`.
 
 ### GUIDELINES:
-1. **Binary Classification**: Use if the user wants to predict a choice between two outcomes (e.g., churn, survival, fraudulent/legitimate).
-2. **Regression**: Use if the target is a continuous numerical value (e.g., price, temperature, sales count).
-3. **Tabular**: Use if the data is structured (CSV, SQL, Excel, DataFrames).
-4. **Unknown**: If the request is non-technical or doesn't fit a pattern, set both to 'unknown'.
+1. **Binary Classification**: Predict a choice between two outcomes.
+2. **Thematic Analysis**: Extract human-meaningful patterns/themes from text and analyze distributions or metadata correlations.
+3. **EDA**: General exploratory analysis.
+4. **Tabular**: Structured data (CSV, SQL).
+5. **Unstructured Text**: Raw text, reviews, feedback, documents.
 
 ### EXAMPLES:
+- "Extract themes from reviews" -> {task_type: 'thematic_analysis', data_modality: 'unstructured_text'}
 - "Predict Titanic survival" -> {task_type: 'binary_classification', data_modality: 'tabular'}
-- "Forecast house prices" -> {task_type: 'regression', data_modality: 'tabular'}
 
 ### FORMATTING RULE:
 You MUST return a valid JSON object matching the requested schema. 
