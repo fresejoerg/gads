@@ -24,14 +24,22 @@ class Recipe(BaseModel):
     invariants: List[str] = []
     rationale: str = ""
 
+class Skill(BaseModel):
+    id: str
+    triggers: List[str]
+    content: str = ""
+
 class KnowledgeRegistry:
     def __init__(self, recipes_dir: str):
         self.recipes_dir = recipes_dir
+        self.skills_dir = os.path.join(os.path.dirname(recipes_dir), "skills")
         self.recipes: Dict[str, Recipe] = {}
+        self.skills: Dict[str, Skill] = {}
         self.load_recipes()
+        self.load_skills()
 
     def load_recipes(self):
-        """Parses all .md files in the recipes directory and extracts YAML frontmatter."""
+        # ... rest of load_recipes logic ...
         if not os.path.exists(self.recipes_dir):
             print(f"  [Registry] Warning: Recipes directory not found: {self.recipes_dir}")
             return
@@ -60,11 +68,126 @@ class KnowledgeRegistry:
                 except Exception as e:
                     print(f"  [Registry] Error loading {filename}: {e}")
 
+    def load_skills(self):
+        """Parses all .md files in the skills directory and extracts YAML frontmatter."""
+        if not os.path.exists(self.skills_dir):
+            print(f"  [Registry] Warning: Skills directory not found: {self.skills_dir}")
+            return
+
+        self.skills = {}
+        for filename in os.listdir(self.skills_dir):
+            if filename.endswith(".md"):
+                path = os.path.join(self.skills_dir, filename)
+                try:
+                    with open(path, "r") as f:
+                        content = f.read()
+                    
+                    match = re.search(r"^---\s*\n(.*?)\n---\s*\n(.*)", content, re.DOTALL)
+                    if match:
+                        yaml_str = match.group(1)
+                        body_str = match.group(2).strip()
+                        
+                        data = yaml.safe_load(yaml_str)
+                        data["content"] = body_str
+                        
+                        skill = Skill(**data)
+                        self.skills[skill.id] = skill
+                        print(f"  [Registry] Loaded skill: {skill.id}")
+                except Exception as e:
+                    print(f"  [Registry] Error loading skill {filename}: {e}")
+
     def get_recipe(self, recipe_id: str) -> Optional[Recipe]:
         return self.recipes.get(recipe_id)
 
     def list_recipes(self) -> List[str]:
-        return list(self.keys())
+        return list(self.recipes.keys())
+
+    def list_recipe_files(self) -> List[str]:
+        """Returns sorted list of .md filenames in the recipes directory."""
+        if not os.path.exists(self.recipes_dir): return []
+        return sorted([f for f in os.listdir(self.recipes_dir) if f.endswith(".md")])
+
+    def get_raw_recipe(self, filename: str) -> str:
+        """Returns the raw content of a recipe file."""
+        path = os.path.join(self.recipes_dir, filename)
+        if not os.path.exists(path): raise ValueError("Recipe file not found")
+        with open(path, "r") as f:
+            return f.read()
+
+    def save_raw_recipe(self, filename: str, content: str):
+        """Validates and saves a raw recipe file."""
+        # 1. Validation
+        match = re.search(r"^---\s*\n(.*?)\n---\s*\n(.*)", content, re.DOTALL)
+        if not match:
+            raise ValueError("Invalid format: Missing YAML frontmatter (--- ... ---)")
+        
+        try:
+            yaml_str = match.group(1)
+            body_str = match.group(2)
+            data = yaml.safe_load(yaml_str)
+            
+            # Extract Rationale for validation
+            rationale_match = re.search(r"# .*?\n\n## Rationale\n(.*?)\n\n##", body_str, re.DOTALL)
+            data["rationale"] = rationale_match.group(1).strip() if rationale_match else ""
+            
+            # Validate with Pydantic
+            Recipe(**data)
+        except Exception as e:
+            raise ValueError(f"Validation failed: {str(e)}")
+
+        # 2. Save
+        if not filename.endswith(".md"): filename += ".md"
+        path = os.path.join(self.recipes_dir, filename)
+        with open(path, "w") as f:
+            f.write(content)
+        
+        # 3. Reload
+        self.load_recipes()
+
+    def list_skill_files(self) -> List[str]:
+        """Returns sorted list of .md filenames in the skills directory."""
+        if not os.path.exists(self.skills_dir): return []
+        return sorted([f for f in os.listdir(self.skills_dir) if f.endswith(".md")])
+
+    def get_raw_skill(self, filename: str) -> str:
+        """Returns the raw content of a skill file."""
+        path = os.path.join(self.skills_dir, filename)
+        if not os.path.exists(path): raise ValueError("Skill file not found")
+        with open(path, "r") as f:
+            return f.read()
+
+    def save_raw_skill(self, filename: str, content: str):
+        """Validates and saves a raw skill file."""
+        match = re.search(r"^---\s*\n(.*?)\n---\s*\n(.*)", content, re.DOTALL)
+        if not match:
+            raise ValueError("Invalid format: Missing YAML frontmatter (--- ... ---)")
+        
+        try:
+            yaml_str = match.group(1)
+            data = yaml.safe_load(yaml_str)
+            Skill(**data)
+        except Exception as e:
+            raise ValueError(f"Validation failed: {str(e)}")
+
+        if not filename.endswith(".md"): filename += ".md"
+        path = os.path.join(self.skills_dir, filename)
+        with open(path, "w") as f:
+            f.write(content)
+        
+        self.load_skills()
+
+    def find_skills(self, task_description: str) -> List[Skill]:
+        """Returns skills that match triggers in the task description (case-insensitive)."""
+        matches = []
+        desc_lower = task_description.lower()
+        for skill in self.skills.values():
+            if any(t.lower() in desc_lower for t in skill.triggers):
+                matches.append(skill)
+        return matches
+
+    def get_skills_summary(self) -> List[Dict[str, Any]]:
+        """Returns a list of available skills with their IDs and triggers for agent awareness."""
+        return [{"id": s.id, "triggers": s.triggers} for s in self.skills.values()]
 
     def find_matches(self, intent_tags: Dict[str, Any]) -> List[Recipe]:
         """

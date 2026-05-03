@@ -13,23 +13,36 @@ class Project(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
     
+    instructions: List["Instruction"] = Relationship(back_populates="project")
     tasks: List["Task"] = Relationship(back_populates="project")
     artifacts: List["Artifact"] = Relationship(back_populates="project")
+
+class Instruction(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    project_id: uuid.UUID = Field(foreign_key="project.id")
+    content: str
+    created_at: datetime = Field(default_factory=datetime.now)
+    
+    project: Project = Relationship(back_populates="instructions")
+    tasks: List["Task"] = Relationship(back_populates="instruction")
 
 class Task(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     project_id: uuid.UUID = Field(foreign_key="project.id")
+    instruction_id: Optional[uuid.UUID] = Field(default=None, foreign_key="instruction.id")
     description: str
     assigned_to: str
     status: str = "pending"  # pending, running, completed, failed
     escalation_count: int = 0
     postcondition_json: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    attached_skills: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
     heartbeat: Optional[datetime] = None
     created_at: datetime = Field(default_factory=datetime.now)
     error: Optional[str] = None
     result_json: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     
     project: Project = Relationship(back_populates="tasks")
+    instruction: Optional[Instruction] = Relationship(back_populates="tasks")
 
 class Artifact(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)

@@ -18,6 +18,9 @@ artifacts/
 .files/
 bin/
 
+# Knowledge Base
+!src/gads/knowledge/recipes/
+
 # Utilities and temporary code
 consult_ui_crash.py
 stress_test_routing.py
