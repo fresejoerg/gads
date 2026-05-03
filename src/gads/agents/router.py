@@ -1,35 +1,19 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
+import json
 from pydantic import BaseModel, Field
 from gads.agents.base import BaseAgent
+from gads.core.prompts import prompt_registry
 
 class RouterInput(BaseModel):
     objective: str
+    available_recipes: List[Dict[str, Any]] = []
 
 class RouterOutput(BaseModel):
-    task_type: str = Field(description="One of: binary_classification, regression, time_series, eda, clustering, thematic_analysis, or 'unknown'")
+    task_type: str = Field(description="One of: binary_classification, regression, time_series, eda, clustering, thematic_analysis, semantic_search, or 'unknown'")
     data_modality: str = Field(description="One of: tabular, image, text, unstructured_text, audio, or 'unknown'")
+    matched_recipe_id: Optional[str] = Field(None, description="The ID of a recipe that perfectly matches the methodology required for the objective.")
     confidence: float = Field(description="Score between 0.0 and 1.0")
-    reasoning: str = Field(description="Brief justification for the classification.")
-
-ROUTER_SYSTEM_PROMPT = """
-You are a Senior Data Science Architect. 
-Your goal is to categorize a user's technical objective into a specific `task_type` and `data_modality`.
-
-### GUIDELINES:
-1. **Binary Classification**: Predict a choice between two outcomes.
-2. **Thematic Analysis**: Extract human-meaningful patterns/themes from text and analyze distributions or metadata correlations.
-3. **EDA**: General exploratory analysis.
-4. **Tabular**: Structured data (CSV, SQL).
-5. **Unstructured Text**: Raw text, reviews, feedback, documents.
-
-### EXAMPLES:
-- "Extract themes from reviews" -> {task_type: 'thematic_analysis', data_modality: 'unstructured_text'}
-- "Predict Titanic survival" -> {task_type: 'binary_classification', data_modality: 'tabular'}
-
-### FORMATTING RULE:
-You MUST return a valid JSON object matching the requested schema. 
-Do NOT include any metadata, schema definitions, or 'properties' wrappers.
-"""
+    reasoning: str = Field(description="Brief justification for the classification and recipe choice.")
 
 class DataScienceRouter(BaseAgent[RouterInput, RouterOutput]):
     def __init__(self, model: str = "claude-haiku-4.5"):
@@ -37,13 +21,19 @@ class DataScienceRouter(BaseAgent[RouterInput, RouterOutput]):
         super().__init__(
             name="Router",
             model=model,
-            system_prompt=ROUTER_SYSTEM_PROMPT,
+            system_prompt=prompt_registry.get_prompt("Router"),
             output_schema=RouterOutput
         )
 
     async def run(self, input_data: RouterInput) -> Any:
+        # Refresh prompt from registry
+        self.system_prompt = prompt_registry.get_prompt(self.name)
+        
+        recipes_str = json.dumps(input_data.available_recipes, indent=2)
+        formatted_prompt = self.system_prompt.format(recipes_json=recipes_str)
+
         messages = [
-            {"role": "system", "content": self.system_prompt},
+            {"role": "system", "content": formatted_prompt},
             {"role": "user", "content": f"OBJECTIVE: {input_data.objective}"}
         ]
         

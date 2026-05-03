@@ -1,6 +1,7 @@
 from typing import List
 from pydantic import BaseModel, Field
 from gads.agents.base import BaseAgent
+from gads.core.prompts import prompt_registry
 
 class Entity(BaseModel):
     name: str
@@ -13,17 +14,11 @@ class NLPExtractorOutput(BaseModel):
 class NLPExtractorInput(BaseModel):
     text: str
 
-NLP_SYSTEM_PROMPT = """
-You are a precise NLP Extraction specialist. 
-Your task is to identify key entities in the provided text and categorize them.
-Be extremely literal and only extract what is present in the text.
-"""
-
 class NLPExtractorAgent(BaseAgent[NLPExtractorInput, NLPExtractorOutput]):
     def __init__(self, model: str = "local_model"):
         super().__init__(
             name="NLPExtractor",
             model=model,
-            system_prompt=NLP_SYSTEM_PROMPT,
+            system_prompt=prompt_registry.get_prompt("NLPExtractor"),
             output_schema=NLPExtractorOutput
         )

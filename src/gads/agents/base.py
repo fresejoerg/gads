@@ -22,6 +22,9 @@ class BaseAgent(ABC, Generic[TIn, TOut]):
 
     async def run(self, input_data: TIn, **kwargs) -> AgentResponse[TOut]:
         """Execute the agent's logic using instructor for structured output."""
+        from gads.core.prompts import prompt_registry
+        self.system_prompt = prompt_registry.get_prompt(self.name)
+
         messages = [
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": input_data.model_dump_json()}
