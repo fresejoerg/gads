@@ -4,7 +4,7 @@ import traceback
 import json
 import base64
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
@@ -21,6 +21,7 @@ from gads.core.executor import ExecutionManager
 from gads.core.registry import get_model_hierarchy, get_local_only, set_local_only, get_random_routing, set_random_routing
 from gads.core.knowledge import KnowledgeRegistry
 from gads.core.reporting import create_master_reports
+from gads.core.prompts import prompt_registry
 from sqlmodel import select, Session
 
 app = FastAPI(title="GADS Core API")
@@ -46,6 +47,7 @@ class ProjectRead(BaseModel):
     has_dashboard: bool = False
     has_report: bool = False
     has_failed_tasks: bool = False
+    is_running: bool = False
 
     class Config:
         from_attributes = True
@@ -87,6 +89,9 @@ class ExternalPathRequest(BaseModel):
 class RecipeContent(BaseModel):
     content: str
 
+class PromptUpdate(BaseModel):
+    content: str
+
 @app.on_event("startup")
 async def startup_event():
     init_db()
@@ -113,7 +118,30 @@ def save_recipe_raw(filename: str, req: RecipeContent):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.get("/skills", response_model=List[str])
+@app.get("/prompts")
+def list_prompts():
+    return prompt_registry.list_prompts()
+
+@app.get("/hierarchy")
+async def get_hierarchy():
+    return await get_model_hierarchy()
+
+@app.post("/prompts/{agent_name}")
+def update_prompt(agent_name: str, req: PromptUpdate):
+    error = prompt_registry.save_override(agent_name, req.content)
+    if error:
+        raise HTTPException(status_code=400, detail=error)
+    return {"status": "ok"}
+
+@app.delete("/prompts/{agent_name}")
+def reset_prompt(agent_name: str):
+    success = prompt_registry.delete_override(agent_name)
+    if not success:
+        raise HTTPException(status_code=404, detail="Override not found")
+    return {"status": "ok"}
+
+@app.get("/skills"
+, response_model=List[str])
 def list_skills_files():
     return registry.list_skill_files()
 
@@ -303,21 +331,25 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 instruction_id=instruction_id,
                 description=f"Architect ({router_model}) is classifying intent and data modality...",
                 assigned_to="Router",
-                status="running"
+                status="running",
+                heartbeat=datetime.now()
             )
             session.add(route_task)
             session.commit()
             session.refresh(route_task)
             
-            router_res = await router.run(RouterInput(objective=objective))
+            router_res = await router.run(RouterInput(
+                objective=objective,
+                available_recipes=registry.get_recipes_summary()
+            ))
             intent = router_res.content
             
             route_task.status = "completed"
-            route_task.result_json = {"stdout": f"Task Type: {intent.task_type}\nModality: {intent.data_modality}\nConfidence: {intent.confidence}"}
+            route_task.result_json = {"stdout": f"Task Type: {intent.task_type}\nModality: {intent.data_modality}\nMatched Recipe: {intent.matched_recipe_id}\nConfidence: {intent.confidence}"}
             session.add(route_task)
             session.commit()
             
-        print(f"  [Router] Intent: {intent.task_type} on {intent.data_modality} (Conf: {intent.confidence})", flush=True)
+        print(f"  [Router] Intent: {intent.task_type} (Recipe: {intent.matched_recipe_id})", flush=True)
 
         if await is_cancelled(): return
 
@@ -329,16 +361,18 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 instruction_id=instruction_id,
                 description="Consulting Best Practices Wiki for matching Data Science recipes...",
                 assigned_to="KnowledgeRegistry",
-                status="running"
+                status="running",
+                heartbeat=datetime.now()
             )
             session.add(search_task)
             session.commit()
             session.refresh(search_task)
             
-            matches = registry.find_matches({"task_type": intent.task_type, "data_modality": intent.data_modality})
+            # Logic shift: The Router (Architect) now explicitly picks the recipe ID
+            recipe_id = intent.matched_recipe_id
+            recipe = registry.get_recipe(recipe_id) if recipe_id else None
             
-            if matches and intent.confidence > 0.7:
-                recipe = matches[0]
+            if recipe:
                 knowledge_report = ReconciliationReport(
                     recipe_id=recipe.id,
                     rationale=recipe.rationale,
@@ -526,7 +560,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 instruction_id=instruction_id,
                 description="Lead Data Scientist is synthesizing final results...", 
                 assigned_to="Synthesizer", 
-                status="running"
+                status="running",
+                heartbeat=datetime.now()
             )
             session.add(synth_task)
             session.commit()
@@ -592,6 +627,11 @@ async def get_project_details(project_id: uuid.UUID):
         p_data = ProjectRead.from_orm(project)
         if instructions:
             p_data.first_instruction = instructions[0].content
+        
+        # Check if running
+        threshold = datetime.now() - timedelta(minutes=2)
+        running_tasks = [t for t in tasks if t.status == "running" and t.heartbeat and t.heartbeat > threshold]
+        p_data.is_running = len(running_tasks) > 0
 
         return {
             "project": p_data, 
@@ -618,6 +658,15 @@ async def list_projects():
             # Check for failed tasks
             failed_tasks = session.exec(select(Task).where(Task.project_id == p.id, Task.status == "failed")).all()
             p_data.has_failed_tasks = len(failed_tasks) > 0
+
+            # Check if running
+            threshold = datetime.now() - timedelta(minutes=2)
+            active_running = session.exec(select(Task).where(
+                Task.project_id == p.id, 
+                Task.status == "running", 
+                Task.heartbeat > threshold
+            )).all()
+            p_data.is_running = len(active_running) > 0
 
             results.append(p_data)
         return results

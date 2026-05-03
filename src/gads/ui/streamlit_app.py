@@ -37,98 +37,83 @@ st.markdown("""
     }
 
     /* ------------------------------------------------------------- */
-    /* BUTTON STYLING (Key-Targeted)                                 */
+    /* BUTTON STYLING (Aggressive Specificity)                      */
     /* ------------------------------------------------------------- */
 
     /* LAUNCH WORKFLOW - Green */
-    .st-key-btn_launch button {
+    div[class*="st-key-btn_launch"] button {
         background-color: #E8F5E9 !important;
         color: #2E7D32 !important;
-        border: 1px solid #E8F5E9 !important;
+        border: 1px solid #2E7D32 !important;
     }
-    .st-key-btn_launch button:hover, .st-key-btn_launch button:active, .st-key-btn_launch button:focus {
+    div[class*="st-key-btn_launch"] button:hover {
         background-color: #C8E6C9 !important;
-        color: #1B5E20 !important;
-        border-color: #C8E6C9 !important;
-        box-shadow: none !important;
     }
 
     /* CANCEL - Red */
-    .st-key-btn_cancel button {
+    div[class*="st-key-btn_cancel"] button {
         background-color: #FFEBEE !important;
         color: #C62828 !important;
-        border: 1px solid #FFEBEE !important;
+        border: 1px solid #C62828 !important;
     }
-    .st-key-btn_cancel button:hover, .st-key-btn_cancel button:active, .st-key-btn_cancel button:focus {
+    div[class*="st-key-btn_cancel"] button:hover {
         background-color: #FFCDD2 !important;
-        color: #B71C1C !important;
-        border-color: #FFCDD2 !important;
-        box-shadow: none !important;
     }
 
     /* NEW PROJECT - Yellow */
-    .st-key-btn_new button {
+    div[class*="st-key-btn_new"] button {
         background-color: #FFFDE7 !important;
         color: #F57F17 !important;
-        border: 1px solid #FFFDE7 !important;
+        border: 1px solid #F57F17 !important;
     }
-    .st-key-btn_new button:hover, .st-key-btn_new button:active, .st-key-btn_new button:focus {
+    div[class*="st-key-btn_new"] button:hover {
         background-color: #FFF9C4 !important;
-        color: #E65100 !important;
-        border-color: #FFF9C4 !important;
-        box-shadow: none !important;
     }
 
     /* REFRESH - Orange */
-    .st-key-btn_refresh button {
+    div[class*="st-key-btn_refresh"] button {
         background-color: #FFF3E0 !important;
         color: #E65100 !important;
-        border: 1px solid #FFF3E0 !important;
+        border: 1px solid #E65100 !important;
     }
-    .st-key-btn_refresh button:hover, .st-key-btn_refresh button:active, .st-key-btn_refresh button:focus {
+    div[class*="st-key-btn_refresh"] button:hover {
         background-color: #FFE0B2 !important;
-        color: #BF360C !important;
-        border-color: #FFE0B2 !important;
-        box-shadow: none !important;
     }
     
     /* MOUNT - Blue */
-    .st-key-btn_mount button {
+    div[class*="st-key-btn_mount"] button {
         background-color: #E3F2FD !important;
         color: #1565C0 !important;
-        border: 1px solid #E3F2FD !important;
+        border: 1px solid #1565C0 !important;
     }
-    .st-key-btn_mount button:hover, .st-key-btn_mount button:active, .st-key-btn_mount button:focus {
+    div[class*="st-key-btn_mount"] button:hover {
         background-color: #BBDEFB !important;
-        color: #0D47A1 !important;
-        border-color: #BBDEFB !important;
-        box-shadow: none !important;
     }
     
     /* ARCHIVE LOAD - Blue */
     div[class*="st-key-load_"] button {
         background-color: #E3F2FD !important;
         color: #1565C0 !important;
-        border: 1px solid #E3F2FD !important;
+        border: 1px solid #1565C0 !important;
     }
-    div[class*="st-key-load_"] button:hover, div[class*="st-key-load_"] button:active, div[class*="st-key-load_"] button:focus {
+    div[class*="st-key-load_"] button:hover {
         background-color: #BBDEFB !important;
-        color: #0D47A1 !important;
-        border-color: #BBDEFB !important;
-        box-shadow: none !important;
     }
 
     /* ARCHIVE DELETE - Red */
     div[class*="st-key-del_"] button {
         background-color: #FFEBEE !important;
         color: #C62828 !important;
-        border: 1px solid #FFEBEE !important;
+        border: 1px solid #C62828 !important;
     }
-    div[class*="st-key-del_"] button:hover, div[class*="st-key-del_"] button:active, div[class*="st-key-del_"] button:focus {
+    div[class*="st-key-del_"] button:hover {
         background-color: #FFCDD2 !important;
-        color: #B71C1C !important;
-        border-color: #FFCDD2 !important;
+    }
+
+    /* Global button resets to prevent theme overrides */
+    .stButton > button {
         box-shadow: none !important;
+        text-transform: none !important;
     }
 
     /* Archive Styling */
@@ -171,7 +156,8 @@ def api_get(path):
         with httpx.Client(timeout=10.0) as client:
             resp = client.get(f"{BACKEND_URL}{path}")
             return resp.json()
-    except Exception:
+    except Exception as e:
+        print(f"  [API] GET {path} failed: {e}")
         return None
 
 def api_post(path, json_data=None):
@@ -195,7 +181,75 @@ def api_delete(path):
 def render_knowledge_panel():
     st.markdown("### KNOWLEDGE")
     with st.expander("KNOWLEDGE BASE", expanded=False):
-        k_type = st.radio("Type", ["Recipes", "Skills"], horizontal=True, label_visibility="collapsed")
+        k_type = st.radio("Type", ["Recipes", "Skills", "Prompts", "Tiers"], horizontal=True, label_visibility="collapsed")
+        
+        if k_type == "Tiers":
+            # --- MODEL TIER DISPLAY (READ ONLY) ---
+            hierarchy = api_get("/hierarchy") or {}
+            for tier in ["T1", "T2", "T3", "T4"]:
+                if tier in hierarchy:
+                    data = hierarchy[tier]
+                    st.markdown(f"**{tier} - {data['description']}**")
+                    models_html = ""
+                    for m in data["models"]:
+                        models_html += f"<span style='background-color: #262730; color: #ffffff; padding: 2px 8px; border-radius: 4px; margin-right: 6px; font-family: monospace; font-size: 0.85rem; border: 1px solid #464855;'>{m}</span>"
+                    st.markdown(models_html, unsafe_allow_html=True)
+                    st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
+            return
+
+        if k_type == "Prompts":
+            # --- SYSTEM PROMPT EDITOR ---
+            prompts = api_get("/prompts") or []
+            agent_options = [p["agent_name"] for p in prompts]
+            
+            sel_key = "prompts_sel"
+            if sel_key not in st.session_state: st.session_state[sel_key] = agent_options[0] if agent_options else None
+            
+            selected_agent = st.selectbox("Select Agent", options=agent_options, index=agent_options.index(st.session_state[sel_key]) if st.session_state[sel_key] in agent_options else 0)
+            
+            if selected_agent != st.session_state[sel_key]:
+                st.session_state[sel_key] = selected_agent
+                if "prompts_buffer" in st.session_state: del st.session_state.prompts_buffer
+                st.rerun()
+
+            p_meta = next((p for p in prompts if p["agent_name"] == selected_agent), None)
+            if p_meta:
+                if "prompts_buffer" not in st.session_state:
+                    st.session_state.prompts_buffer = p_meta["content"]
+                
+                status_color = "green" if not p_meta["is_override"] else "orange"
+                status_label = "FACTORY DEFAULT" if not p_meta["is_override"] else "USER OVERRIDE"
+                st.markdown(f"Status: :{status_color}[{status_label}]")
+                
+                if p_meta["required_vars"]:
+                    st.caption(f"Required variables: {', '.join([f'{{{v}}}' for v in p_meta['required_vars']])}")
+
+                new_content = st_ace(
+                    value=st.session_state.prompts_buffer, 
+                    language="markdown", 
+                    theme="monokai", 
+                    height=500, 
+                    wrap=True, 
+                    key=f"ace_prompt_{selected_agent}"
+                )
+                st.session_state.prompts_buffer = new_content
+                
+                col1, col2 = st.columns(2)
+                if col1.button("SAVE OVERRIDE", use_container_width=True, type="primary"):
+                    res = api_post(f"/prompts/{selected_agent}", {"content": new_content})
+                    if res and res.get("status") == "ok":
+                        st.toast("Override saved.")
+                        st.rerun()
+                    else:
+                        st.error(res.get("detail", "Save failed."))
+                
+                if p_meta["is_override"]:
+                    if col2.button("RESTORE DEFAULT", use_container_width=True):
+                        api_delete(f"/prompts/{selected_agent}")
+                        if "prompts_buffer" in st.session_state: del st.session_state.prompts_buffer
+                        st.rerun()
+            return
+
         base_path = "/recipes" if k_type == "Recipes" else "/skills"
         
         items = api_get(base_path) or []
@@ -295,6 +349,7 @@ def render_archive_panel():
             
             status_indicators = []
             if p.get("has_failed_tasks"): status_indicators.append("❌")
+            elif p.get("is_running"): status_indicators.append("🔵")
             elif p.get("has_report") and p.get("has_dashboard"): status_indicators.append("✅")
             else: status_indicators.append("⏳")
 
@@ -304,15 +359,14 @@ def render_archive_panel():
             # Metadata with project ID and first instruction
             meta_html = f"**{p.get('name', 'Project')}**<br><span style='font-size: 1.0rem; color: #888;'>ID: `{p_id}`</span><br><span class='archive-meta'>{created}</span>"
             if p.get('first_instruction'):
-                instr_preview = p['first_instruction'][:120] + ("..." if len(p['first_instruction']) > 120 else "")
-                meta_html += f"<br><span style='font-size: 1.05rem; font-style: italic; color: #bbb;'>{instr_preview}</span>"
+                meta_html += f"<br><span style='font-size: 1.05rem; font-style: italic; color: #bbb;'>{p['first_instruction']}</span>"
             
             cols[1].markdown(meta_html, unsafe_allow_html=True)
 
             btn_cols = cols[2].columns(2)
-            # LOAD button (Primary)
+            # LOAD button
             with btn_cols[0]:
-                if st.button("LOAD", key=f"load_{p_id}", use_container_width=True, type="primary"):
+                if st.button("LOAD", key=f"load_{p_id}", use_container_width=True):
                     st.session_state.current_project_id = p_id
                     st.rerun()
             
