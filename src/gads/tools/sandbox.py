@@ -8,6 +8,7 @@ import uuid
 class ExecutionResult(BaseModel):
     stdout: str
     stderr: str
+    code: Optional[str] = None
     result: Optional[str] = None
     plots: List[str] = []
     displays: List[Dict[str, Any]] = []
@@ -65,6 +66,27 @@ class SandboxClient:
         if not os.path.exists(host_path):
             return []
         return os.listdir(host_path)
+
+    async def poll_logs(self, session_id: str, offset_out: int = 0, offset_err: int = 0) -> Optional[Dict[str, Any]]:
+        """Polls the sandbox for incremental stdout and stderr."""
+        try:
+            response = await self.client.get(
+                f"{self.base_url}/sessions/{session_id}/logs",
+                params={"offset_out": offset_out, "offset_err": offset_err},
+                timeout=5.0
+            )
+            if response.status_code == 200:
+                return response.json()
+        except Exception:
+            pass
+        return None
+
+    async def reset_session(self, session_id: str):
+        """Forcefully kills the kernel and resets the session in the sandbox container."""
+        try:
+            await self.client.post(f"{self.base_url}/sessions/{session_id}/reset")
+        except Exception:
+            pass
 
     async def execute(self, code: str, project_id: uuid.UUID, session_id: str = "default") -> ExecutionResult:
         """Validates and executes code in the sandbox, isolated by project."""

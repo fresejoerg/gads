@@ -153,12 +153,14 @@ class ExecutionHub:
             self.create_outbox_event("TASK_COMPLETED", {"task_id": str(task_id), "result": result})
             self.session.commit()
 
-    def fail_task(self, task_id: uuid.UUID, error: str):
+    def fail_task(self, task_id: uuid.UUID, error: str, result: Optional[dict] = None):
         """Mark a task as failed."""
         task = self.session.get(Task, task_id)
         if task:
             task.status = "failed"
             task.error = error
+            if result:
+                task.result_json = result
             self.session.add(task)
             self.create_outbox_event("TASK_FAILED", {"task_id": str(task_id), "error": error})
             self.session.commit()

@@ -14,6 +14,9 @@ class CoderInput(BaseModel):
     authoritative_state: Dict[str, Any] = {} # Ground truth from the kernel
     previous_code: Optional[str] = None
     error_feedback: Optional[str] = None
+    skills_context: Optional[str] = None
+    task_id: Optional[str] = None
+    postcondition_contract: Optional[Dict[str, Any]] = None
 
 CODER_SYSTEM_PROMPT = """
 You are a precise Python Developer. 
@@ -44,6 +47,14 @@ STRICT RULES:
 4. NO HALLUCINATIONS: Do not generate mock data. 
 5. DATA PROVENANCE: You MUST use the variables and files listed in the sections below.
 6. WORKING DIRECTORY: You are ALREADY in your project-specific workspace directory.
+7. CONTRACT VALIDATION: If you save a file to disk (e.g., a Parquet file), you MUST print its schema or `.head()` to stdout so the validation engine can verify that the required columns were successfully created.
+8. POSTCONDITION ALIGNMENT: You will be provided with a `POSTCONDITION CONTRACT`. You MUST ensure your final output (DataFrame columns or list contents) EXACTLY matches the names and types requested in this contract. If the contract asks for a column 'avg_price', do NOT name it 'mean_price'.
+
+## TASK-SPECIFIC BEST PRACTICES
+{skills_context}
+
+## POSTCONDITION CONTRACT (Your success criteria)
+{contract_json}
 
 ## AUTHORITATIVE RUNTIME STATE (Source of Truth)
 The following variables and data structures ALREADY EXIST in your stateful kernel memory. 
@@ -70,15 +81,18 @@ class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
             output_schema=CoderOutput
         )
 
-    async def run(self, input_data: CoderInput) -> Any:
+    async def run(self, input_data: CoderInput, **kwargs) -> Any:
         state_summary = json.dumps(input_data.authoritative_state, indent=2)
         files_summary = ", ".join([f"'{f}'" for f in input_data.available_files]) if input_data.available_files else "None"
+        contract_summary = json.dumps(input_data.postcondition_contract, indent=2) if input_data.postcondition_contract else "None. Just fulfill the task description."
         
         print(f"    [Coder] Preparing prompt. Available files: {files_summary}", flush=True)
 
         formatted_prompt = self.system_prompt.format(
             state_summary=state_summary,
-            files_list=files_summary
+            files_list=files_summary,
+            skills_context=input_data.skills_context or "No specific skills required for this task.",
+            contract_json=contract_summary
         )
         
         # Strengthen file awareness in the user message
@@ -97,7 +111,8 @@ class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
         content = await get_structured_completion(
             model=self.model,
             response_model=self.output_schema,
-            messages=messages
+            messages=messages,
+            **kwargs
         )
         
         from gads.agents.base import AgentResponse

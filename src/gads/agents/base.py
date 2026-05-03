@@ -20,7 +20,7 @@ class BaseAgent(ABC, Generic[TIn, TOut]):
         self.system_prompt = system_prompt
         self.output_schema = output_schema
 
-    async def run(self, input_data: TIn) -> AgentResponse[TOut]:
+    async def run(self, input_data: TIn, **kwargs) -> AgentResponse[TOut]:
         """Execute the agent's logic using instructor for structured output."""
         messages = [
             {"role": "system", "content": self.system_prompt},
@@ -30,7 +30,8 @@ class BaseAgent(ABC, Generic[TIn, TOut]):
         content = await get_structured_completion(
             model=self.model,
             response_model=self.output_schema,
-            messages=messages
+            messages=messages,
+            **kwargs
         )
         
         return AgentResponse(content=content, model_used=self.model)

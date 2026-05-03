@@ -17,16 +17,22 @@ class PlannerTask(BaseModel):
     postcondition: Dict[str, Any] = Field(
         description="Structural contract for success. MUST be a valid JSON object with key:value pairs. E.g., {'output_type': 'dataframe', 'required_columns': ['name']}"
     )
+    attached_skills: List[str] = Field(
+        default=[],
+        description="List of Skill IDs to attach to this task for the worker agent's guidance."
+    )
 
 class FileMetadata(BaseModel):
     name: str
     size_mb: float
+    columns_and_dtypes: Optional[Dict[str, str]] = None
 
 class PlannerInput(BaseModel):
     objective: str
     available_models_hierarchy: Dict[str, Any]
     available_files: List[FileMetadata]
     knowledge_report: Optional[ReconciliationReport] = None
+    available_skills: List[Dict[str, Any]] = []
 
 
 class PlannerOutput(BaseModel):
@@ -42,12 +48,18 @@ Your goal is to decompose a user's request into a list of tasks, delegate each t
 - You MUST align your task decomposition with the recommended DAG nodes unless the user's specific data or environment prevents it.
 - **IDEMPOTENCY**: If the report lists `skippable_nodes`, DO NOT include those tasks in your output. They have already been completed or are unnecessary.
 
-### 2. ENVIRONMENT AWARENESS
+### 3. ENVIRONMENT AWARENESS
 - You are provided with a list of `AVAILABLE FILES`.
 - These files are ALREADY in the workspace.
 - **CRITICAL**: DO NOT create any tasks to "upload", "move", or "verify" these files. Assume they are ready for analysis.
 
-### 3. CAPABILITY RUBRIC
+### 4. SKILLS & BEST PRACTICES
+- You are provided with a list of `AVAILABLE SKILLS` (Expertise modules).
+- You MUST explicitly attach the relevant Skill IDs to each task using the `attached_skills` field.
+- If a task involves visualization, attach the visualization skills. If it involves cleaning, attach cleaning skills.
+
+### 5. CAPABILITY RUBRIC
+
 Score every task across these 4 dimensions (Low, Med, High):
 - **Reasoning Depth**: Novel decomposition, multi-hop logic, or architectural decisions.
 - **Context Breadth**: Need for 100K+ tokens of context or very long memory.
@@ -65,17 +77,19 @@ Score every task across these 4 dimensions (Low, Med, High):
 
 ### 5. OUTPUT FORMAT
 You MUST provide a list of steps. For each task:
-- Set `assigned_to` to the EXACT verbatim model ID from the 'models' list in the chosen Tier.
-- **PREFERENCE**: You MUST prefer **Gemini** models and the **local_model** over Claude models whenever possible within the same tier.
+- Set `assigned_to` to the FIRST verbatim model ID (index 0) from the 'models' list in the chosen Tier.
 - You MUST select a model that is explicitly listed in the hierarchy below.
 - **POSTCONDITION CONTRACT**: Define a structural contract for every task to detect "silent failures." 
   - This MUST be a JSON object (Dict), NOT a list or set.
-  - Supported keys: `output_type` ('dataframe' or 'list'), `required_columns` (list of strings), `min_rows` (integer).
-  - EXAMPLE: `{{"output_type": "dataframe", "required_columns": ["theme", "score"], "min_rows": 10}}`
+  - Supported keys: `output_type` ('dataframe' or 'list'), `required_columns` (list of strings).
+  - EXAMPLE: `{{"output_type": "dataframe", "required_columns": ["theme", "score"]}}`
 - **FIGURE NUMBERING**: For every task that generates a visualization, you MUST explicitly assign a unique number in the description (e.g., "Analyze target balance. Save as Figure 1."). This ensures a professional thread through the final report.
 
 ## AVAILABLE FILES:
 {files_list}
+
+## AVAILABLE SKILLS (Expertise Modules):
+{skills_json}
 
 ## KNOWLEDGE REPORT:
 {knowledge_json}
@@ -99,19 +113,24 @@ class DataSciencePlanner(BaseAgent[PlannerInput, PlannerOutput]):
 
     async def run(self, input_data: PlannerInput) -> Any:
         hierarchy_str = json.dumps(input_data.available_models_hierarchy, indent=2)
+        skills_str = json.dumps(input_data.available_skills, indent=2)
         
-        # Format files with size for agent awareness
+        # Format files with size and schema for agent awareness
         files_info = []
         for f in input_data.available_files:
-            files_info.append(f"{f.name} ({f.size_mb:.2f} MB)")
-        files_str = ", ".join(files_info) if files_info else "None"
+            info = f"{f.name} ({f.size_mb:.2f} MB)"
+            if f.columns_and_dtypes:
+                info += f" - Schema: {json.dumps(f.columns_and_dtypes)}"
+            files_info.append(info)
+        files_str = "\n".join([f"- {i}" for i in files_info]) if files_info else "None"
         
         knowledge_str = json.dumps(input_data.knowledge_report.dict(), indent=2) if input_data.knowledge_report else "No matching SOP found. Use generic data science reasoning."
         
         formatted_prompt = self.system_prompt.format(
             hierarchy_json=hierarchy_str,
             files_list=files_str,
-            knowledge_json=knowledge_str
+            knowledge_json=knowledge_str,
+            skills_json=skills_str
         )
         
         messages = [
