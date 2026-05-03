@@ -26,4 +26,5 @@ dependencies = [
     "websockets>=14.2",
     "asyncpg>=0.30.0",
     "streamlit>=1.56.0",
+    "streamlit-ace>=0.1.1",
 ]

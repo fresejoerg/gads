@@ -13,12 +13,12 @@ import uuid
 from gads.core.bus import bus, dispatcher_loop
 from gads.core.execution_hub import watchdog_loop, ExecutionHub
 from gads.core.database import init_db, engine
-from gads.core.models import Project, Task, Artifact
+from gads.core.models import Project, Task, Artifact, Instruction
 from gads.agents.planner import DataSciencePlanner, PlannerInput, ReconciliationReport, FileMetadata
 from gads.agents.router import DataScienceRouter, RouterInput
 from gads.agents.workers.synthesizer import SynthesizerAgent, SynthesizerInput
 from gads.core.executor import ExecutionManager
-from gads.core.registry import get_model_hierarchy, GADS_LOCAL_ONLY
+from gads.core.registry import get_model_hierarchy, get_local_only, set_local_only, get_random_routing, set_random_routing
 from gads.core.knowledge import KnowledgeRegistry
 from gads.core.reporting import create_master_reports
 from sqlmodel import select, Session
@@ -27,17 +27,34 @@ app = FastAPI(title="GADS Core API")
 registry = KnowledgeRegistry("src/gads/knowledge/recipes")
 WORKSPACE_ROOT = "/home/joergf/projects/MyLocalStack/data/workspaces"
 
+LIVE_STREAMS: Dict[str, Dict[str, str]] = {}
+
+@app.get("/tasks/{task_id}/stream")
+def get_task_stream(task_id: str):
+    return LIVE_STREAMS.get(task_id, {"reasoning": "", "stdout": ""})
+
 # --- RESPONSE MODELS ---
 class ProjectRead(BaseModel):
     id: uuid.UUID
     name: str
     objective: str
+    first_instruction: Optional[str] = None
     narrative: Optional[str] = None
     takeaways: Optional[List[str]] = None
     last_state_json: Optional[Dict[str, Any]] = None
     created_at: datetime
     has_dashboard: bool = False
     has_report: bool = False
+    has_failed_tasks: bool = False
+
+    class Config:
+        from_attributes = True
+
+class InstructionRead(BaseModel):
+    id: uuid.UUID
+    project_id: uuid.UUID
+    content: str
+    created_at: datetime
 
     class Config:
         from_attributes = True
@@ -45,6 +62,11 @@ class ProjectRead(BaseModel):
 class ProjectResponse(BaseModel):
     project: ProjectRead
     files: List[str] = []
+    instructions: List[InstructionRead] = []
+
+class ConfigUpdate(BaseModel):
+    local_only: bool
+    random_routing: bool
 
 class FileUpload(BaseModel):
     name: str
@@ -62,12 +84,70 @@ class FilesUploadRequest(BaseModel):
 class ExternalPathRequest(BaseModel):
     path: str
 
+class RecipeContent(BaseModel):
+    content: str
+
 @app.on_event("startup")
 async def startup_event():
     init_db()
     asyncio.create_task(dispatcher_loop())
     asyncio.create_task(watchdog_loop())
     asyncio.create_task(archive_cleanup_loop())
+
+@app.get("/recipes", response_model=List[str])
+def list_recipes_files():
+    return registry.list_recipe_files()
+
+@app.get("/recipes/{filename}")
+def get_recipe_raw(filename: str):
+    try:
+        return {"content": registry.get_raw_recipe(filename)}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.post("/recipes/{filename}")
+def save_recipe_raw(filename: str, req: RecipeContent):
+    try:
+        registry.save_raw_recipe(filename, req.content)
+        return {"status": "success"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/skills", response_model=List[str])
+def list_skills_files():
+    return registry.list_skill_files()
+
+@app.get("/skills/{filename}")
+def get_skill_raw(filename: str):
+    try:
+        return {"content": registry.get_raw_skill(filename)}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.post("/skills/{filename}")
+def save_skill_raw(filename: str, req: RecipeContent):
+    try:
+        registry.save_raw_skill(filename, req.content)
+        return {"status": "success"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/config")
+def get_config():
+    return {
+        "local_only": get_local_only(),
+        "random_routing": get_random_routing()
+    }
+
+@app.post("/config")
+def update_config(req: ConfigUpdate):
+    set_local_only(req.local_only)
+    set_random_routing(req.random_routing)
+    return {
+        "status": "success", 
+        "local_only": get_local_only(),
+        "random_routing": get_random_routing()
+    }
 
 async def archive_cleanup_loop():
     """Background task to delete project artifacts older than 30 days."""
@@ -112,6 +192,55 @@ async def manual_cleanup():
     count = await perform_cleanup()
     return {"status": "success", "removed_projects": count}
 
+@app.post("/projects/{project_id}/cancel")
+async def cancel_project(project_id: uuid.UUID):
+    """Mark a project for cancellation."""
+    with Session(engine) as session:
+        project = session.get(Project, project_id)
+        if not project: raise HTTPException(status_code=404, detail="Project not found")
+
+        # Mark narrative with cancelled status
+        project.narrative = "[CANCELLED] User requested termination."
+        session.add(project)
+
+        # Mark all pending/running tasks as failed
+        tasks = session.exec(select(Task).where(Task.project_id == project_id, Task.status.in_(["pending", "running"]))).all()
+        for t in tasks:
+            t.status = "failed"
+            t.error = "Workflow terminated by user."
+            session.add(t)
+
+        session.commit()
+
+        # IMMEDIATELY reset sandbox to stop any running local models
+        executor = ExecutionManager()
+        await executor.sandbox.reset_session(str(project_id))
+
+        hub = ExecutionHub(session)
+        hub.create_outbox_event("WORKFLOW_CANCELLED", {"project_id": str(project_id)})
+        session.commit()
+
+    return {"status": "cancelled"}
+
+@app.delete("/projects/{project_id}")
+async def delete_project(project_id: uuid.UUID):
+    """Delete a project and all its artifacts."""
+    import shutil
+    with Session(engine) as session:
+        project = session.get(Project, project_id)
+        if not project: raise HTTPException(status_code=404, detail="Project not found")
+        
+        # 1. Delete workspace on disk
+        workspace_dir = f"{WORKSPACE_ROOT}/{project_id}"
+        if os.path.exists(workspace_dir):
+            shutil.rmtree(workspace_dir)
+            
+        # 2. Delete from DB (cascading handles tasks/artifacts/instructions)
+        session.delete(project)
+        session.commit()
+        
+    return {"status": "success"}
+
 def _get_recursive_files(workspace_dir: str) -> List[Dict[str, Any]]:
     """Helper to list all files in workspace recursively with size metadata as JSON-serializable dicts."""
     all_files = []
@@ -128,14 +257,22 @@ def _get_recursive_files(workspace_dir: str) -> List[Dict[str, Any]]:
             all_files.append({"name": rel_path, "size_mb": size_mb})
     return sorted(all_files, key=lambda x: x["name"])
 
-async def run_agent_workflow(project_id: uuid.UUID, objective: str):
+async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_id: Optional[uuid.UUID] = None):
     """Orchestrates the multi-agent workflow with Full Gemini Priority Strategy."""
     print(f"\n--- 🚀 Starting expert workflow for Project {project_id} ---", flush=True)
     
+    async def is_cancelled():
+        with Session(engine) as s:
+            p = s.get(Project, project_id)
+            return p and p.narrative and "[CANCELLED]" in p.narrative
+
     try:
         executor = ExecutionManager()
         hierarchy = await get_model_hierarchy()
         
+        # Check cancellation before start
+        if await is_cancelled(): return
+
         # 0. SYNC GROUND TRUTH
         print(f"  [Workflow] Grounding session state...", flush=True)
         workspace_dir = f"{WORKSPACE_ROOT}/{project_id}"
@@ -153,14 +290,17 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                     session.add(project)
                     session.commit()
 
+        if await is_cancelled(): return
+
         # 1. ROUTING (Full Gemini Priority)
-        router_fallback = ["local_model"] if GADS_LOCAL_ONLY else ["gemini-3.1-flash-lite-preview"]
+        router_fallback = ["local_model"] if get_local_only() else ["gemini-3.1-flash-lite-preview"]
         router_model = hierarchy.get("T3", {}).get("models", router_fallback)[0]
         router = DataScienceRouter(model=router_model)
         
         with Session(engine) as session:
             route_task = Task(
                 project_id=project_id,
+                instruction_id=instruction_id,
                 description=f"Architect ({router_model}) is classifying intent and data modality...",
                 assigned_to="Router",
                 status="running"
@@ -179,11 +319,14 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             
         print(f"  [Router] Intent: {intent.task_type} on {intent.data_modality} (Conf: {intent.confidence})", flush=True)
 
+        if await is_cancelled(): return
+
         # 2. KNOWLEDGE RETRIEVAL
         knowledge_report = None
         with Session(engine) as session:
             search_task = Task(
                 project_id=project_id,
+                instruction_id=instruction_id,
                 description="Consulting Best Practices Wiki for matching Data Science recipes...",
                 assigned_to="KnowledgeRegistry",
                 status="running"
@@ -211,20 +354,27 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             session.add(search_task)
             session.commit()
 
+        if await is_cancelled(): return
+
         # 3. PLANNING
-        planner_fallback = ["local_model"] if GADS_LOCAL_ONLY else ["gemini-3.1-pro-preview"]
+        planner_fallback = ["local_model"] if get_local_only() else ["gemini-3.1-pro-preview"]
         planner_model = hierarchy.get("T1", {}).get("models", planner_fallback)[0]
         planner = DataSciencePlanner(model=planner_model)
         
-        # Convert dicts back to FileMetadata objects for Planner input
         from gads.agents.planner import FileMetadata as FM
-        planner_files = [FM(**f) for f in current_files_meta]
+        planner_files = []
+        for f in current_files_meta:
+            columns_dtypes = None
+            if f["name"].endswith(".csv") or f["name"].endswith(".parquet"):
+                columns_dtypes = await _probe_file_schema(executor, project_id, f["name"])
+            planner_files.append(FM(name=f["name"], size_mb=f["size_mb"], columns_and_dtypes=columns_dtypes))
 
         planner_res = await planner.run(PlannerInput(
             objective=objective,
             available_models_hierarchy=hierarchy,
             available_files=planner_files,
-            knowledge_report=knowledge_report
+            knowledge_report=knowledge_report,
+            available_skills=registry.get_skills_summary()
         ))
         
         tasks_to_run = []
@@ -233,9 +383,11 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             for step in planner_res.content.steps:
                 new_task = Task(
                     project_id=project_id,
+                    instruction_id=instruction_id,
                     description=step.description,
                     assigned_to=step.assigned_to,
                     postcondition_json=step.postcondition,
+                    attached_skills=step.attached_skills,
                     status="pending"
                 )
                 session.add(new_task)
@@ -250,6 +402,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
 
         # 4. EXECUTION
         for task_id in task_ids:
+            if await is_cancelled(): return
+
             while True:
                 desc, assigned_to = "", ""
                 with Session(engine) as session:
@@ -261,7 +415,43 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                         desc = task_obj.description
                     else: break 
                 
-                res, model_used = await executor.run_task(desc, project_id=project_id, session_id=str(project_id))
+                # Dynamic Skill Discovery (Planner-led + Keyword Fallback)
+                assigned_skills = task_obj.attached_skills or []
+                matched_skills = registry.find_skills(desc)
+                
+                # Deduplicate and Fetch Full Content
+                all_skill_ids = list(set(assigned_skills + [s.id for s in matched_skills]))
+                skills_to_inject = []
+                for sid in all_skill_ids:
+                    s_obj = registry.skills.get(sid)
+                    if s_obj: skills_to_inject.append(s_obj)
+
+                skills_ctx = None
+                if skills_to_inject:
+                    skills_ctx = "\n\n".join([f"### Skill: {s.id}\n{s.content}" for s in skills_to_inject])
+                    print(f"    [Workflow] Applied skills: {[s.id for s in skills_to_inject]}", flush=True)
+
+                tid_str = str(task_id)
+                LIVE_STREAMS[tid_str] = {"reasoning": "", "stdout": ""}
+                
+                async def stream_reasoning_callback(token: str):
+                    # print(f"    [Workflow] Streaming reasoning for {tid_str}...", flush=True)
+                    LIVE_STREAMS[tid_str]["reasoning"] += token
+
+                async def stream_stdout_callback(text: str):
+                    print(f"    [Workflow] Updating LIVE_STREAMS for {tid_str} ({len(text)} chars)", flush=True)
+                    LIVE_STREAMS[tid_str]["stdout"] = text
+
+                res, model_used = await executor.run_task(
+                    desc, 
+                    project_id=project_id, 
+                    session_id=str(project_id), 
+                    skills_context=skills_ctx, 
+                    task_id=task_id,
+                    stdout_callback=stream_stdout_callback,
+                    stream_callback=stream_reasoning_callback,
+                    cancel_check=is_cancelled
+                )
                 
                 with Session(engine) as session:
                     hub = ExecutionHub(session)
@@ -273,11 +463,11 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                             session.commit()
                             continue 
                         else:
-                            hub.fail_task(task_id, error_msg)
+                            hub.fail_task(task_id, error_msg, result={"stdout": res.stdout, "stderr": res.stderr, "code": res.code})
                             session.commit()
                             break
                     else:
-                        hub.complete_task(task_id, {"stdout": res.stdout, "model_used": model_used})
+                        hub.complete_task(task_id, {"stdout": res.stdout, "model_used": model_used, "code": res.code})
                         files_after = _get_recursive_files(workspace_dir)
                         hub.create_outbox_event("STATE_UPDATED", {"files": files_after, "state": executor.authoritative_state})
                         
@@ -316,10 +506,28 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
                         current_files_meta = files_after
                         session.commit()
                         break
+                
+            # HARD ABORT MECHANISM
+            # Check the terminal state of the task after the inner loop finishes (escalations exhausted)
+            with Session(engine) as session:
+                task_obj = session.get(Task, task_id)
+                if task_obj and task_obj.status == "failed":
+                    reason = f"Terminal failure in prerequisite task (ID: {task_id}). Halting workflow to prevent cascade failures."
+                    print(f"    [Workflow] 🛑 HARD ABORT: {reason}", flush=True)
+                    _mark_workflow_failed(session, project_id, reason)
+                    return # Immediately exit the entire run_agent_workflow function
+
+        if await is_cancelled(): return
 
         # 5. SYNTHESIS
         with Session(engine) as session:
-            synth_task = Task(project_id=project_id, description="Lead Data Scientist is synthesizing final results...", assigned_to="Synthesizer", status="running")
+            synth_task = Task(
+                project_id=project_id, 
+                instruction_id=instruction_id,
+                description="Lead Data Scientist is synthesizing final results...", 
+                assigned_to="Synthesizer", 
+                status="running"
+            )
             session.add(synth_task)
             session.commit()
             session.refresh(synth_task)
@@ -327,9 +535,18 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             all_tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
             context_parts = [f"Task: {t.description}\nStatus: {t.status}\nOutput: {(t.result_json or {}).get('stdout','')[:4000]}" for t in all_tasks]
             context = "\n\n---\n\n".join(context_parts)
+            
+            proj = session.get(Project, project_id)
+            existing_narrative = proj.narrative if proj else None
+            existing_takeaways = proj.takeaways if proj else None
 
         synthesizer = SynthesizerAgent(model=planner_model)
-        synth_res = await synthesizer.run(SynthesizerInput(objective=objective, context_artifacts=context))
+        synth_res = await synthesizer.run(SynthesizerInput(
+            objective=objective, 
+            context_artifacts=context,
+            existing_narrative=existing_narrative,
+            existing_takeaways=existing_takeaways
+        ))
         create_master_reports(project_id=project_id, workspace_dir=workspace_dir, narrative=synth_res.content.narrative, takeaways=synth_res.content.key_takeaways, artifacts=artifacts)
 
         with Session(engine) as session:
@@ -350,7 +567,10 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str):
             
     except Exception as e:
         print(f"❌ FATAL ERROR: {e}")
+        import traceback
         traceback.print_exc()
+        with Session(engine) as session:
+            _mark_workflow_failed(session, project_id, f"Fatal system error: {str(e)}")
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, last_seq: int = 0):
@@ -367,7 +587,18 @@ async def get_project_details(project_id: uuid.UUID):
         if not project: raise HTTPException(status_code=404, detail="Project not found")
         tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
         artifacts = session.exec(select(Artifact).where(Artifact.project_id == project_id)).all()
-        return {"project": ProjectRead.from_orm(project), "tasks": tasks, "artifacts": artifacts}
+        instructions = session.exec(select(Instruction).where(Instruction.project_id == project_id).order_by(Instruction.created_at.asc())).all()
+
+        p_data = ProjectRead.from_orm(project)
+        if instructions:
+            p_data.first_instruction = instructions[0].content
+
+        return {
+            "project": p_data, 
+            "tasks": tasks, 
+            "artifacts": artifacts,
+            "instructions": instructions
+        }
 
 @app.get("/projects", response_model=List[ProjectRead])
 async def list_projects():
@@ -378,26 +609,74 @@ async def list_projects():
             p_data = ProjectRead.from_orm(p)
             p_data.has_dashboard = os.path.exists(f"{WORKSPACE_ROOT}/{p.id}/final_dashboard.html")
             p_data.has_report = os.path.exists(f"{WORKSPACE_ROOT}/{p.id}/research_report.md")
+
+            # Fetch first instruction
+            first_instr = session.exec(select(Instruction).where(Instruction.project_id == p.id).order_by(Instruction.created_at.asc())).first()
+            if first_instr:
+                p_data.first_instruction = first_instr.content
+
+            # Check for failed tasks
+            failed_tasks = session.exec(select(Task).where(Task.project_id == p.id, Task.status == "failed")).all()
+            p_data.has_failed_tasks = len(failed_tasks) > 0
+
             results.append(p_data)
         return results
-
 @app.post("/projects", response_model=ProjectResponse)
 async def create_project(req: ProjectCreateRequest, background_tasks: BackgroundTasks):
     with Session(engine) as session:
         if req.existing_project_id:
             project = session.get(Project, uuid.UUID(req.existing_project_id))
             if not project: raise HTTPException(status_code=404, detail="Project not found")
+            # Update objective if provided (for shell projects)
+            if req.objective:
+                project.objective = req.objective
+                session.add(project)
+                session.commit()
+                session.refresh(project)
         else:
             project = Project(name=req.name, objective=req.objective)
             session.add(project)
             session.commit()
             session.refresh(project)
+
+        # 0. Duplicate Prevention
+        # Check if there are already active tasks for this project
+        active_tasks = session.exec(select(Task).where(Task.project_id == project.id, Task.status.in_(["pending", "running"]))).all()
+        if active_tasks:
+            print(f"    [Workflow] Duplicate thread blocked for project {project.id} (found {len(active_tasks)} active tasks).")
+            # Return current state without spawning a new background task
+            current_files = _get_recursive_files(f"{WORKSPACE_ROOT}/{project.id}")
+            instructions = session.exec(select(Instruction).where(Instruction.project_id == project.id).order_by(Instruction.created_at.asc())).all()
+            return ProjectResponse(
+                project=ProjectRead.from_orm(project), 
+                files=[f["name"] for f in current_files],
+                instructions=[InstructionRead.from_orm(i) for i in instructions]
+            )
+
+        # Create Instruction record
+        instr_id = None
+        if req.objective.strip():
+            instruction = Instruction(project_id=project.id, content=req.objective)
+            session.add(instruction)
+            session.commit()
+            session.refresh(instruction)
+            instr_id = instruction.id
+
         workspace_dir = f"{WORKSPACE_ROOT}/{project.id}"
         os.makedirs(workspace_dir, exist_ok=True)
         current_files = _get_recursive_files(workspace_dir)
-        if req.objective.strip(): background_tasks.add_task(run_agent_workflow, project.id, req.objective)
-        return ProjectResponse(project=ProjectRead.from_orm(project), files=[f["name"] for f in current_files])
 
+        if req.objective.strip():
+            background_tasks.add_task(run_agent_workflow, project.id, req.objective, instr_id)
+
+        # Fetch instructions to return
+        instructions = session.exec(select(Instruction).where(Instruction.project_id == project.id).order_by(Instruction.created_at.asc())).all()
+
+        return ProjectResponse(
+            project=ProjectRead.from_orm(project), 
+            files=[f["name"] for f in current_files],
+            instructions=[InstructionRead.from_orm(i) for i in instructions]
+        )
 @app.post("/projects/{project_id}/register-external", response_model=ProjectResponse)
 async def register_external_file(project_id: uuid.UUID, req: ExternalPathRequest):
     with Session(engine) as session:
@@ -416,10 +695,7 @@ async def register_external_file(project_id: uuid.UUID, req: ExternalPathRequest
                 if os.path.islink(target_path): os.unlink(target_path)
                 else: os.remove(target_path)
             
-            # THE FIX: Use absolute path since we now have path parity (/home/joergf/datasets exists in both)
             os.symlink(host_path, target_path)
-            
-            print(f"  [Server] Registered absolute symlink: {target_path} -> {host_path}", flush=True)
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to create symlink: {e}")
         
@@ -436,6 +712,64 @@ async def download_file(project_id: uuid.UUID, file_path: str, download: bool = 
     if not os.path.abspath(full_path).startswith(os.path.abspath(workspace_dir)): raise HTTPException(status_code=403, detail="Denied")
     if not os.path.exists(full_path): raise HTTPException(status_code=404, detail="Not found")
     return FileResponse(full_path, filename=os.path.basename(full_path)) if download else FileResponse(full_path)
+
+async def _probe_file_schema(executor: ExecutionManager, project_id: uuid.UUID, filename: str) -> Optional[Dict[str, str]]:
+    """Safe, time-capped schema and dtype extraction using DuckDB."""
+    print(f"    [Introspection] Probing schema for {filename}...", flush=True)
+    
+    # Strictly capped DuckDB query for safe type inference
+    code = f"""
+import duckdb
+import json
+try:
+    # Use read_csv_auto with limited sample for speed and safety
+    if "{filename}".endswith(".csv"):
+        res = duckdb.query("DESCRIBE SELECT * FROM read_csv_auto('{filename}', sample_size=1024)").to_df()
+    elif "{filename}".endswith(".parquet"):
+        res = duckdb.query("DESCRIBE SELECT * FROM '{filename}'").to_df()
+    else:
+        print(json.dumps({{"error": "Unsupported format"}}))
+        exit()
+    
+    # Map DuckDB types to simple string descriptions
+    schema = dict(zip(res['column_name'], res['column_type']))
+    print(json.dumps(schema))
+except Exception as e:
+    print(json.dumps({{"error": str(e)}}))
+"""
+    try:
+        # 30s timeout for schema probe
+        res = await asyncio.wait_for(
+            executor.sandbox.execute(code, project_id=project_id, session_id=str(project_id)),
+            timeout=30.0
+        )
+        if res.stdout:
+            data = json.loads(res.stdout.strip().split('\n')[-1])
+            if "error" not in data:
+                print(f"    [Introspection] Detected schema: {data}", flush=True)
+                return data
+    except Exception as e:
+        print(f"    [Introspection] Probe failed for {filename}: {e}", flush=True)
+    return None
+
+def _mark_workflow_failed(session: Session, project_id: uuid.UUID, reason: str):
+    """Idempotently halts a workflow and cancels all pending tasks."""
+    project = session.get(Project, project_id)
+    if project:
+        project.narrative = f"[HALTED] {reason}"
+        session.add(project)
+    
+    # Mark all pending/running tasks as failed
+    tasks = session.exec(select(Task).where(Task.project_id == project_id, Task.status.in_(["pending", "running"]))).all()
+    for t in tasks:
+        t.status = "failed"
+        t.error = reason
+        session.add(t)
+    
+    session.commit()
+    hub = ExecutionHub(session)
+    hub.create_outbox_event("WORKFLOW_CANCELLED", {"project_id": str(project_id), "reason": reason})
+    session.commit()
 
 @app.get("/health")
 def health(): return {"status": "ok"}

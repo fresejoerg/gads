@@ -1,499 +1,545 @@
 import streamlit as st
+from streamlit_ace import st_ace
 import httpx
 import json
 import asyncio
-import websockets
 import os
 import base64
-import threading
+import re
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 # --- CONFIGURATION ---
 BACKEND_URL = os.getenv("GADS_BACKEND_URL", "http://localhost:8001")
-WS_URL = os.getenv("GADS_WS_URL", "ws://localhost:8001/ws")
 WORKSPACE_ROOT = "/home/joergf/projects/MyLocalStack/data/workspaces"
 
 st.set_page_config(
-    page_title="GADS Control Center",
+    page_title="GADS Workspace",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# --- WEBSOCKET THREAD HANDLER ---
-def run_ws_thread(loop, last_seq):
-    asyncio.set_event_loop(loop)
-    loop.run_until_complete(listen_to_ws_background(last_seq))
-
-async def listen_to_ws_background(start_seq):
-    curr_seq = start_seq
-    while True:
-        try:
-            async with websockets.connect(f"{WS_URL}?last_seq={curr_seq}") as ws:
-                while True:
-                    msg = await ws.recv()
-                    event = json.loads(msg)
-                    curr_seq = event["sequence"]
-                    
-                    # Update the global session state from background
-                    etype = event["type"]
-                    payload = event["payload"]
-                    
-                    if etype == "TASK_CREATED":
-                        st.session_state.tasks[payload["task_id"]] = {
-                            "description": payload["description"],
-                            "status": "pending",
-                            "output": ""
-                        }
-                    elif etype == "TASK_STARTED":
-                        if payload["task_id"] in st.session_state.tasks:
-                            st.session_state.tasks[payload["task_id"]]["status"] = "running"
-                    elif etype == "TASK_COMPLETED":
-                        if payload["task_id"] in st.session_state.tasks:
-                            st.session_state.tasks[payload["task_id"]]["status"] = "completed"
-                            st.session_state.tasks[payload["task_id"]]["output"] = payload.get("result", {}).get("stdout", "")
-                    elif etype == "TASK_FAILED":
-                        if payload["task_id"] in st.session_state.tasks:
-                            st.session_state.tasks[payload["task_id"]]["status"] = "failed"
-                            st.session_state.tasks[payload["task_id"]]["output"] = payload.get("error", "")
-                    elif etype == "STATE_UPDATED":
-                        st.session_state.project_files = payload.get("files", [])
-                        st.session_state.project_state = payload.get("state", {})
-                    elif etype == "WORKFLOW_FINAL_RESULT":
-                        st.session_state.narrative = payload["narrative"]
-                        st.session_state.takeaways = payload["takeaways"]
-                    
-                    st.session_state.last_seq = curr_seq
-                    # Signal a refresh
-                    st.session_state.needs_rerun = True
-        except Exception:
-            await asyncio.sleep(2)
-
-# --- CSS FOR STYLING (Strictly Monochromatic High Contrast) ---
+# --- CSS FOR MODERN HIGH-LEGIBILITY WORKSPACE ---
 st.markdown("""
 <style>
-    /* Global Overrides */
-    html, body, [class*="st-"] {
-        font-size: 1.1rem;
-        color: #000000 !important;
-        background-color: #ffffff !important;
+    /* Global Styles */
+    html, body {
+        font-family: 'Inter', sans-serif;
+    }
+
+    /* Column Dividers */
+    [data-testid="column"] {
+        border-right: 1px solid #EDEDED;
+        padding: 0 1.5rem !important;
+    }
+    [data-testid="column"]:last-child {
+        border-right: none;
+    }
+
+    /* ------------------------------------------------------------- */
+    /* BUTTON STYLING (Key-Targeted)                                 */
+    /* ------------------------------------------------------------- */
+
+    /* LAUNCH WORKFLOW - Green */
+    .st-key-btn_launch button {
+        background-color: #E8F5E9 !important;
+        color: #2E7D32 !important;
+        border: 1px solid #E8F5E9 !important;
+    }
+    .st-key-btn_launch button:hover, .st-key-btn_launch button:active, .st-key-btn_launch button:focus {
+        background-color: #C8E6C9 !important;
+        color: #1B5E20 !important;
+        border-color: #C8E6C9 !important;
+        box-shadow: none !important;
+    }
+
+    /* CANCEL - Red */
+    .st-key-btn_cancel button {
+        background-color: #FFEBEE !important;
+        color: #C62828 !important;
+        border: 1px solid #FFEBEE !important;
+    }
+    .st-key-btn_cancel button:hover, .st-key-btn_cancel button:active, .st-key-btn_cancel button:focus {
+        background-color: #FFCDD2 !important;
+        color: #B71C1C !important;
+        border-color: #FFCDD2 !important;
+        box-shadow: none !important;
+    }
+
+    /* NEW PROJECT - Yellow */
+    .st-key-btn_new button {
+        background-color: #FFFDE7 !important;
+        color: #F57F17 !important;
+        border: 1px solid #FFFDE7 !important;
+    }
+    .st-key-btn_new button:hover, .st-key-btn_new button:active, .st-key-btn_new button:focus {
+        background-color: #FFF9C4 !important;
+        color: #E65100 !important;
+        border-color: #FFF9C4 !important;
+        box-shadow: none !important;
+    }
+
+    /* REFRESH - Orange */
+    .st-key-btn_refresh button {
+        background-color: #FFF3E0 !important;
+        color: #E65100 !important;
+        border: 1px solid #FFF3E0 !important;
+    }
+    .st-key-btn_refresh button:hover, .st-key-btn_refresh button:active, .st-key-btn_refresh button:focus {
+        background-color: #FFE0B2 !important;
+        color: #BF360C !important;
+        border-color: #FFE0B2 !important;
+        box-shadow: none !important;
     }
     
-    .stApp { background-color: #ffffff !important; }
-    
-    /* Sidebar Styling */
-    section[data-testid="stSidebar"] {
-        background-color: #ffffff !important;
-        border-right: 2px solid #000000 !important;
+    /* MOUNT - Blue */
+    .st-key-btn_mount button {
+        background-color: #E3F2FD !important;
+        color: #1565C0 !important;
+        border: 1px solid #E3F2FD !important;
+    }
+    .st-key-btn_mount button:hover, .st-key-btn_mount button:active, .st-key-btn_mount button:focus {
+        background-color: #BBDEFB !important;
+        color: #0D47A1 !important;
+        border-color: #BBDEFB !important;
+        box-shadow: none !important;
     }
     
-    /* FIX: Force '>>' collapse icon and all sidebar buttons to be black */
-    [data-testid="stSidebarCollapse"] button,
-    section[data-testid="stSidebar"] button {
-        color: #000000 !important;
+    /* ARCHIVE LOAD - Blue */
+    div[class*="st-key-load_"] button {
+        background-color: #E3F2FD !important;
+        color: #1565C0 !important;
+        border: 1px solid #E3F2FD !important;
     }
-    [data-testid="stSidebarCollapse"] svg,
-    section[data-testid="stSidebar"] svg {
-        fill: #000000 !important;
+    div[class*="st-key-load_"] button:hover, div[class*="st-key-load_"] button:active, div[class*="st-key-load_"] button:focus {
+        background-color: #BBDEFB !important;
+        color: #0D47A1 !important;
+        border-color: #BBDEFB !important;
+        box-shadow: none !important;
     }
-    
-    section[data-testid="stSidebar"] h1, 
-    section[data-testid="stSidebar"] h2, 
-    section[data-testid="stSidebar"] h3,
-    section[data-testid="stSidebar"] p,
-    section[data-testid="stSidebar"] span,
-    section[data-testid="stSidebar"] label,
-    section[data-testid="stSidebar"] .stMarkdown {
-        color: #000000 !important;
+
+    /* ARCHIVE DELETE - Red */
+    div[class*="st-key-del_"] button {
+        background-color: #FFEBEE !important;
+        color: #C62828 !important;
+        border: 1px solid #FFEBEE !important;
     }
-    
-    /* Project Archive Cards - High Contrast */
-    .stExpander {
-        border: 2px solid #000000 !important;
-        background-color: #ffffff !important;
-        margin-bottom: 10px !important;
+    div[class*="st-key-del_"] button:hover, div[class*="st-key-del_"] button:active, div[class*="st-key-del_"] button:focus {
+        background-color: #FFCDD2 !important;
+        color: #B71C1C !important;
+        border-color: #FFCDD2 !important;
+        box-shadow: none !important;
     }
-    
-    /* Force text inside sidebar expanders to be black */
-    section[data-testid="stSidebar"] .stExpander div[data-testid="stExpanderDetails"] p,
-    section[data-testid="stSidebar"] .stExpander div[data-testid="stExpanderDetails"] span {
-        color: #000000 !important;
-    }
-    
-    /* Task Tracking */
-    .task-card { 
-        background-color: #ffffff; 
-        padding: 16px; 
-        border-radius: 0; 
-        border: 2px solid #000000;
-        margin-bottom: 12px;
+
+    /* Archive Styling */
+    .archive-meta {
+        font-size: 1.0rem;
+        color: #666666;
+        display: block;
+        margin-top: 4px;
     }
     
-    .status-label {
+    /* Active Project Indicator */
+    .active-badge {
         font-family: 'IBM Plex Mono', monospace;
         font-size: 0.8rem;
-        padding: 4px 8px;
-        border-radius: 0;
-        font-weight: 900;
-        border: 2px solid #000000;
+        background-color: #000000;
+        color: #FFFFFF;
+        padding: 4px 10px;
+        border-radius: 2px;
+        margin-bottom: 1rem;
         display: inline-block;
-        color: #000000 !important;
-    }
-    /* Monochromatic Status indicators */
-    .status-pending { background-color: #ffffff; }
-    .status-running { background-color: #ffffff; text-decoration: underline; }
-    .status-completed { background-color: #ffffff; font-style: italic; }
-    .status-failed { background-color: #ffffff; border-style: dashed; }
-    
-    h1, h2, h3 { color: #000000 !important; font-weight: 900 !important; }
-    
-    /* Links */
-    a { color: #000000 !important; text-decoration: underline !important; font-weight: 700; }
-    section[data-testid="stSidebar"] a { color: #000000 !important; }
-    
-    /* Input & Textarea Contrast Fix */
-    .stTextArea textarea {
-        color: #000000 !important;
-        background-color: #ffffff !important;
-        -webkit-text-fill-color: #000000 !important;
-        caret-color: #000000 !important;
-        border: 3px solid #000000 !important;
     }
 
-    .stTextInput input {
-        color: #000000 !important;
-        background-color: #ffffff !important;
-        -webkit-text-fill-color: #000000 !important;
-        caret-color: #000000 !important;
-        border: 3px solid #000000 !important;
-    }
-
-
-    /* Tabs */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        border: 1px solid #000000 !important;
-        padding: 8px 16px;
-        background-color: #ffffff;
-    }
-
-    /* Force all text in the main area to be black */
-    .main .stMarkdown p, .main .stMarkdown li {
-        color: #000000 !important;
+    /* Log Containers */
+    .stCodeBlock {
+        border-radius: 4px !important;
+        border: 1px solid #EDEDED !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # --- SESSION STATE ---
-if "events" not in st.session_state:
-    st.session_state.events = []
 if "current_project_id" not in st.session_state:
     st.session_state.current_project_id = None
-if "project_files" not in st.session_state:
-    st.session_state.project_files = []
-if "project_state" not in st.session_state:
-    st.session_state.project_state = {}
-if "tasks" not in st.session_state:
-    st.session_state.tasks = {}
-if "narrative" not in st.session_state:
-    st.session_state.narrative = ""
-if "takeaways" not in st.session_state:
-    st.session_state.takeaways = []
-if "last_seq" not in st.session_state:
-    st.session_state.last_seq = 0
-if "needs_rerun" not in st.session_state:
-    st.session_state.needs_rerun = False
+if "local_only_mode" not in st.session_state:
+    st.session_state.local_only_mode = False
 
 # --- API HELPERS ---
-def fetch_projects():
+def api_get(path):
     try:
-        with httpx.Client() as client:
-            resp = client.get(f"{BACKEND_URL}/projects")
-            return resp.json()
-    except Exception as e:
-        st.error(f"Failed to fetch projects: {e}")
-        return []
-
-def fetch_project_details(project_id: str):
-    try:
-        with httpx.Client() as client:
-            resp = client.get(f"{BACKEND_URL}/projects/{project_id}")
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(f"{BACKEND_URL}{path}")
             return resp.json()
     except Exception:
         return None
 
-async def start_workflow(objective: str, project_id: Optional[str] = None):
+def api_post(path, json_data=None):
     try:
-        async with httpx.AsyncClient() as client:
-            payload = {
-                "name": f"Project {datetime.now().strftime('%Y-%m-%d %H:%M')}", 
-                "objective": objective,
-                "existing_project_id": project_id
-            }
-            resp = await client.post(f"{BACKEND_URL}/projects", json=payload)
-            data = resp.json()
-            st.session_state.current_project_id = data["project"]["id"]
-            # Clear local state only if it's a brand new workflow instruction
-            if objective.strip():
-                st.session_state.tasks = {}
-                st.session_state.narrative = ""
-                st.session_state.takeaways = []
-            return data
-    except Exception as e:
-        st.error(f"Failed to start workflow: {e}")
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.post(f"{BACKEND_URL}{path}", json=json_data)
+            return resp.json()
+    except Exception:
+        return None
 
-# --- UI COMPONENTS ---
+def api_delete(path):
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.delete(f"{BACKEND_URL}{path}")
+            return resp.json()
+    except Exception:
+        return None
 
-@st.fragment(run_every=10)
-def render_sidebar_content():
-    st.title("Project Archive")
-    st.markdown("---")
-    projects = fetch_projects()
+# --- UI LOGIC ---
+
+def render_knowledge_panel():
+    st.markdown("### KNOWLEDGE")
+    with st.expander("KNOWLEDGE BASE", expanded=False):
+        k_type = st.radio("Type", ["Recipes", "Skills"], horizontal=True, label_visibility="collapsed")
+        base_path = "/recipes" if k_type == "Recipes" else "/skills"
+        
+        items = api_get(base_path) or []
+        new_label = f"-- New {k_type[:-1]} --"
+        options = [new_label] + items
+        
+        # Track selection in session state
+        sel_key = f"{k_type.lower()}_sel"
+        if sel_key not in st.session_state:
+            st.session_state[sel_key] = options[0]
+            
+        selected = st.selectbox(f"Select {k_type[:-1]}", options=options, index=options.index(st.session_state[sel_key]) if st.session_state[sel_key] in options else 0)
+        
+        if selected != st.session_state[sel_key]:
+            st.session_state[sel_key] = selected
+            # Clear buffered content when switching
+            for buf in ["yaml", "md", "skill"]:
+                b_key = f"{k_type.lower()}_buffer_{buf}"
+                if b_key in st.session_state: del st.session_state[b_key]
+            st.rerun()
+
+        filename = ""
+        if k_type == "Recipes":
+            # --- RECIPE EDITOR (SPLIT) ---
+            if selected == new_label:
+                filename = st.text_input("Filename", placeholder="e.g. classification.md", key="new_recipe_name")
+                initial_yaml = "id: \nversion: 1.0.0\nauthor: \napplies_when:\n  task_type: []\n  data_modality: []\nrequires:\n  variables: []\n  capabilities: []\ndag: []\n"
+                initial_md = "# Title\n\n## Rationale\n"
+            else:
+                filename = selected
+                if "recipes_buffer_yaml" not in st.session_state or "recipes_buffer_md" not in st.session_state:
+                    res = api_get(f"/recipes/{selected}")
+                    content = res.get("content", "") if res else ""
+                    match = re.search(r"^---\s*\n(.*?)\n---\s*\n(.*)", content, re.DOTALL)
+                    if match:
+                        st.session_state.recipes_buffer_yaml = match.group(1)
+                        st.session_state.recipes_buffer_md = match.group(2)
+                    else:
+                        st.session_state.recipes_buffer_yaml = ""
+                        st.session_state.recipes_buffer_md = content
+                initial_yaml = st.session_state.recipes_buffer_yaml
+                initial_md = st.session_state.recipes_buffer_md
+
+            st.markdown("##### METADATA (YAML)")
+            new_yaml = st_ace(value=initial_yaml, language="yaml", theme="monokai", height=200, key=f"ace_yaml_{selected}")
+            st.session_state.recipes_buffer_yaml = new_yaml
+
+            st.markdown("##### CONTENT (MARKDOWN)")
+            new_md = st_ace(value=initial_md, language="markdown", theme="monokai", height=300, wrap=True, key=f"ace_md_{selected}")
+            st.session_state.recipes_buffer_md = new_md
+            full_content = f"---\n{new_yaml}\n---\n{new_md}"
+        else:
+            # --- SKILL EDITOR (UNIFIED) ---
+            if selected == new_label:
+                filename = st.text_input("Filename", placeholder="e.g. visualization.md", key="new_skill_name")
+                initial_skill = "---\nid: \ntriggers: []\n---\n# Skill Description\n"
+            else:
+                filename = selected
+                if "skills_buffer_skill" not in st.session_state:
+                    res = api_get(f"/skills/{selected}")
+                    st.session_state.skills_buffer_skill = res.get("content", "") if res else ""
+                initial_skill = st.session_state.skills_buffer_skill
+
+            full_content = st_ace(value=initial_skill, language="markdown", theme="monokai", height=500, wrap=True, key=f"ace_skill_{selected}")
+            st.session_state.skills_buffer_skill = full_content
+
+        if st.button(f"SAVE {k_type[:-1].upper()}", use_container_width=True, type="primary"):
+            if not filename:
+                st.error("Filename required.")
+            else:
+                res = api_post(f"{base_path}/{filename}", {"content": full_content})
+                if res and res.get("status") == "success":
+                    st.success(f"Saved {filename}")
+                    st.session_state[sel_key] = filename
+                    for buf in ["yaml", "md", "skill"]:
+                        b_key = f"{k_type.lower()}_buffer_{buf}"
+                        if b_key in st.session_state: del st.session_state[b_key]
+                    st.rerun()
+                else:
+                    detail = res.get("detail", "Validation failed") if res else "Error"
+                    st.error(detail)
+
+def render_archive_panel():
+    st.markdown("### ARCHIVE")
+    st.text_input("Filter", placeholder="Search...", label_visibility="collapsed")
+    
+    projects = api_get("/projects")
     if not projects:
         st.caption("No projects found.")
         return
 
-    for p in projects:
-        # Parse timestamp for display with fallback
-        try:
-            raw_ts = p.get("created_at")
-            if raw_ts:
-                dt = datetime.fromisoformat(raw_ts.replace("Z", ""))
-                ts_str = dt.strftime("%Y-%m-%d %H:%M")
-            else:
-                ts_str = "N/A"
-        except Exception:
-            ts_str = "N/A"
-        
-        p_id = p['id']
-        with st.expander(f"{ts_str} | {p.get('name', 'Unnamed')[:20]}"):
-            st.caption(f"PROJECT ID: {p_id}")
+    # Scrollable Archive
+    with st.container(height=800):
+        for p in projects:
+            p_id = p['id']
+            created = p.get("created_at", "N/A")[5:16].replace("T", " ")
             
-            if st.button("SELECT PROJECT", key=f"sel_{p_id}", use_container_width=True):
-                st.session_state.current_project_id = p_id
-                st.session_state.tasks = {}
-                st.session_state.narrative = ""
-                st.session_state.takeaways = []
-                st.rerun()
+            status_indicators = []
+            if p.get("has_failed_tasks"): status_indicators.append("❌")
+            elif p.get("has_report") and p.get("has_dashboard"): status_indicators.append("✅")
+            else: status_indicators.append("⏳")
 
-            if p.get("has_dashboard"):
-                st.markdown(f"**[OPEN MASTER DASHBOARD]({BACKEND_URL}/projects/{p_id}/files/final_dashboard.html)**")
-            else:
-                st.caption("Dashboard: Not Available")
-                
-            if p.get("has_report"):
-                st.markdown(f"**[OPEN RESEARCH REPORT]({BACKEND_URL}/projects/{p_id}/files/research_report.md)**")
-            else:
-                st.caption("Report: Not Available")
-
-def fetch_current_tasks(project_id: str):
-    """Fallback to fetch all tasks from DB if WS fails."""
-    try:
-        with httpx.Client() as client:
-            # We'll need to add a backend endpoint for this or just rely on state
-            pass
-    except Exception:
-        pass
-
-def render_main():
-    # 1. Header (Static)
-    st.title("GADS Control Center")
-    st.markdown("**Generative-augmented Data Science Orchestrator**")
-    st.markdown("---")
-    
-    # 2. Fragment: Auto-refreshing Dashboard (Sidebar + Center + Right)
-    @st.fragment(run_every=2)
-    def render_dynamic_dashboard():
-        # --- BACKGROUND DATA SYNC ---
-        project_complete = False
-        if st.session_state.current_project_id:
-            details = fetch_project_details(st.session_state.current_project_id)
-            if details:
-                # 1. Sync tasks
-                st.session_state.tasks = {t["id"]: t for t in details["tasks"]}
-                
-                # 2. Sync files and memory state
-                st.session_state.project_state = details["project"].get("last_state_json", {})
-                st.session_state.narrative = details["project"].get("narrative", "")
-                st.session_state.takeaways = details["project"].get("takeaways", [])
-                
-                ws_path = f"{WORKSPACE_ROOT}/{st.session_state.current_project_id}"
-                if os.path.exists(ws_path):
-                    st.session_state.project_files = os.listdir(ws_path)
-
-                # 3. Detect completion and sync narrative
-                # Check ALL tasks for synthesis output
-                for t in details["tasks"]:
-                    res = t.get("result_json")
-                    if res and isinstance(res, dict) and "narrative" in res:
-                        st.session_state.narrative = res["narrative"]
-                        st.session_state.takeaways = res.get("takeaways", [])
-                
-                # Terminal state check
-                if details["tasks"] and all(t["status"] in ["completed", "failed"] for t in details["tasks"]):
-                    # If we have no narrative yet, but tasks are done, it's a failure or pure technical run
-                    project_complete = True
-        
-        # Split into Center and Right
-        center_col, right_col = st.columns([1.5, 1])
-
-        with center_col:
-            st.subheader("Objective & Synthesis")
+            cols = st.columns([0.1, 0.55, 0.35])
+            cols[0].markdown(" ".join(status_indicators))
             
-            if st.session_state.narrative:
-                st.markdown(f"<div style='background-color: #ffffff; padding: 30px; border: 2px solid #000000;'>{st.session_state.narrative}</div>", unsafe_allow_html=True)
-                if st.session_state.takeaways:
-                    st.markdown("#### Key Takeaways")
-                    for t in st.session_state.takeaways:
-                        st.markdown(f"- **{t}**")
-                
-                if project_complete:
-                    st.success("[SYSTEM] Project complete. Final reports generated and saved to workspace.")
-            elif project_complete:
-                st.warning("[SYSTEM] Workflow finished but no analytical synthesis was produced.")
-            else:
-                st.info("[SYSTEM] Analysis synthesis pending completion.")
-
-        with right_col:
-            st.subheader("System Status")
-            track_tab, grounding_tab, action_tab = st.tabs(["Tasks", "Grounding", "Management"])
+            # Metadata with project ID and first instruction
+            meta_html = f"**{p.get('name', 'Project')}**<br><span style='font-size: 1.0rem; color: #888;'>ID: `{p_id}`</span><br><span class='archive-meta'>{created}</span>"
+            if p.get('first_instruction'):
+                instr_preview = p['first_instruction'][:120] + ("..." if len(p['first_instruction']) > 120 else "")
+                meta_html += f"<br><span style='font-size: 1.05rem; font-style: italic; color: #bbb;'>{instr_preview}</span>"
             
-            with track_tab:
-                if not st.session_state.tasks:
-                    st.info("No active tasks.")
-                
-                # Sort tasks by created_at (now that we have the field)
-                sorted_tasks = sorted(st.session_state.tasks.values(), key=lambda x: x.get("created_at", ""))
-                
-                for tinfo in sorted_tasks:
-                    status = tinfo['status'].upper()
-                    st.markdown(f"""
-                    <div class="task-card">
-                        <span class="status-label status-{tinfo['status']}">{status}</span><br/>
-                        <div style="margin-top: 10px; color: #000000; font-weight: 500;">{tinfo['description']}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Robust log extraction for ALL completed tasks
-                    res_data = tinfo.get('result_json')
-                    if res_data and isinstance(res_data, dict):
-                        stdout = res_data.get('stdout', '')
-                        if stdout:
-                            with st.expander("View Execution Logs"):
-                                st.code(stdout)
+            cols[1].markdown(meta_html, unsafe_allow_html=True)
 
-            with grounding_tab:
-                st.markdown("#### Workspace Files")
-                if not st.session_state.project_files:
-                    st.write("*(Empty)*")
-                for f in st.session_state.project_files:
-                    st.markdown(f"- `{f}` ([view]({BACKEND_URL}/projects/{st.session_state.current_project_id}/files/{f}))")
-                
-                st.markdown("---")
-                st.markdown("#### Sandbox Memory")
-                if not st.session_state.project_state:
-                    st.write("*(Empty)*")
-                else:
-                    st.json(st.session_state.project_state)
-
-            with action_tab:
-                # 1. External Path Registration (Local Picker)
-                st.markdown("#### Register External Dataset")
-                
-                # Scan host datasets directory
-                host_datasets_root = "/home/joergf/datasets"
-                available_host_files = []
-                if os.path.exists(host_datasets_root):
-                    try:
-                        available_host_files = sorted([f for f in os.listdir(host_datasets_root) if os.path.isfile(os.path.join(host_datasets_root, f))])
-                    except Exception:
-                        pass
-                
-                if available_host_files:
-                    selected_file = st.selectbox("Pick Dataset from Host", options=["--- Select File ---"] + available_host_files)
-                    if st.button("Mount Selected Dataset", key="btn_mount", use_container_width=True):
-                        if selected_file != "--- Select File ---":
-                            try:
-                                project_id = st.session_state.current_project_id
-                                # If no project active, create one on the fly with NO objective
-                                if not project_id:
-                                    with httpx.Client(timeout=30.0) as client:
-                                        payload = {
-                                            "name": f"Analysis: {selected_file}",
-                                            "objective": "" # SILENT: Don't trigger workflow yet
-                                        }
-                                        resp = client.post(f"{BACKEND_URL}/projects", json=payload)
-                                        resp.raise_for_status()
-                                        project_data = resp.json()
-                                        project_id = project_data["project"]["id"]
-                                        st.session_state.current_project_id = project_id
-                                        st.info(f"[SYSTEM] Created project context: {project_id}")
-
-                                full_host_path = os.path.join(host_datasets_root, selected_file)
-                                with httpx.Client(timeout=30.0) as client:
-                                    resp = client.post(f"{BACKEND_URL}/projects/{project_id}/register-external", json={"path": full_host_path})
-                                    resp.raise_for_status()
-                                    st.success(f"[SYSTEM] Dataset '{selected_file}' mounted.")
-                                    st.session_state.needs_rerun = True
-                            except Exception as e:
-                                st.error(f"Mount failed: {e}")
-                else:
-                    st.info(f"No files found in {host_datasets_root}")
-
-                st.markdown("---")
-                # 2. File uploader inside fragment
-                uploaded_files = st.file_uploader("Upload local files", accept_multiple_files=True)
-                if uploaded_files and st.button("Sync Uploads"):
-                    payload = [{"name": f.name, "content_base64": base64.b64encode(f.getvalue()).decode("utf-8")} for f in uploaded_files]
-                    try:
-                        project_id = st.session_state.current_project_id
-                        with httpx.Client(timeout=30.0) as client:
-                            if project_id:
-                                resp = client.post(f"{BACKEND_URL}/projects/{project_id}/files", json={"files": payload})
-                            else:
-                                resp = client.post(f"{BACKEND_URL}/projects", json={"name": "Upload Session", "objective": "", "files": payload})
-                            resp.raise_for_status()
-                            st.success(f"Uploaded {len(uploaded_files)} file(s).")
-                    except Exception as e:
-                        st.error(f"Upload failed: {e}")
-
-                st.markdown("---")
-                if st.button("Purge Old Projects (>30d)", use_container_width=True):
-                    try:
-                        with httpx.Client(timeout=60.0) as client:
-                            resp = client.post(f"{BACKEND_URL}/maintenance/cleanup")
-                            resp.raise_for_status()
-                            data = resp.json()
-                            st.success(f"[SYSTEM] Cleanup complete. Removed {data['removed_projects']} projects.")
-                    except Exception as e:
-                        st.error(f"Cleanup failed: {e}")
-
-                if st.button("Reset Global Session", use_container_width=True):
-                    st.session_state.current_project_id = None
-                    st.session_state.tasks = {}
-                    st.session_state.narrative = ""
-                    st.session_state.takeaways = []
-                    st.session_state.project_files = []
-                    st.session_state.project_state = {}
+            btn_cols = cols[2].columns(2)
+            # LOAD button (Primary)
+            with btn_cols[0]:
+                if st.button("LOAD", key=f"load_{p_id}", use_container_width=True, type="primary"):
+                    st.session_state.current_project_id = p_id
+                    st.rerun()
+            
+            # Delete button (Secondary)
+            with btn_cols[1]:
+                if st.button("🗑️", key=f"del_{p_id}", use_container_width=True):
+                    api_delete(f"/projects/{p_id}")
+                    if st.session_state.current_project_id == p_id:
+                        st.session_state.current_project_id = None
+                    st.toast(f"Deleted {p['name']}")
                     st.rerun()
 
-    # Place Objective input ABOVE the dynamic fragment so it doesn't reset every 2s
-    objective = st.text_area("Research Objective", placeholder="Describe your data science goal...", height=100)
-    if st.button("Launch Workflow", type="primary", use_container_width=True):
-        if objective:
-            # Use current project context if it exists
-            asyncio.run(start_workflow(objective, project_id=st.session_state.current_project_id))
-            st.info("[SYSTEM] Workflow initiated.")
+            st.markdown("---")
+
+def render_orchestrator_panel():
+    # Header with Toggles
+    head_col1, head_col2, head_col3 = st.columns([2.0, 1.2, 1.0])
+    head_col1.markdown("### ORCHESTRATOR")
+    
+    if "initial_config_synced" not in st.session_state:
+        config = api_get("/config")
+        if config:
+            st.session_state.local_only_mode = config.get("local_only", False)
+            st.session_state.random_routing_mode = config.get("random_routing", False)
+            st.session_state.initial_config_synced = True
         else:
-            st.warning("[SYSTEM] Objective required.")
+            st.session_state.local_only_mode = False
+            st.session_state.random_routing_mode = False
+
+    st.session_state.local_only_mode = head_col2.toggle(
+        "LOCAL ONLY", 
+        value=st.session_state.local_only_mode
+    )
+    st.session_state.random_routing_mode = head_col3.toggle(
+        "RANDOM ROUTING", 
+        value=st.session_state.random_routing_mode
+    )
+    api_post("/config", {
+        "local_only": st.session_state.local_only_mode,
+        "random_routing": st.session_state.random_routing_mode
+    })
+
+    if st.session_state.current_project_id:
+        st.markdown(f"<div class='active-badge'>ACTIVE PROJECT: {st.session_state.current_project_id}</div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div class='active-badge'>NO PROJECT LOADED</div>", unsafe_allow_html=True)
+
+    # 1. Objective Input
+    objective = st.text_area("Research Objective", 
+                            placeholder="Describe your data science goal...", 
+                            height=100, 
+                            label_visibility="collapsed")
+    
+    # 2. Control Bar
+    ctrl_cols = st.columns(4)
+    
+    with ctrl_cols[0]:
+        if st.button("LAUNCH WORKFLOW", key="btn_launch", use_container_width=True):
+            if objective:
+                payload = {
+                    "name": f"Project {datetime.now().strftime('%m-%d %H:%M')}", 
+                    "objective": objective, 
+                    "existing_project_id": st.session_state.current_project_id
+                }
+                res = api_post("/projects", payload)
+                if res:
+                    st.session_state.current_project_id = res["project"]["id"]
+                    st.rerun()
+            else:
+                st.warning("Objective required.")
+
+    with ctrl_cols[1]:
+        if st.button("CANCEL", key="btn_cancel", use_container_width=True):
+            if st.session_state.current_project_id:
+                api_post(f"/projects/{st.session_state.current_project_id}/cancel")
+                st.toast("Cancellation requested.")
+
+    with ctrl_cols[2]:
+        if st.button("NEW PROJECT", key="btn_new", use_container_width=True):
+            st.session_state.current_project_id = None
+            st.rerun()
+        
+    with ctrl_cols[3]:
+        if st.button("REFRESH", key="btn_refresh", use_container_width=True):
+            st.rerun()
+
+    st.markdown("---")
+
+    # 3. Dynamic Workflow Polling
+    @st.fragment(run_every=2)
+    def render_active_workflow():
+        if not st.session_state.current_project_id:
+            st.info("Start a new project or select from the archive.")
+            return
+
+        details = api_get(f"/projects/{st.session_state.current_project_id}")
+        if not details: return
+
+        proj = details["project"]
+        tasks = details["tasks"]
+        
+        if proj.get("narrative"):
+            with st.expander("EXECUTIVE SUMMARY", expanded=True):
+                st.markdown(proj["narrative"])
+        
+        st.markdown("#### LOGS")
+        with st.container(height=500):
+            if not tasks: st.caption("Preparing agent swarm...")
+            
+            # Map instructions for display
+            instr_map = {i['id']: i for i in details.get("instructions", [])}
+            last_instr_id = None
+
+            for t in sorted(tasks, key=lambda x: x.get("created_at", "")):
+                # Display instruction block when it changes
+                curr_instr_id = t.get("instruction_id")
+                if curr_instr_id and curr_instr_id != last_instr_id:
+                    instr = instr_map.get(curr_instr_id)
+                    if instr:
+                        st.chat_message("user").markdown(f"**Instruction:** {instr['content']}")
+                    last_instr_id = curr_instr_id
+
+                st_icon = "⚪"
+                if t['status'] == "completed": st_icon = "🟢"
+                elif t['status'] == "failed": st_icon = "🔴"
+                elif t['status'] == "running": st_icon = "🔵"
+                
+                with st.expander(f"{st_icon} {t['description'][:85]}...", expanded=(t['status'] == "running")):
+                    st.caption(f"Worker: `{t['assigned_to']}`")
+                    
+                    if t['status'] == "running":
+                        stream_data = api_get(f"/tasks/{t['id']}/stream")
+                        if stream_data:
+                            reasoning = stream_data.get("reasoning", "")
+                            stdout = stream_data.get("stdout", "")
+                            if reasoning:
+                                # Truncate reasoning to avoid freezing the UI on massive outputs
+                                if len(reasoning) > 5000:
+                                    reasoning = "... [truncated] ...\n" + reasoning[-5000:]
+                                st.markdown("**🤔 Reasoning:**")
+                                st.code(reasoning, language="markdown")
+                            else:
+                                st.caption("🤔 Agent is thinking...")
+
+                            if stdout:
+                                if len(stdout) > 5000:
+                                    stdout = "... [truncated] ...\n" + stdout[-5000:]
+                                st.markdown("**🖥️ Sandbox Output:**")
+                                st.code(stdout, language="text")
+                            else:
+                                st.caption("🖥️ Sandbox is starting up...")
+                        else:
+                            st.caption("Initializing...")
+                            
+                    res = t.get("result_json")
+                    if res and res.get("stdout"):
+                        st.code(res["stdout"], language="text")
+                    if t.get("error"):
+                        st.error(t["error"])
+
+    render_active_workflow()
+
+def render_grounding_panel():
+    st.markdown("### GROUNDING")
+    
+    st.markdown("#### DATASETS")
+    host_datasets_root = "/home/joergf/datasets"
+    if os.path.exists(host_datasets_root):
+        files = sorted([f for f in os.listdir(host_datasets_root) if os.path.isfile(os.path.join(host_datasets_root, f))])
+        selected = st.selectbox("Mount", options=["--- Select to Mount ---"] + files, label_visibility="collapsed")
+        if st.button("MOUNT", key="btn_mount", use_container_width=True) and selected != "--- Select to Mount ---":
+            # AUTO-CREATE PROJECT IF NONE LOADED
+            if not st.session_state.current_project_id:
+                payload = {
+                    "name": f"Draft {datetime.now().strftime('%m-%d %H:%M')}", 
+                    "objective": ""
+                }
+                res = api_post("/projects", payload)
+                if res:
+                    st.session_state.current_project_id = res["project"]["id"]
+            
+            if st.session_state.current_project_id:
+                api_post(f"/projects/{st.session_state.current_project_id}/register-external", {"path": os.path.join(host_datasets_root, selected)})
+                st.toast(f"Mounted {selected}")
+                st.rerun() # Refresh to show in workspace
+            else:
+                st.error("Failed to create project session.")
     
     st.markdown("---")
-    # Render the dynamic panels
-    render_dynamic_dashboard()
+    
+    @st.fragment(run_every=3)
+    def render_state_explorer():
+        if not st.session_state.current_project_id: return
 
-# --- EXECUTION ---
-with st.sidebar:
-    render_sidebar_content()
-render_main()
+        details = api_get(f"/projects/{st.session_state.current_project_id}")
+        if not details: return
+
+        st.markdown("#### WORKSPACE")
+        ws_path = f"{WORKSPACE_ROOT}/{st.session_state.current_project_id}"
+        if os.path.exists(ws_path):
+            files = sorted(os.listdir(ws_path))
+            for f in files:
+                url = f"{BACKEND_URL}/projects/{st.session_state.current_project_id}/files/{f}"
+                st.markdown(f"- [`{f}`]({url})")
+        else:
+            st.caption("No files yet.")
+
+        st.markdown("---")
+        
+        st.markdown("#### KERNEL STATE")
+        mem = details["project"].get("last_state_json", {})
+        if mem:
+            st.json(mem)
+        else:
+            st.caption("Memory empty.")
+
+    render_state_explorer()
+
+# --- MAIN LAYOUT ---
+col_archive, col_orch, col_ground = st.columns([2.0, 2.0, 1.0])
+
+with col_archive:
+    render_knowledge_panel()
+    render_archive_panel()
+
+with col_orch:
+    render_orchestrator_panel()
+
+with col_ground:
+    render_grounding_panel()
