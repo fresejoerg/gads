@@ -189,6 +189,10 @@ class KnowledgeRegistry:
         """Returns a list of available skills with their IDs and triggers for agent awareness."""
         return [{"id": s.id, "triggers": s.triggers} for s in self.skills.values()]
 
+    def get_recipes_summary(self) -> List[Dict[str, Any]]:
+        """Returns a list of available recipes with their IDs and rationale for agent awareness."""
+        return [{"id": r.id, "rationale": r.rationale, "applies_when": r.applies_when} for r in self.recipes.values()]
+
     def find_matches(self, intent_tags: Dict[str, Any]) -> List[Recipe]:
         """
         Simple matching logic based on task_type and modality.
