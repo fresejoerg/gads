@@ -4,12 +4,18 @@ import re
 import instructor
 from litellm import acompletion
 from dotenv import load_dotenv
+from contextvars import ContextVar
+from typing import Optional, Dict, Any
 
 # Load environment variables from .env
 load_dotenv()
 
 LITELLM_BASE_URL = os.getenv("LITELLM_BASE_URL", "http://localhost:4000/v1")
 LITELLM_MASTER_KEY = os.getenv("LITELLM_MASTER_KEY", "sk-1234")
+
+# Global context for trace propagation (project_id, task_id, workflow_id)
+# Value should be a Dict[str, Any]
+trace_context: ContextVar[Optional[Dict[str, Any]]] = ContextVar("trace_context", default=None)
 
 # Configure instructor with LiteLLM async completion
 client = instructor.patch(create=acompletion, mode=instructor.Mode.JSON_SCHEMA)
@@ -19,6 +25,7 @@ async def get_structured_completion(model: str, response_model, messages: list, 
     Wrapper around litellm to get validated Pydantic objects.
     Supports streaming reasoning tokens to a callback, stripping <think> tags,
     and automatic repair via `instructor` if manual extraction fails.
+    Injects Langfuse/LiteLLM metadata from trace_context for observability.
     """
     if "base_url" not in kwargs:
         kwargs["base_url"] = LITELLM_BASE_URL
@@ -26,6 +33,49 @@ async def get_structured_completion(model: str, response_model, messages: list, 
         kwargs["api_key"] = LITELLM_MASTER_KEY
     if "max_tokens" not in kwargs:
         kwargs["max_tokens"] = 8192
+
+    # Inject observability metadata from global context
+    ctx = trace_context.get()
+    if ctx:
+        # standard LiteLLM/Langfuse metadata keys
+        # We create a CLEAN, independent copy to avoid any potential circularity
+        meta = {
+            "trace_id": str(ctx.get("project_id")),
+            "session_id": str(ctx.get("project_id")),
+            "parent_observation_id": str(ctx.get("parent_observation_id")) if ctx.get("parent_observation_id") else None,
+            "generation_name": str(ctx.get("agent_name", "agent_call")),
+            "user_id": str(ctx.get("user_id", "default_user")),
+        }
+        meta = {k: v for k, v in meta.items() if v is not None}
+        
+        # When using instructor/client (OpenAI SDK), metadata MUST be in extra_body 
+        # to be forwarded by LiteLLM Proxy. Top-level kwargs are often stripped by the SDK.
+        if "extra_body" not in kwargs:
+            kwargs["extra_body"] = {}
+        
+        # We don't put it in both places to avoid LiteLLM merging logic loops
+        kwargs["extra_body"]["metadata"] = meta
+
+        # ALSO inject via HEADERS (Most reliable for LiteLLM Proxy callbacks)
+        if "extra_headers" not in kwargs:
+            kwargs["extra_headers"] = {}
+        
+        kwargs["extra_headers"].update({
+            "x-langfuse-trace-id": str(ctx.get("project_id")),
+            "x-langfuse-session-id": str(ctx.get("project_id")),
+            "x-langfuse-tags": f"agent:{ctx.get('agent_name')}"
+        })
+        
+        print(f"  [LLM] Injecting Trace Metadata (Headers + Body): {ctx.get('project_id')}", flush=True)
+
+        try:
+            # Crucial: Flush the Langfuse SDK buffer before calling the LLM.
+            from gads.core.server import langfuse_client
+            print(f"  [LLM] Triggering Langfuse flush... (Tasks in queue: {langfuse_client.task_manager._queue.qsize()})", flush=True)
+            langfuse_client.flush()
+            print("  [LLM] Langfuse flush complete.", flush=True)
+        except Exception as e:
+            print(f"  [LLM] Langfuse flush failed/skipped: {type(e).__name__} - {e}", flush=True)
 
     if stream_callback:
         print(f"  [LLM] Streaming enabled for {model}...", flush=True)
