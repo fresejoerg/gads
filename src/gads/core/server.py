@@ -22,7 +22,18 @@ from gads.core.registry import get_model_hierarchy, get_local_only, set_local_on
 from gads.core.knowledge import KnowledgeRegistry
 from gads.core.reporting import create_master_reports
 from gads.core.prompts import prompt_registry
+from langfuse import Langfuse
 from sqlmodel import select, Session
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Initialize Observability
+langfuse_client = Langfuse(
+    public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
+    secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
+    host=os.getenv("LANGFUSE_HOST")
+)
 
 app = FastAPI(title="GADS Core API")
 registry = KnowledgeRegistry("src/gads/knowledge/recipes")
@@ -284,20 +295,37 @@ def _get_recursive_files(workspace_dir: str) -> List[Dict[str, Any]]:
                 size_mb = 0.0
             all_files.append({"name": rel_path, "size_mb": size_mb})
     return sorted(all_files, key=lambda x: x["name"])
-
 async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_id: Optional[uuid.UUID] = None):
-    """Orchestrates the multi-agent workflow with Full Gemini Priority Strategy."""
-    print(f"\n--- 🚀 Starting expert workflow for Project {project_id} ---", flush=True)
+    from gads.core.llm import trace_context
     
-    async def is_cancelled():
-        with Session(engine) as s:
-            p = s.get(Project, project_id)
-            return p and p.narrative and "[CANCELLED]" in p.narrative
+    # 1. Create top-level Langfuse Trace
+    trace = langfuse_client.trace(
+        id=str(project_id),
+        name="Project Workflow",
+        user_id="default_user",
+        metadata={"objective": objective},
+        session_id=str(project_id)
+    )
+
+    ctx_token = trace_context.set({
+        "project_id": str(project_id),
+        "workflow_id": str(project_id),
+        "user_id": "default_user",
+        "langfuse_trace_id": trace.id
+    })
 
     try:
+        """Orchestrates the multi-agent workflow with Full Gemini Priority Strategy."""
+        print(f"\n--- 🚀 Starting expert workflow for Project {project_id} ---", flush=True)
+
+        async def is_cancelled():
+            with Session(engine) as s:
+                p = s.get(Project, project_id)
+                return p and p.narrative and "[CANCELLED]" in p.narrative
+
         executor = ExecutionManager()
         hierarchy = await get_model_hierarchy()
-        
+
         # Check cancellation before start
         if await is_cancelled(): return
 
@@ -305,7 +333,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         print(f"  [Workflow] Grounding session state...", flush=True)
         workspace_dir = f"{WORKSPACE_ROOT}/{project_id}"
         current_files_meta = _get_recursive_files(workspace_dir)
-        
+
         # Dummy execute to trigger state introspection
         res = await executor.sandbox.execute("pass", project_id=project_id, session_id=str(project_id))
         if res.kernel_state:
@@ -324,7 +352,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         router_fallback = ["local_model"] if get_local_only() else ["gemini-3.1-flash-lite-preview"]
         router_model = hierarchy.get("T3", {}).get("models", router_fallback)[0]
         router = DataScienceRouter(model=router_model)
-        
+
+        intent = None
         with Session(engine) as session:
             route_task = Task(
                 project_id=project_id,
@@ -337,18 +366,27 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             session.add(route_task)
             session.commit()
             session.refresh(route_task)
-            
+
+            # Create a Span for the Architect
+            span = trace.span(name="Architect Routing", metadata={"task_id": str(route_task.id)})
+            trace_context.get().update({
+                "agent_name": "Router", 
+                "task_id": str(route_task.id),
+                "parent_observation_id": span.id
+            })
+
             router_res = await router.run(RouterInput(
                 objective=objective,
                 available_recipes=registry.get_recipes_summary()
             ))
             intent = router_res.content
-            
+            span.end(output=intent.model_dump())
+
             route_task.status = "completed"
             route_task.result_json = {"stdout": f"Task Type: {intent.task_type}\nModality: {intent.data_modality}\nMatched Recipe: {intent.matched_recipe_id}\nConfidence: {intent.confidence}"}
             session.add(route_task)
             session.commit()
-            
+
         print(f"  [Router] Intent: {intent.task_type} (Recipe: {intent.matched_recipe_id})", flush=True)
 
         if await is_cancelled(): return
@@ -367,11 +405,11 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             session.add(search_task)
             session.commit()
             session.refresh(search_task)
-            
+
             # Logic shift: The Router (Architect) now explicitly picks the recipe ID
             recipe_id = intent.matched_recipe_id
             recipe = registry.get_recipe(recipe_id) if recipe_id else None
-            
+
             if recipe:
                 knowledge_report = ReconciliationReport(
                     recipe_id=recipe.id,
@@ -394,7 +432,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         planner_fallback = ["local_model"] if get_local_only() else ["gemini-3.1-pro-preview"]
         planner_model = hierarchy.get("T1", {}).get("models", planner_fallback)[0]
         planner = DataSciencePlanner(model=planner_model)
-        
+
         from gads.agents.planner import FileMetadata as FM
         planner_files = []
         for f in current_files_meta:
@@ -403,6 +441,14 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 columns_dtypes = await _probe_file_schema(executor, project_id, f["name"])
             planner_files.append(FM(name=f["name"], size_mb=f["size_mb"], columns_and_dtypes=columns_dtypes))
 
+        planner_res = None
+        span = trace.span(name="Project Planning")
+        trace_context.get().update({
+            "agent_name": "Planner", 
+            "task_id": "planning-phase", 
+            "parent_observation_id": span.id
+        })
+
         planner_res = await planner.run(PlannerInput(
             objective=objective,
             available_models_hierarchy=hierarchy,
@@ -410,7 +456,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             knowledge_report=knowledge_report,
             available_skills=registry.get_skills_summary()
         ))
-        
+        span.end(output=planner_res.content.model_dump())
+
         tasks_to_run = []
         with Session(engine) as session:
             hub = ExecutionHub(session)
@@ -427,7 +474,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 session.add(new_task)
                 tasks_to_run.append(new_task)
             session.commit()
-            
+
             for t in tasks_to_run:
                 session.refresh(t)
                 hub.create_outbox_event("TASK_CREATED", {"task_id": str(t.id), "description": t.description})
@@ -437,6 +484,9 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         # 4. EXECUTION
         for task_id in task_ids:
             if await is_cancelled(): return
+
+            # Create a Span for this specific worker task
+            task_span = trace.span(name="Task Execution", metadata={"task_id": str(task_id)})
 
             while True:
                 desc, assigned_to = "", ""
@@ -448,11 +498,11 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         executor.coder.model = task_obj.assigned_to
                         desc = task_obj.description
                     else: break 
-                
+
                 # Dynamic Skill Discovery (Planner-led + Keyword Fallback)
                 assigned_skills = task_obj.attached_skills or []
                 matched_skills = registry.find_skills(desc)
-                
+
                 # Deduplicate and Fetch Full Content
                 all_skill_ids = list(set(assigned_skills + [s.id for s in matched_skills]))
                 skills_to_inject = []
@@ -467,14 +517,19 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
 
                 tid_str = str(task_id)
                 LIVE_STREAMS[tid_str] = {"reasoning": "", "stdout": ""}
-                
+
                 async def stream_reasoning_callback(token: str):
-                    # print(f"    [Workflow] Streaming reasoning for {tid_str}...", flush=True)
                     LIVE_STREAMS[tid_str]["reasoning"] += token
 
                 async def stream_stdout_callback(text: str):
                     print(f"    [Workflow] Updating LIVE_STREAMS for {tid_str} ({len(text)} chars)", flush=True)
                     LIVE_STREAMS[tid_str]["stdout"] = text
+
+                trace_context.get().update({
+                    "agent_name": "CodeGenerator", 
+                    "task_id": tid_str,
+                    "parent_observation_id": task_span.id
+                })
 
                 res, model_used = await executor.run_task(
                     desc, 
@@ -486,7 +541,10 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     stream_callback=stream_reasoning_callback,
                     cancel_check=is_cancelled
                 )
-                
+
+                # Update task span with result details
+                task_span.update(output={"model": model_used, "code_len": len(res.code) if res.code else 0})
+
                 with Session(engine) as session:
                     hub = ExecutionHub(session)
                     task_obj = session.get(Task, task_id)
@@ -498,19 +556,20 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                             continue 
                         else:
                             hub.fail_task(task_id, error_msg, result={"stdout": res.stdout, "stderr": res.stderr, "code": res.code})
+                            task_span.end(output={"error": error_msg})
                             session.commit()
                             break
                     else:
                         hub.complete_task(task_id, {"stdout": res.stdout, "model_used": model_used, "code": res.code})
                         files_after = _get_recursive_files(workspace_dir)
                         hub.create_outbox_event("STATE_UPDATED", {"files": files_after, "state": executor.authoritative_state})
-                        
+
                         project = session.get(Project, project_id)
                         if project:
                             project.last_state_json = executor.authoritative_state
                             session.add(project)
                             session.commit()
-                        
+
                         for i, plot_b64 in enumerate(res.plots):
                             art = Artifact(project_id=project_id, type="plot", description=f"In-memory plot {i+1}", content_json={"image_base64": plot_b64}, agent_id="CodeGenerator")
                             session.add(art)
@@ -538,18 +597,18 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                                 except Exception: pass
 
                         current_files_meta = files_after
+                        task_span.end(output={"stdout": res.stdout, "model_used": model_used, "code": res.code})
                         session.commit()
                         break
-                
+
             # HARD ABORT MECHANISM
-            # Check the terminal state of the task after the inner loop finishes (escalations exhausted)
             with Session(engine) as session:
                 task_obj = session.get(Task, task_id)
                 if task_obj and task_obj.status == "failed":
                     reason = f"Terminal failure in prerequisite task (ID: {task_id}). Halting workflow to prevent cascade failures."
                     print(f"    [Workflow] 🛑 HARD ABORT: {reason}", flush=True)
                     _mark_workflow_failed(session, project_id, reason)
-                    return # Immediately exit the entire run_agent_workflow function
+                    return 
 
         if await is_cancelled(): return
 
@@ -566,23 +625,32 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             session.add(synth_task)
             session.commit()
             session.refresh(synth_task)
+
+            span = trace.span(name="Final Synthesis")
+            trace_context.get().update({
+                "agent_name": "Synthesizer", 
+                "task_id": str(synth_task.id),
+                "parent_observation_id": span.id
+            })
+
             artifacts = session.exec(select(Artifact).where(Artifact.project_id == project_id)).all()
             all_tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
             context_parts = [f"Task: {t.description}\nStatus: {t.status}\nOutput: {(t.result_json or {}).get('stdout','')[:4000]}" for t in all_tasks]
             context = "\n\n---\n\n".join(context_parts)
-            
+
             proj = session.get(Project, project_id)
             existing_narrative = proj.narrative if proj else None
             existing_takeaways = proj.takeaways if proj else None
 
-        synthesizer = SynthesizerAgent(model=planner_model)
-        synth_res = await synthesizer.run(SynthesizerInput(
-            objective=objective, 
-            context_artifacts=context,
-            existing_narrative=existing_narrative,
-            existing_takeaways=existing_takeaways
-        ))
-        create_master_reports(project_id=project_id, workspace_dir=workspace_dir, narrative=synth_res.content.narrative, takeaways=synth_res.content.key_takeaways, artifacts=artifacts)
+            synthesizer = SynthesizerAgent(model=planner_model)
+            synth_res = await synthesizer.run(SynthesizerInput(
+                objective=objective, 
+                context_artifacts=context,
+                existing_narrative=existing_narrative,
+                existing_takeaways=existing_takeaways
+            ))
+            span.end(output=synth_res.content.model_dump())
+            create_master_reports(project_id=project_id, workspace_dir=workspace_dir, narrative=synth_res.content.narrative, takeaways=synth_res.content.key_takeaways, artifacts=artifacts)
 
         with Session(engine) as session:
             stask = session.get(Task, synth_task.id)
@@ -599,13 +667,19 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             hub.create_outbox_event("STATE_UPDATED", {"files": _get_recursive_files(workspace_dir), "state": executor.authoritative_state})
             hub.create_outbox_event("STEP_COMPLETED", {"message": "Project complete."})
             session.commit()
-            
+
     except Exception as e:
         print(f"❌ FATAL ERROR: {e}")
         import traceback
         traceback.print_exc()
         with Session(engine) as session:
             _mark_workflow_failed(session, project_id, f"Fatal system error: {str(e)}")
+    finally:
+        from gads.core.llm import trace_context
+        trace_context.reset(ctx_token)
+        # Final flush to ensure everything is sent to Langfuse
+        langfuse_client.flush()
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, last_seq: int = 0):
