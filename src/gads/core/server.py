@@ -17,6 +17,7 @@ from gads.core.models import Project, Task, Artifact, Instruction
 from gads.agents.planner import DataSciencePlanner, PlannerInput, ReconciliationReport, FileMetadata
 from gads.agents.router import DataScienceRouter, RouterInput
 from gads.agents.workers.synthesizer import SynthesizerAgent, SynthesizerInput
+from gads.agents.workers.critique import CritiqueAgent, CritiqueInput
 from gads.core.executor import ExecutionManager
 from gads.core.registry import get_model_hierarchy, get_local_only, set_local_only, get_random_routing, set_random_routing
 from gads.core.knowledge import KnowledgeRegistry
@@ -274,7 +275,16 @@ async def delete_project(project_id: uuid.UUID):
         if os.path.exists(workspace_dir):
             shutil.rmtree(workspace_dir)
             
-        # 2. Delete from DB (cascading handles tasks/artifacts/instructions)
+        # 2. Delete from DB (manually handle cascading to avoid FK constraints)
+        tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
+        for t in tasks: session.delete(t)
+        
+        artifacts = session.exec(select(Artifact).where(Artifact.project_id == project_id)).all()
+        for a in artifacts: session.delete(a)
+            
+        instructions = session.exec(select(Instruction).where(Instruction.project_id == project_id)).all()
+        for i in instructions: session.delete(i)
+        
         session.delete(project)
         session.commit()
         
@@ -351,6 +361,11 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         # 1. ROUTING (Full Gemini Priority)
         router_fallback = ["local_model"] if get_local_only() else ["gemini-3.1-flash-lite-preview"]
         router_model = hierarchy.get("T3", {}).get("models", router_fallback)[0]
+        
+        # Select Critique model (Prefer T2 for quality, fallback to T3)
+        critique_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
+        critique_model = hierarchy.get("T2", {}).get("models", hierarchy.get("T3", {}).get("models", critique_fallback))[0]
+
         router = DataScienceRouter(model=router_model)
 
         intent = None
@@ -383,7 +398,10 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             span.end(output=intent.model_dump())
 
             route_task.status = "completed"
-            route_task.result_json = {"stdout": f"Task Type: {intent.task_type}\nModality: {intent.data_modality}\nMatched Recipe: {intent.matched_recipe_id}\nConfidence: {intent.confidence}"}
+            route_task.result_json = {
+                "stdout": f"Task Type: {intent.task_type}\nModality: {intent.data_modality}\nMatched Recipe: {intent.matched_recipe_id}\nConfidence: {intent.confidence}",
+                "model_used": router_model
+            }
             session.add(route_task)
             session.commit()
 
@@ -612,58 +630,206 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
 
         if await is_cancelled(): return
 
-        # 5. SYNTHESIS
+        # 5. SYNTHESIS & CRITIQUE LOOP
+        MAX_ATTEMPTS = 2
+        attempt = 0
+        final_synth = None
+        redundant_plots = []
+
+        while attempt < MAX_ATTEMPTS:
+            attempt += 1
+            print(f"  [Workflow] Synthesis attempt {attempt}/{MAX_ATTEMPTS}...", flush=True)
+
+            with Session(engine) as session:
+                synth_task = Task(
+                    project_id=project_id, 
+                    instruction_id=instruction_id,
+                    description=f"Lead Data Scientist is synthesizing results (Attempt {attempt})...", 
+                    assigned_to="Synthesizer", 
+                    status="running",
+                    heartbeat=datetime.now()
+                )
+                session.add(synth_task)
+                session.commit()
+                session.refresh(synth_task)
+
+                span = trace.span(name=f"Synthesis Attempt {attempt}")
+                trace_context.get().update({
+                    "agent_name": "Synthesizer", 
+                    "task_id": str(synth_task.id),
+                    "parent_observation_id": span.id
+                })
+
+                all_tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
+                context_parts = [f"Task: {t.description}\nStatus: {t.status}\nOutput: {(t.result_json or {}).get('stdout','')[:4000]}" for t in all_tasks]
+                
+                # Fetch actual artifacts to include in context
+                artifacts = session.exec(select(Artifact).where(Artifact.project_id == project_id)).all()
+                artifact_descriptions = [f"Artifact: {a.description} (Type: {a.type})" for a in artifacts]
+                
+                if artifact_descriptions:
+                    context_parts.append("--- GENERATED ARTIFACTS ---\n" + "\n".join(artifact_descriptions))
+
+                context = "\n\n---\n\n".join(context_parts)
+
+                proj = session.get(Project, project_id)
+                existing_narrative = proj.narrative if proj else None
+                existing_takeaways = proj.takeaways if proj else None
+
+                synthesizer = SynthesizerAgent(model=planner_model)
+                synth_res = await synthesizer.run(SynthesizerInput(
+                    objective=objective, 
+                    context_artifacts=context,
+                    existing_narrative=existing_narrative,
+                    existing_takeaways=existing_takeaways
+                ))
+                final_synth = synth_res.content
+                span.end(output=final_synth.model_dump())
+
+                stask = session.get(Task, synth_task.id)
+                if stask:
+                    stask.status = "completed"
+                    stask.result_json = {
+                        "stdout": "Draft generated.", 
+                        "narrative": final_synth.narrative, 
+                        "takeaways": final_synth.key_takeaways,
+                        "model_used": planner_model # Synthesizer currently uses planner_model
+                    }
+                session.commit()
+
+            # Generate draft dashboard for Critique
+            with Session(engine) as session:
+                artifacts = session.exec(select(Artifact).where(Artifact.project_id == project_id)).all()
+                draft_html = create_master_reports(
+                    project_id=project_id, 
+                    workspace_dir=workspace_dir, 
+                    narrative=final_synth.narrative, 
+                    takeaways=final_synth.key_takeaways, 
+                    artifacts=artifacts,
+                    artifact_insights=final_synth.artifact_insights
+                )
+            
+            # Sanitize HTML for Critique context (strip scripts/data blobs)
+            import re
+            sanitized_html = re.sub(r'<script.*?>.*?</script>', '<script>/* JS OMITTED FOR BREVITY */</script>', draft_html, flags=re.DOTALL)
+            if len(sanitized_html) > 100000:
+                sanitized_html = sanitized_html[:50000] + "\n... [TRUNCATED] ...\n" + sanitized_html[-50000:]
+
+            # 6. CRITIQUE
+            if await is_cancelled(): return
+            print(f"  [Workflow] Quality Assurance Critique (Attempt {attempt})...", flush=True)
+            with Session(engine) as session:
+                critique_task = Task(
+                    project_id=project_id,
+                    instruction_id=instruction_id,
+                    description=f"QA Specialist is evaluating synthesis quality (Attempt {attempt})...",
+                    assigned_to="Critique",
+                    status="running",
+                    heartbeat=datetime.now()
+                )
+                session.add(critique_task)
+                session.commit()
+                session.refresh(critique_task)
+
+                span = trace.span(name=f"Critique Attempt {attempt}")
+                trace_context.get().update({
+                    "agent_name": "Critique",
+                    "task_id": str(critique_task.id),
+                    "parent_observation_id": span.id
+                })
+
+                critique_agent = CritiqueAgent(model=critique_model) # Use specialized model for critique
+                critique_res = await critique_agent.run(CritiqueInput(
+                    objective=objective,
+                    context_artifacts=context,
+                    synthesis_narrative=final_synth.narrative,
+                    synthesis_takeaways=final_synth.key_takeaways,
+                    dashboard_html=sanitized_html
+                ))
+                critique = critique_res.content
+                span.end(output=critique.model_dump())
+
+                ctask = session.get(Task, critique_task.id)
+                if ctask:
+                    ctask.status = "completed"
+                    ctask.result_json = {
+                        "stdout": f"Approved: {critique.is_approved}\nFeedback: {critique.critique_feedback}",
+                        "model_used": critique_model
+                    }
+                session.commit()
+
+                if critique.is_approved or attempt >= MAX_ATTEMPTS:
+                    redundant_plots = critique.redundant_artifacts
+                    break
+                else:
+                    # Inject feedback for next attempt
+                    feedback_msg = f"\n\n--- CRITIQUE FEEDBACK (REJECTED) ---\n{critique.critique_feedback}\n\nPlease revise the narrative and takeaways to address these points."
+                    with Session(engine) as session:
+                        proj = session.get(Project, project_id)
+                        if proj:
+                            proj.narrative = (proj.narrative or "") + feedback_msg
+                            session.add(proj)
+                            session.commit()
+
+        # 7. FINAL REPORTING & PRUNING
         with Session(engine) as session:
-            synth_task = Task(
-                project_id=project_id, 
+            reporting_task = Task(
+                project_id=project_id,
                 instruction_id=instruction_id,
-                description="Lead Data Scientist is synthesizing final results...", 
-                assigned_to="Synthesizer", 
+                description="Publishing final dashboard and research reports...",
+                assigned_to="System",
                 status="running",
                 heartbeat=datetime.now()
             )
-            session.add(synth_task)
+            session.add(reporting_task)
             session.commit()
-            session.refresh(synth_task)
-
-            span = trace.span(name="Final Synthesis")
-            trace_context.get().update({
-                "agent_name": "Synthesizer", 
-                "task_id": str(synth_task.id),
-                "parent_observation_id": span.id
-            })
+            session.refresh(reporting_task)
+            hub = ExecutionHub(session)
+            hub.create_outbox_event("TASK_CREATED", {"task_id": str(reporting_task.id), "description": reporting_task.description})
+            session.commit()
 
             artifacts = session.exec(select(Artifact).where(Artifact.project_id == project_id)).all()
-            all_tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
-            context_parts = [f"Task: {t.description}\nStatus: {t.status}\nOutput: {(t.result_json or {}).get('stdout','')[:4000]}" for t in all_tasks]
-            context = "\n\n---\n\n".join(context_parts)
+            
+            # Pruning logic
+            filtered_artifacts = []
+            for a in artifacts:
+                is_redundant = False
+                # Check description and filename
+                desc = a.description.lower()
+                fname = a.content_json.get("filename", "").lower()
+                for r in (redundant_plots or []):
+                    r_low = r.lower()
+                    if r_low in desc or (fname and r_low in fname):
+                        is_redundant = True
+                        break
+                if not is_redundant:
+                    filtered_artifacts.append(a)
+                else:
+                    print(f"  [Workflow] Pruning redundant artifact: {a.description}", flush=True)
 
-            proj = session.get(Project, project_id)
-            existing_narrative = proj.narrative if proj else None
-            existing_takeaways = proj.takeaways if proj else None
+            create_master_reports(
+                project_id=project_id, 
+                workspace_dir=workspace_dir, 
+                narrative=final_synth.narrative, 
+                takeaways=final_synth.key_takeaways, 
+                artifacts=filtered_artifacts,
+                artifact_insights=final_synth.artifact_insights
+            )
 
-            synthesizer = SynthesizerAgent(model=planner_model)
-            synth_res = await synthesizer.run(SynthesizerInput(
-                objective=objective, 
-                context_artifacts=context,
-                existing_narrative=existing_narrative,
-                existing_takeaways=existing_takeaways
-            ))
-            span.end(output=synth_res.content.model_dump())
-            create_master_reports(project_id=project_id, workspace_dir=workspace_dir, narrative=synth_res.content.narrative, takeaways=synth_res.content.key_takeaways, artifacts=artifacts)
-
-        with Session(engine) as session:
-            stask = session.get(Task, synth_task.id)
-            if stask:
-                stask.status = "completed"
-                stask.result_json = {"stdout": "Narrative generated.", "narrative": synth_res.content.narrative, "takeaways": synth_res.content.key_takeaways}
             proj = session.get(Project, project_id)
             if proj:
-                proj.narrative = synth_res.content.narrative
-                proj.takeaways = synth_res.content.key_takeaways
+                proj.narrative = final_synth.narrative
+                proj.takeaways = final_synth.key_takeaways
+            
+            # Mark reporting task complete
+            rtask = session.get(Task, reporting_task.id)
+            if rtask:
+                rtask.status = "completed"
+                rtask.result_json = {"stdout": "Dashboard published successfully (QA warnings may apply)." if not critique.is_approved else "Dashboard published successfully."}
             session.commit()
+
             hub = ExecutionHub(session)
-            hub.create_outbox_event("WORKFLOW_FINAL_RESULT", {"narrative": synth_res.content.narrative, "takeaways": synth_res.content.key_takeaways})
+            hub.create_outbox_event("WORKFLOW_FINAL_RESULT", {"narrative": final_synth.narrative, "takeaways": final_synth.key_takeaways})
             hub.create_outbox_event("STATE_UPDATED", {"files": _get_recursive_files(workspace_dir), "state": executor.authoritative_state})
             hub.create_outbox_event("STEP_COMPLETED", {"message": "Project complete."})
             session.commit()

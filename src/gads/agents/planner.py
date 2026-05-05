@@ -34,6 +34,7 @@ class PlannerInput(BaseModel):
     available_files: List[FileMetadata]
     knowledge_report: Optional[ReconciliationReport] = None
     available_skills: List[Dict[str, Any]] = []
+    critique_feedback: Optional[str] = None
 
 
 class PlannerOutput(BaseModel):
@@ -74,9 +75,13 @@ class DataSciencePlanner(BaseAgent[PlannerInput, PlannerOutput]):
             skills_json=skills_str
         )
         
+        user_content = f"USER OBJECTIVE: {input_data.objective}"
+        if input_data.critique_feedback:
+            user_content += f"\n\n--- PREVIOUS ATTEMPT REJECTED BY QA ---\nQA Feedback: {input_data.critique_feedback}\n\nTasks previously executed:\n{knowledge_str}\n\nPlease generate a new plan that specifically addresses the missing requirements noted by QA."
+
         messages = [
             {"role": "system", "content": formatted_prompt},
-            {"role": "user", "content": f"USER OBJECTIVE: {input_data.objective}"}
+            {"role": "user", "content": user_content}
         ]
         
         from gads.core.llm import get_structured_completion

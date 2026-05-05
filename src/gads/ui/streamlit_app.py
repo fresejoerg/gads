@@ -42,78 +42,86 @@ st.markdown("""
 
     /* LAUNCH WORKFLOW - Green */
     div[class*="st-key-btn_launch"] button {
-        background-color: #E8F5E9 !important;
-        color: #2E7D32 !important;
-        border: 1px solid #2E7D32 !important;
+        background-color: #2E7D32 !important;
+        color: #FFFFFF !important;
+        border: none !important;
     }
     div[class*="st-key-btn_launch"] button:hover {
-        background-color: #C8E6C9 !important;
+        background-color: #1B5E20 !important;
     }
 
     /* CANCEL - Red */
     div[class*="st-key-btn_cancel"] button {
-        background-color: #FFEBEE !important;
-        color: #C62828 !important;
-        border: 1px solid #C62828 !important;
+        background-color: #C62828 !important;
+        color: #FFFFFF !important;
+        border: none !important;
     }
     div[class*="st-key-btn_cancel"] button:hover {
-        background-color: #FFCDD2 !important;
+        background-color: #B71C1C !important;
     }
 
-    /* NEW PROJECT - Yellow */
+    /* NEW PROJECT - Orange */
     div[class*="st-key-btn_new"] button {
-        background-color: #FFFDE7 !important;
-        color: #F57F17 !important;
-        border: 1px solid #F57F17 !important;
+        background-color: #F57F17 !important;
+        color: #FFFFFF !important;
+        border: none !important;
     }
     div[class*="st-key-btn_new"] button:hover {
-        background-color: #FFF9C4 !important;
+        background-color: #E65100 !important;
     }
 
-    /* REFRESH - Orange */
+    /* REFRESH - Deep Orange */
     div[class*="st-key-btn_refresh"] button {
-        background-color: #FFF3E0 !important;
-        color: #E65100 !important;
-        border: 1px solid #E65100 !important;
+        background-color: #E65100 !important;
+        color: #FFFFFF !important;
+        border: none !important;
     }
     div[class*="st-key-btn_refresh"] button:hover {
-        background-color: #FFE0B2 !important;
+        background-color: #BF360C !important;
     }
     
     /* MOUNT - Blue */
     div[class*="st-key-btn_mount"] button {
-        background-color: #E3F2FD !important;
-        color: #1565C0 !important;
-        border: 1px solid #1565C0 !important;
+        background-color: #1565C0 !important;
+        color: #FFFFFF !important;
+        border: none !important;
     }
     div[class*="st-key-btn_mount"] button:hover {
-        background-color: #BBDEFB !important;
+        background-color: #0D47A1 !important;
     }
     
     /* ARCHIVE LOAD - Blue */
     div[class*="st-key-load_"] button {
-        background-color: #E3F2FD !important;
-        color: #1565C0 !important;
-        border: 1px solid #1565C0 !important;
+        background-color: #1565C0 !important;
+        color: #FFFFFF !important;
+        border: none !important;
     }
     div[class*="st-key-load_"] button:hover {
-        background-color: #BBDEFB !important;
+        background-color: #0D47A1 !important;
     }
 
     /* ARCHIVE DELETE - Red */
     div[class*="st-key-del_"] button {
-        background-color: #FFEBEE !important;
-        color: #C62828 !important;
-        border: 1px solid #C62828 !important;
+        background-color: #C62828 !important;
+        color: #FFFFFF !important;
+        border: none !important;
     }
     div[class*="st-key-del_"] button:hover {
-        background-color: #FFCDD2 !important;
+        background-color: #B71C1C !important;
     }
 
     /* Global button resets to prevent theme overrides */
-    .stButton > button {
+    .stButton > button, button[kind="primary"], button[kind="secondary"] {
         box-shadow: none !important;
         text-transform: none !important;
+        padding: 0px 1rem !important;
+        min-height: 2.1rem !important;
+        height: 2.1rem !important;
+        font-size: 0.85rem !important;
+        line-height: 1 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
     }
 
     /* Archive Styling */
@@ -363,16 +371,13 @@ def render_archive_panel():
             
             cols[1].markdown(meta_html, unsafe_allow_html=True)
 
-            btn_cols = cols[2].columns(2)
-            # LOAD button
-            with btn_cols[0]:
-                if st.button("LOAD", key=f"load_{p_id}", use_container_width=True):
+            # Action buttons (Stacked vertically)
+            with cols[2]:
+                if st.button("LOAD", key=f"load_{p_id}", help="Load this project into the orchestrator.", use_container_width=True):
                     st.session_state.current_project_id = p_id
                     st.rerun()
             
-            # Delete button (Secondary)
-            with btn_cols[1]:
-                if st.button("🗑️", key=f"del_{p_id}", use_container_width=True):
+                if st.button("DELETE", key=f"del_{p_id}", use_container_width=True):
                     api_delete(f"/projects/{p_id}")
                     if st.session_state.current_project_id == p_id:
                         st.session_state.current_project_id = None
@@ -398,11 +403,13 @@ def render_orchestrator_panel():
 
     st.session_state.local_only_mode = head_col2.toggle(
         "LOCAL ONLY", 
-        value=st.session_state.local_only_mode
+        value=st.session_state.local_only_mode,
+        help="Force the system to use local LLM models (e.g. Ollama) instead of cloud APIs."
     )
     st.session_state.random_routing_mode = head_col3.toggle(
         "RANDOM ROUTING", 
-        value=st.session_state.random_routing_mode
+        value=st.session_state.random_routing_mode,
+        help="Bypass the Planner and randomly route the objective to a worker agent (for testing)."
     )
     api_post("/config", {
         "local_only": st.session_state.local_only_mode,
@@ -424,7 +431,7 @@ def render_orchestrator_panel():
     ctrl_cols = st.columns(4)
     
     with ctrl_cols[0]:
-        if st.button("LAUNCH WORKFLOW", key="btn_launch", use_container_width=True):
+        if st.button("LAUNCH", key="btn_launch", help="Start the multi-agent analysis workflow for the provided objective.", use_container_width=True):
             if objective:
                 payload = {
                     "name": f"Project {datetime.now().strftime('%m-%d %H:%M')}", 
@@ -439,18 +446,18 @@ def render_orchestrator_panel():
                 st.warning("Objective required.")
 
     with ctrl_cols[1]:
-        if st.button("CANCEL", key="btn_cancel", use_container_width=True):
+        if st.button("CANCEL", key="btn_cancel", help="Interrupt and cancel the currently running workflow.", use_container_width=True):
             if st.session_state.current_project_id:
                 api_post(f"/projects/{st.session_state.current_project_id}/cancel")
                 st.toast("Cancellation requested.")
 
     with ctrl_cols[2]:
-        if st.button("NEW PROJECT", key="btn_new", use_container_width=True):
+        if st.button("NEW", key="btn_new", help="Clear the workspace to start a new project from scratch.", use_container_width=True):
             st.session_state.current_project_id = None
             st.rerun()
         
     with ctrl_cols[3]:
-        if st.button("REFRESH", key="btn_refresh", use_container_width=True):
+        if st.button("REFRESH", key="btn_refresh", help="Manually refresh the UI state.", use_container_width=True):
             st.rerun()
 
     st.markdown("---")
@@ -495,7 +502,12 @@ def render_orchestrator_panel():
                 elif t['status'] == "running": st_icon = "🔵"
                 
                 with st.expander(f"{st_icon} {t['description'][:85]}...", expanded=(t['status'] == "running")):
+                    res = t.get("result_json") or {}
+                    model_name = res.get("model_used")
+                    
                     st.caption(f"Worker: `{t['assigned_to']}`")
+                    if model_name:
+                        st.caption(f"Model: `{model_name}`")
                     
                     if t['status'] == "running":
                         stream_data = api_get(f"/tasks/{t['id']}/stream")
@@ -537,7 +549,7 @@ def render_grounding_panel():
     if os.path.exists(host_datasets_root):
         files = sorted([f for f in os.listdir(host_datasets_root) if os.path.isfile(os.path.join(host_datasets_root, f))])
         selected = st.selectbox("Mount", options=["--- Select to Mount ---"] + files, label_visibility="collapsed")
-        if st.button("MOUNT", key="btn_mount", use_container_width=True) and selected != "--- Select to Mount ---":
+        if st.button("MOUNT", key="btn_mount", help="Link the selected external dataset into the current project workspace.", use_container_width=True) and selected != "--- Select to Mount ---":
             # AUTO-CREATE PROJECT IF NONE LOADED
             if not st.session_state.current_project_id:
                 payload = {
@@ -586,7 +598,7 @@ def render_grounding_panel():
     render_state_explorer()
 
 # --- MAIN LAYOUT ---
-col_archive, col_orch, col_ground = st.columns([2.0, 2.0, 1.0])
+col_archive, col_orch, col_ground = st.columns([1.6, 3.2, 1.2])
 
 with col_archive:
     render_knowledge_panel()

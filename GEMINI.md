@@ -16,6 +16,18 @@ The Streamlit interface for project management.
 ./scripts/run_streamlit.sh
 ```
 
+## Engineering Standards & Output Fidelity
+
+### 1. Strict Requirement Enforcement (Critique)
+The `CritiqueAgent` is configured with **STRICT** adherence rules. If a user objective contains a specific quantitative or structural request (e.g., "list the top 5", "show a table of X"), that request MUST be fulfilled by a visual artifact (Plotly chart or table). 
+- A narrative description alone is a **FAILURE**.
+- Missing artifacts for specific requests will trigger a **REJECTION** and a synthesis retry.
+
+### 2. Tabular Visualization Standard
+For any request involving specific records, "Top N" lists, or small dataframes, use the `tabular_visualization` skill:
+- **Requirement**: Use `plotly.graph_objects.Table`.
+- **Persistence**: Save as an interactive HTML artifact so it appears in the final dashboard.
+
 ## Verification & Health Checks
 - **Backend Health**: `curl http://localhost:8001/health` -> `{"status": "ok"}`
 - **UI Accessibility**: Verify port `8003` is listening.

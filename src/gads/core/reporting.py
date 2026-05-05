@@ -1,5 +1,5 @@
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import uuid
 
 def create_master_reports(
@@ -7,12 +7,22 @@ def create_master_reports(
     workspace_dir: str,
     narrative: str,
     takeaways: List[str],
-    artifacts: List[Any]
+    artifacts: List[Any],
+    artifact_insights: Optional[List[Any]] = None
 ):
     """
     Assembles the final integrated HTML dashboard and Markdown research report.
     """
-    
+    insights_map = {}
+    if artifact_insights:
+        # artifact_insights can be list of dicts or pydantic models
+        for ins in artifact_insights:
+            if hasattr(ins, 'model_dump'):
+                data = ins.model_dump()
+            else:
+                data = ins
+            insights_map[data.get('artifact_id')] = data
+
     # 1. Generate Markdown Report
     takeaways_md = "\n".join([f"- {t}" for t in takeaways])
     md_content = f"""# Research Report: Project {project_id}
@@ -37,7 +47,6 @@ The following artifacts were generated during this analysis:
         f.write(md_content)
 
     # 2. Generate Integrated HTML Dashboard
-    # Filter for interactive plots and capture their descriptions
     cards_html = ""
     for a in artifacts:
         if a.type == "interactive_plot":
@@ -46,19 +55,36 @@ The following artifacts were generated during this analysis:
             if os.path.exists(fpath):
                 with open(fpath, "r") as pf:
                     content = pf.read()
-                    # Extract the Plotly div AND the script part
-                    # Plotly HTMLs usually look like: ...<div>...</div> <script>...</script> ...
                     if "<body" in content:
                         inner = content.split("<body")[1].split(">", 1)[1].split("</body>")[0]
                     else:
                         inner = content
                     
+                    # Find matching insight
+                    # Try matching by filename or description (which might contain Figure N)
+                    insight = insights_map.get(fname)
+                    if not insight:
+                        # Try matching Figure label in description
+                        for key in insights_map.keys():
+                            if key.lower() in a.description.lower():
+                                insight = insights_map[key]
+                                break
+                    
+                    ctx_text = insight.get('contextual_text', "") if insight else ""
+                    caption = insight.get('caption', f"Context: Verified by CodeGenerator as part of the analysis workflow.") if insight else "Context: Verified by CodeGenerator as part of the analysis workflow."
+
+                    if ctx_text:
+                        ctx_html = f"<div class='insight-text'>{ctx_text}</div>"
+                    else:
+                        ctx_html = ""
+
                     cards_html += f"""
                     <div class='card'>
                         <h2>{a.description}</h2>
+                        {ctx_html}
                         <div class='plot-container'>{inner}</div>
                         <div class='card-footer'>
-                            <strong>Context:</strong> Verified by CodeGenerator as part of the analysis workflow.
+                            <strong>{caption}</strong>
                         </div>
                     </div>
                     """
@@ -77,7 +103,8 @@ The following artifacts were generated during this analysis:
             .report-body {{ background: #ffffff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }}
             .card {{ border: 1px solid #cbd5e1; border-radius: 12px; padding: 25px; margin: 30px 0; background: #ffffff; }}
             .plot-container {{ min-height: 400px; }}
-            .card-footer {{ margin-top: 15px; font-size: 0.9rem; color: #64748b; font-style: italic; border-top: 1px solid #f1f5f9; padding-top: 10px; }}
+            .insight-text {{ font-size: 1.05rem; color: #475569; margin-bottom: 20px; padding: 15px; background: #f8fafc; border-radius: 8px; border-left: 4px solid #94a3b8; }}
+            .card-footer {{ margin-top: 15px; font-size: 0.95rem; color: #1e293b; border-top: 1px solid #f1f5f9; padding-top: 10px; }}
             h1, h2, h3 {{ color: #0f172a; }}
             .takeaways {{ background: #eff6ff; border-left: 4px solid #3b82f6; padding: 25px; margin: 30px 0; border-radius: 0 8px 8px 0; }}
             .narrative {{ font-size: 1.15rem; color: #334155; margin-bottom: 40px; white-space: pre-wrap; background: #fff; }}
@@ -112,3 +139,5 @@ The following artifacts were generated during this analysis:
     
     with open(os.path.join(workspace_dir, "final_dashboard.html"), "w") as f:
         f.write(html_content)
+
+    return html_content

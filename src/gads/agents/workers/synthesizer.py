@@ -9,9 +9,15 @@ class SynthesizerInput(BaseModel):
     existing_narrative: Optional[str] = None
     existing_takeaways: Optional[List[str]] = None
 
+class ArtifactInsight(BaseModel):
+    artifact_id: str = Field(description="The ID or filename of the artifact (e.g., 'Figure 1' or 'table_1.html').")
+    contextual_text: str = Field(description="Paragraph explaining what this visualization illustrates in the context of the objective.")
+    caption: str = Field(description="A concise, descriptive caption for the visualization.")
+
 class SynthesizerOutput(BaseModel):
     narrative: str = Field(description="The final human-friendly response or story.")
     key_takeaways: List[str] = Field(description="Bullet points of the most important findings.")
+    artifact_insights: List[ArtifactInsight] = Field(default_factory=list, description="Specific context and captions for each visualization generated.")
 
 class SynthesizerAgent(BaseAgent[SynthesizerInput, SynthesizerOutput]):
     def __init__(self, model: str = "claude-opus-4.7"):

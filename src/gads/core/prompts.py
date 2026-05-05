@@ -166,7 +166,13 @@ RULES:
 4. GROUNDING: Refer to actual artifact filenames when appropriate (e.g., 'the correlation matrix saved in Figure 2 (correlation.html)...').
 5. AMENDMENTS: If the user is asking a follow-up question, you will receive the EXISTING NARRATIVE and EXISTING TAKEAWAYS. You MUST seamlessly integrate the new findings into the existing story. Expand the report. DO NOT delete or ignore the previous findings.
 6. If there were errors, explain them simply.
-7. CRITICAL: You MUST return a valid JSON object containing ONLY the 'narrative' and 'key_takeaways' fields. 
+7. ARTIFACT INSIGHTS (DASHBOARD INTEGRATION): 
+   - For every interactive plot or table provided in the context, you MUST generate an entry in the `artifact_insights` list.
+   - `artifact_id`: MUST match the filename or the "Figure N" label from the task description EXACTLY.
+   - `contextual_text`: Write a clear paragraph (3-4 sentences) that will appear DIRECTLY ABOVE the visualization in the dashboard. It should explain what the chart shows and why it matters.
+   - `caption`: A one-sentence, professional caption for the chart (e.g., "Figure 1: Distribution of sentiment scores across product categories").
+8. NO HALLUCINATIONS: Do NOT refer to "Figure 2" if only one figure exists. Only refer to artifacts explicitly listed in the 'GENERATED ARTIFACTS' section of the context.
+9. CRITICAL: You MUST return a valid JSON object containing 'narrative', 'key_takeaways', AND 'artifact_insights'.
    Do NOT include any metadata, schema definitions, or 'properties' wrappers.
 
 ## PREVIOUS REPORT STATE
@@ -177,6 +183,29 @@ RULES:
 You are a precise NLP Extraction specialist. 
 Your task is to identify key entities in the provided text and categorize them.
 Be extremely literal and only extract what is present in the text.
+""".strip(),
+
+    "Critique": """
+You are a Senior Data Science Quality Assurance Specialist.
+Your goal is to evaluate an agent-generated synthesis for logical consistency, adherence to user intent, and visualization quality.
+
+### EVALUATION CRITERIA:
+1. **Adherence to Intent (STRICT)**: 
+   - Does the synthesis directly answer the user's objective?
+   - **SPECIFIC REQUIREMENTS**: If the user asked for a specific output (e.g., "list the top 5", "show a table", "count X"), that output MUST exist as a visual artifact embedded in the `FINAL DASHBOARD HTML`. 
+   - If a specific requested output is missing from the dashboard HTML, you MUST fail the evaluation (`is_approved = False`).
+2. **Logical Consistency**: Are the claims supported by the provided task outputs?
+3. **Visualization Integrity**: 
+   - Are there multiple plots showing the same information?
+   - Do the plots mentioned in the narrative actually correspond to the rendered dashboard artifacts?
+   - Is there "Figure N" clutter or references to non-existent figures?
+4. **Tone & Clarity**: Is the narrative professional, concise, and free of agentic "filler" (e.g., "I have performed the task...")?
+
+### OUTPUT FORMAT:
+You MUST provide:
+- `is_approved`: Boolean (True ONLY if all specific user requirements are met and visible in artifacts).
+- `critique_feedback`: String (Specific, actionable feedback if False; "Looks good" if True).
+- `redundant_artifacts`: List of strings (Filenames of redundant or poor-quality plots to be removed).
 """.strip()
 }
 
@@ -185,7 +214,8 @@ REQUIRED_VARS = {
     "Router": ["recipes_json"],
     "CodeGenerator": ["skills_context", "contract_json", "state_summary", "files_list"],
     "Synthesizer": ["previous_state"],
-    "NLPExtractor": []
+    "NLPExtractor": [],
+    "Critique": []
 }
 
 class PromptRegistry:
