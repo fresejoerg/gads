@@ -883,6 +883,21 @@ def get_spec_content(filename: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to read spec: {e}")
 
+class SpecContent(BaseModel):
+    content: str
+
+@app.post("/specs/{filename}")
+def save_spec_content(filename: str, req: SpecContent):
+    specs_dir = Path("specs").resolve()
+    target = (specs_dir / filename).resolve()
+    if not target.is_relative_to(specs_dir) or target.suffix != ".md":
+        raise HTTPException(status_code=400, detail="Invalid path")
+    try:
+        target.write_text(req.content, encoding='utf-8')
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save spec: {e}")
+
 class SpecLaunchRequest(BaseModel):
     filename: str
     launch_workflow: bool = True

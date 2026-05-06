@@ -474,14 +474,35 @@ def render_orchestrator_panel():
             st.info("No `.md` spec documents found in the `specs/` directory.")
 
     if "view_spec" in st.session_state and st.session_state.view_spec:
-        @st.dialog(f"Spec Content: {st.session_state.view_spec}")
+        @st.dialog(f"Edit Spec: {st.session_state.view_spec}", width="large")
         def show_spec():
-            spec_data = api_get(f"/specs/{st.session_state.view_spec}")
-            if spec_data and "content" in spec_data:
-                st.markdown("```markdown\n" + spec_data["content"] + "\n```")
-            else:
-                st.error("Failed to load spec content.")
-            if st.button("Close", use_container_width=True):
+            if "spec_buffer" not in st.session_state:
+                spec_data = api_get(f"/specs/{st.session_state.view_spec}")
+                st.session_state.spec_buffer = spec_data.get("content", "") if spec_data else ""
+            
+            new_content = st_ace(
+                value=st.session_state.spec_buffer,
+                language="markdown",
+                theme="monokai",
+                height=500,
+                wrap=True,
+                key="ace_spec_editor"
+            )
+            st.session_state.spec_buffer = new_content
+            
+            col1, col2 = st.columns(2)
+            if col1.button("SAVE CHANGES", use_container_width=True, type="primary"):
+                res = api_post(f"/specs/{st.session_state.view_spec}", {"content": new_content})
+                if res and res.get("status") == "success":
+                    st.toast("Spec saved successfully.")
+                    del st.session_state.spec_buffer
+                    st.session_state.view_spec = None
+                    st.rerun()
+                else:
+                    st.error("Failed to save spec.")
+            
+            if col2.button("CLOSE", use_container_width=True):
+                del st.session_state.spec_buffer
                 st.session_state.view_spec = None
                 st.rerun()
         show_spec()
