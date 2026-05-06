@@ -204,6 +204,23 @@ def api_delete(path):
     except Exception:
         return None
 
+def render_banner():
+    img_path = "/home/joergf/Generated Image May 05, 2026 - 10_53PM.png"
+    if os.path.exists(img_path):
+        try:
+            with open(img_path, "rb") as f:
+                data = base64.b64encode(f.read()).decode("utf-8")
+                st.markdown(
+                    f"""
+                    <div style="display: flex; justify-content: center; align-items: center; margin-top: -3rem; margin-bottom: 1rem;">
+                        <img src="data:image/png;base64,{data}" style="height: 180px; filter: drop-shadow(0px 4px 8px rgba(0,0,0,0.1));">
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        except Exception as e:
+            st.error(f"Error loading banner: {e}")
+
 # --- UI LOGIC ---
 
 def render_knowledge_panel():
@@ -684,6 +701,8 @@ def render_grounding_panel():
     render_state_explorer()
 
 # --- MAIN LAYOUT ---
+render_banner()
+
 col_archive, col_orch, col_ground = st.columns([1.6, 3.2, 1.2])
 
 with col_archive:
