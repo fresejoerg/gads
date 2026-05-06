@@ -110,6 +110,26 @@ st.markdown("""
         background-color: #B71C1C !important;
     }
 
+    /* VIEW SPEC - Yellow */
+    div[class*="st-key-btn_view_spec"] button {
+        background-color: #FBC02D !important;
+        color: #000000 !important;
+        border: none !important;
+    }
+    div[class*="st-key-btn_view_spec"] button:hover {
+        background-color: #F9A825 !important;
+    }
+
+    /* LOAD SPEC - Blue */
+    div[class*="st-key-btn_load_spec"] button {
+        background-color: #1976D2 !important;
+        color: #FFFFFF !important;
+        border: none !important;
+    }
+    div[class*="st-key-btn_load_spec"] button:hover {
+        background-color: #1565C0 !important;
+    }
+
     /* Global button resets to prevent theme overrides */
     .stButton > button, button[kind="primary"], button[kind="secondary"] {
         box-shadow: none !important;
