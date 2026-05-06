@@ -212,8 +212,8 @@ def render_banner():
                 data = base64.b64encode(f.read()).decode("utf-8")
                 st.markdown(
                     f"""
-                    <div style="display: flex; justify-content: center; align-items: center; margin-top: -3rem; margin-bottom: 1rem;">
-                        <img src="data:image/png;base64,{data}" style="height: 180px; filter: drop-shadow(0px 4px 8px rgba(0,0,0,0.1));">
+                    <div style="display: flex; justify-content: flex-start; align-items: center; margin-top: -3rem; margin-bottom: 1rem;">
+                        <img src="data:image/png;base64,{data}" style="height: 220px; filter: drop-shadow(0px 4px 8px rgba(0,0,0,0.1));">
                     </div>
                     """,
                     unsafe_allow_html=True
