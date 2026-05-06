@@ -4,11 +4,13 @@ import traceback
 import json
 import base64
 import os
+import yaml
+from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import uuid
 from gads.core.bus import bus, dispatcher_loop
 from gads.core.execution_hub import watchdog_loop, ExecutionHub
@@ -103,6 +105,11 @@ class RecipeContent(BaseModel):
 
 class PromptUpdate(BaseModel):
     content: str
+
+class ProjectSpecMetadata(BaseModel):
+    name: Optional[str] = None
+    datasets: List[str] = Field(default_factory=list)
+    recipes: List[str] = Field(default_factory=list)
 
 @app.on_event("startup")
 async def startup_event():
@@ -855,6 +862,108 @@ async def websocket_endpoint(websocket: WebSocket, last_seq: int = 0):
         while True: await websocket.receive_text()
     except WebSocketDisconnect: bus.disconnect(websocket)
 
+@app.get("/specs")
+def list_specs():
+    specs_dir = Path("specs").resolve()
+    if not specs_dir.exists():
+        return []
+    files = [f.name for f in specs_dir.iterdir() if f.is_file() and f.suffix == ".md"]
+    return sorted(files)
+
+class SpecLaunchRequest(BaseModel):
+    filename: str
+
+@app.post("/projects/from-spec", response_model=ProjectResponse)
+async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundTasks):
+    specs_dir = Path("specs").resolve()
+    target = (specs_dir / req.filename).resolve()
+    if not target.is_relative_to(specs_dir) or target.suffix != ".md":
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="Spec file not found")
+    
+    datasets_root = Path(os.getenv("GADS_DATASETS_ROOT", "/home/joergf/datasets")).resolve()
+
+    try:
+        content = target.read_text(encoding='utf-8')
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read spec: {e}")
+
+    # Parse YAML frontmatter
+    yaml_data = {}
+    objective = content
+    if content.startswith("---"):
+        parts = content.split("---", 2)
+        if len(parts) >= 3:
+            try:
+                yaml_data = yaml.safe_load(parts[1]) or {}
+                objective = parts[2].strip()
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Invalid YAML frontmatter: {e}")
+
+    try:
+        meta = ProjectSpecMetadata(**yaml_data)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Schema validation failed: {e}")
+
+    # Pre-flight validation
+    # 1. Datasets
+    for ds in meta.datasets:
+        ds_path = (datasets_root / ds).resolve()
+        if not ds_path.is_relative_to(datasets_root) or not ds_path.exists():
+            raise HTTPException(status_code=400, detail=f"Dataset not found or invalid: {ds}")
+            
+    # 2. Recipes
+    for recipe in meta.recipes:
+        try:
+            registry.get_raw_recipe(recipe)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Recipe not found: {recipe}")
+
+    # Transactional Execution
+    with Session(engine) as session:
+        project_name = meta.name or f"Project {datetime.now().strftime('%m-%d %H:%M')} (from spec)"
+        project = Project(name=project_name, objective=objective)
+        session.add(project)
+        session.flush() # Get ID without fully committing yet
+        
+        instruction_content = objective
+        if meta.recipes:
+            instruction_content += f"\n\n--- PREFERRED RECIPES ---\nPlease prioritize the following recipes for this objective: {', '.join(meta.recipes)}"
+            
+        instruction = Instruction(project_id=project.id, content=instruction_content)
+        session.add(instruction)
+        
+        workspace_dir = f"{WORKSPACE_ROOT}/{project.id}"
+        
+        try:
+            os.makedirs(workspace_dir, exist_ok=True)
+            for ds in meta.datasets:
+                ds_path = (datasets_root / ds).resolve()
+                _mount_external_dataset(workspace_dir, str(ds_path))
+        except Exception as e:
+            # Rollback DB and filesystem
+            session.rollback()
+            if os.path.exists(workspace_dir):
+                import shutil
+                shutil.rmtree(workspace_dir)
+            raise HTTPException(status_code=500, detail=f"Failed to setup workspace: {e}")
+            
+        session.commit()
+        session.refresh(project)
+        
+        background_tasks.add_task(run_agent_workflow, project.id, objective, instruction.id)
+        
+        current_files = _get_recursive_files(workspace_dir)
+        instructions = session.exec(select(Instruction).where(Instruction.project_id == project.id).order_by(Instruction.created_at.asc())).all()
+        
+        return ProjectResponse(
+            project=ProjectRead.from_orm(project), 
+            files=[f["name"] for f in current_files],
+            instructions=[InstructionRead.from_orm(i) for i in instructions]
+        )
+
+
 @app.get("/projects/{project_id}", response_model=Dict[str, Any])
 async def get_project_details(project_id: uuid.UUID):
     with Session(engine) as session:
@@ -966,27 +1075,37 @@ async def create_project(req: ProjectCreateRequest, background_tasks: Background
             files=[f["name"] for f in current_files],
             instructions=[InstructionRead.from_orm(i) for i in instructions]
         )
+def _mount_external_dataset(workspace_dir: str, host_path: str):
+    """Securely symlinks an external dataset into the workspace."""
+    if not os.path.lexists(host_path):
+        raise FileNotFoundError(f"Path not found: {host_path}")
+        
+    os.makedirs(workspace_dir, exist_ok=True)
+    filename = os.path.basename(host_path)
+    target_path = os.path.join(workspace_dir, filename)
+    
+    try:
+        if os.path.lexists(target_path):
+            if os.path.islink(target_path): os.unlink(target_path)
+            else: os.remove(target_path)
+        
+        os.symlink(host_path, target_path)
+    except Exception as e:
+        raise Exception(f"Failed to create symlink: {e}")
+
 @app.post("/projects/{project_id}/register-external", response_model=ProjectResponse)
 async def register_external_file(project_id: uuid.UUID, req: ExternalPathRequest):
     with Session(engine) as session:
         project = session.get(Project, project_id)
         if not project: raise HTTPException(status_code=404, detail="Project not found")
-        host_path = req.path
-        if not os.path.lexists(host_path): raise HTTPException(status_code=400, detail="Path not found")
         
         workspace_dir = f"{WORKSPACE_ROOT}/{project_id}"
-        os.makedirs(workspace_dir, exist_ok=True)
-        filename = os.path.basename(host_path)
-        target_path = os.path.join(workspace_dir, filename)
-        
         try:
-            if os.path.lexists(target_path):
-                if os.path.islink(target_path): os.unlink(target_path)
-                else: os.remove(target_path)
-            
-            os.symlink(host_path, target_path)
+            _mount_external_dataset(workspace_dir, req.path)
+        except FileNotFoundError:
+            raise HTTPException(status_code=400, detail="Path not found")
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Failed to create symlink: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
         
         current_files = _get_recursive_files(workspace_dir)
         hub = ExecutionHub(session)
