@@ -870,8 +870,22 @@ def list_specs():
     files = [f.name for f in specs_dir.iterdir() if f.is_file() and f.suffix == ".md"]
     return sorted(files)
 
+@app.get("/specs/{filename}")
+def get_spec_content(filename: str):
+    specs_dir = Path("specs").resolve()
+    target = (specs_dir / filename).resolve()
+    if not target.is_relative_to(specs_dir) or target.suffix != ".md":
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="Spec file not found")
+    try:
+        return {"content": target.read_text(encoding='utf-8')}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to read spec: {e}")
+
 class SpecLaunchRequest(BaseModel):
     filename: str
+    launch_workflow: bool = True
 
 @app.post("/projects/from-spec", response_model=ProjectResponse)
 async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundTasks):
@@ -952,7 +966,8 @@ async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundT
         session.commit()
         session.refresh(project)
         
-        background_tasks.add_task(run_agent_workflow, project.id, objective, instruction.id)
+        if req.launch_workflow:
+            background_tasks.add_task(run_agent_workflow, project.id, objective, instruction.id)
         
         current_files = _get_recursive_files(workspace_dir)
         instructions = session.exec(select(Instruction).where(Instruction.project_id == project.id).order_by(Instruction.created_at.asc())).all()

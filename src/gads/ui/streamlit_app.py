@@ -421,13 +421,58 @@ def render_orchestrator_panel():
     else:
         st.markdown("<div class='active-badge'>NO PROJECT LOADED</div>", unsafe_allow_html=True)
 
-    # 1. Objective Input
+    # 1. Spec Launcher
+    with st.expander("LAUNCH FROM SPEC", expanded=False):
+        specs = api_get("/specs")
+        if specs:
+            spec_cols = st.columns([0.4, 0.2, 0.2, 0.2])
+            selected_spec = spec_cols[0].selectbox("Select Spec Document", options=specs, label_visibility="collapsed")
+            
+            if spec_cols[1].button("VIEW SPEC", key="btn_view_spec", use_container_width=True):
+                st.session_state.view_spec = selected_spec
+                
+            if spec_cols[2].button("LOAD SPEC", key="btn_load_spec", use_container_width=True):
+                with st.spinner("Loading..."):
+                    res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": False})
+                    if res and "project" in res:
+                        st.toast("Spec loaded successfully!")
+                        st.session_state.current_project_id = res["project"]["id"]
+                        st.rerun()
+                    else:
+                        st.error(res.get("detail", "Failed to load spec.")) if res else st.error("Failed to connect to backend.")
+                        
+            if spec_cols[3].button("LAUNCH", key="btn_launch_spec", type="primary", use_container_width=True):
+                with st.spinner("Launching..."):
+                    res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": True})
+                    if res and "project" in res:
+                        st.toast("Spec launched successfully!")
+                        st.session_state.current_project_id = res["project"]["id"]
+                        st.rerun()
+                    else:
+                        st.error(res.get("detail", "Failed to launch spec.")) if res else st.error("Failed to connect to backend.")
+        else:
+            st.info("No `.md` spec documents found in the `specs/` directory.")
+
+    if "view_spec" in st.session_state and st.session_state.view_spec:
+        @st.dialog(f"Spec Content: {st.session_state.view_spec}")
+        def show_spec():
+            spec_data = api_get(f"/specs/{st.session_state.view_spec}")
+            if spec_data and "content" in spec_data:
+                st.markdown("```markdown\n" + spec_data["content"] + "\n```")
+            else:
+                st.error("Failed to load spec content.")
+            if st.button("Close", use_container_width=True):
+                st.session_state.view_spec = None
+                st.rerun()
+        show_spec()
+
+    # 2. Objective Input
     objective = st.text_area("Research Objective", 
                             placeholder="Describe your data science goal...", 
                             height=100, 
                             label_visibility="collapsed")
     
-    # 2. Control Bar
+    # 3. Control Bar
     ctrl_cols = st.columns(4)
     
     with ctrl_cols[0]:
