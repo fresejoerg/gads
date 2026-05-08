@@ -37,101 +37,16 @@ st.markdown("""
     }
 
     /* ------------------------------------------------------------- */
-    /* BUTTON STYLING (Aggressive Specificity)                      */
+    /* UNIFIED PROFESSIONAL BUTTON STYLING                          */
     /* ------------------------------------------------------------- */
 
-    /* LAUNCH WORKFLOW - Green */
-    div[class*="st-key-btn_launch"] button {
-        background-color: #2E7D32 !important;
+    .stButton > button, 
+    button[kind="primary"], 
+    button[kind="secondary"],
+    div[class*="st-key-"] button {
+        background-color: #262730 !important;
         color: #FFFFFF !important;
-        border: none !important;
-    }
-    div[class*="st-key-btn_launch"] button:hover {
-        background-color: #1B5E20 !important;
-    }
-
-    /* CANCEL - Red */
-    div[class*="st-key-btn_cancel"] button {
-        background-color: #C62828 !important;
-        color: #FFFFFF !important;
-        border: none !important;
-    }
-    div[class*="st-key-btn_cancel"] button:hover {
-        background-color: #B71C1C !important;
-    }
-
-    /* NEW PROJECT - Orange */
-    div[class*="st-key-btn_new"] button {
-        background-color: #F57F17 !important;
-        color: #FFFFFF !important;
-        border: none !important;
-    }
-    div[class*="st-key-btn_new"] button:hover {
-        background-color: #E65100 !important;
-    }
-
-    /* REFRESH - Deep Orange */
-    div[class*="st-key-btn_refresh"] button {
-        background-color: #E65100 !important;
-        color: #FFFFFF !important;
-        border: none !important;
-    }
-    div[class*="st-key-btn_refresh"] button:hover {
-        background-color: #BF360C !important;
-    }
-    
-    /* MOUNT - Blue */
-    div[class*="st-key-btn_mount"] button {
-        background-color: #1565C0 !important;
-        color: #FFFFFF !important;
-        border: none !important;
-    }
-    div[class*="st-key-btn_mount"] button:hover {
-        background-color: #0D47A1 !important;
-    }
-    
-    /* ARCHIVE LOAD - Blue */
-    div[class*="st-key-load_"] button {
-        background-color: #1565C0 !important;
-        color: #FFFFFF !important;
-        border: none !important;
-    }
-    div[class*="st-key-load_"] button:hover {
-        background-color: #0D47A1 !important;
-    }
-
-    /* ARCHIVE DELETE - Red */
-    div[class*="st-key-del_"] button {
-        background-color: #C62828 !important;
-        color: #FFFFFF !important;
-        border: none !important;
-    }
-    div[class*="st-key-del_"] button:hover {
-        background-color: #B71C1C !important;
-    }
-
-    /* VIEW SPEC - Yellow */
-    div[class*="st-key-btn_view_spec"] button {
-        background-color: #FBC02D !important;
-        color: #000000 !important;
-        border: none !important;
-    }
-    div[class*="st-key-btn_view_spec"] button:hover {
-        background-color: #F9A825 !important;
-    }
-
-    /* LOAD SPEC - Blue */
-    div[class*="st-key-btn_load_spec"] button {
-        background-color: #1976D2 !important;
-        color: #FFFFFF !important;
-        border: none !important;
-    }
-    div[class*="st-key-btn_load_spec"] button:hover {
-        background-color: #1565C0 !important;
-    }
-
-    /* Global button resets to prevent theme overrides */
-    .stButton > button, button[kind="primary"], button[kind="secondary"] {
+        border: 1px solid #464855 !important;
         box-shadow: none !important;
         text-transform: none !important;
         padding: 0px 1rem !important;
@@ -142,6 +57,17 @@ st.markdown("""
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
+        border-radius: 4px !important;
+        transition: background-color 0.2s, border-color 0.2s !important;
+    }
+
+    .stButton > button:hover, 
+    button[kind="primary"]:hover, 
+    button[kind="secondary"]:hover,
+    div[class*="st-key-"] button:hover {
+        background-color: #31333F !important;
+        border-color: #606477 !important;
+        color: #FFFFFF !important;
     }
 
     /* Archive Styling */
@@ -691,8 +617,24 @@ def render_grounding_panel():
 
         st.markdown("---")
         
+        mem = details["project"].get("last_state_json", {}) or {}
+        
+        # Display Schemas if present
+        schemas = mem.pop("__schemas__", None)
+        if schemas:
+            st.markdown("#### FILE SCHEMAS")
+            for filename, schema_data in schemas.items():
+                with st.expander(f"📊 {filename}", expanded=False):
+                    if "schema" in schema_data and "sample" in schema_data:
+                        st.markdown("**Schema:**")
+                        st.json(schema_data["schema"])
+                        st.markdown("**Sample Data (First 5 Rows):**")
+                        st.dataframe(schema_data["sample"])
+                    else:
+                        st.json(schema_data)
+            st.markdown("---")
+
         st.markdown("#### KERNEL STATE")
-        mem = details["project"].get("last_state_json", {})
         if mem:
             st.json(mem)
         else:

@@ -15,8 +15,9 @@ A foundational requirement of GADS is the ability to run on **local LLMs** and *
 ## Key Features
 
 *   **Project Manager (The Planner)**: A high-reasoning agent that decomposes user objectives into a deterministic task list with unique "Figure N" assignments and strict postcondition contracts.
-*   **Architect (The Router)**: Classifies user objectives into structured intents (e.g., `binary_classification.tabular`) to fetch matching expert SOPs.
-*   **GADS Control Center (UI)**: A 3-panel **Streamlit** IDE featuring a strictly monochromatic high-contrast theme, persistent **Project Archive** with timestamps, and real-time **Task Tracking** via auto-refreshing fragments.
+*   **Architect (The Router)**: Classifies user objectives into structured intents (e.g., `binary_classification.tabular`) and seamlessly consults the Knowledge Base to fetch matching expert SOPs in a single consolidated step.
+*   **GADS Control Center (UI)**: A 3-panel **Streamlit** IDE featuring a unified, professional UI styling, persistent **Project Archive** with timestamps, and real-time **Task Tracking** via auto-refreshing fragments.
+*   **Automatic Data Introspection**: Instantly extracts file schemas and data samples (top 5 rows) using fast, low-memory DuckDB queries the moment an external dataset is mounted, allowing you to preview data structures without heavy processing.
 *   **Professional Reporting Engine**: Automatically assembles an integrated **Interactive HTML Dashboard** and a formal **Markdown Research Report** (anchored by Figure numbers) at the end of every analysis.
 *   **Durable Project Memory**: All analytical results (Narratives, Takeaways) and Sandbox Variable States are persisted in a PostgreSQL database, ensuring projects are fully reloadable and stateful.
 *   **Automated Maintenance**: Background tasks for periodic archive cleanup of old artifacts (>30 days) and orphaned task detection.

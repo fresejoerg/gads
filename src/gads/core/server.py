@@ -376,11 +376,13 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         router = DataScienceRouter(model=router_model)
 
         intent = None
+        knowledge_report = None
+        
         with Session(engine) as session:
             route_task = Task(
                 project_id=project_id,
                 instruction_id=instruction_id,
-                description=f"Architect ({router_model}) is classifying intent and data modality...",
+                description=f"Architect ({router_model}) is classifying intent and consulting knowledge base...",
                 assigned_to="Router",
                 status="running",
                 heartbeat=datetime.now()
@@ -404,37 +406,11 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             intent = router_res.content
             span.end(output=intent.model_dump())
 
-            route_task.status = "completed"
-            route_task.result_json = {
-                "stdout": f"Task Type: {intent.task_type}\nModality: {intent.data_modality}\nMatched Recipe: {intent.matched_recipe_id}\nConfidence: {intent.confidence}",
-                "model_used": router_model
-            }
-            session.add(route_task)
-            session.commit()
-
-        print(f"  [Router] Intent: {intent.task_type} (Recipe: {intent.matched_recipe_id})", flush=True)
-
-        if await is_cancelled(): return
-
-        # 2. KNOWLEDGE RETRIEVAL
-        knowledge_report = None
-        with Session(engine) as session:
-            search_task = Task(
-                project_id=project_id,
-                instruction_id=instruction_id,
-                description="Consulting Best Practices Wiki for matching Data Science recipes...",
-                assigned_to="KnowledgeRegistry",
-                status="running",
-                heartbeat=datetime.now()
-            )
-            session.add(search_task)
-            session.commit()
-            session.refresh(search_task)
-
-            # Logic shift: The Router (Architect) now explicitly picks the recipe ID
+            # Inline Knowledge Retrieval
             recipe_id = intent.matched_recipe_id
             recipe = registry.get_recipe(recipe_id) if recipe_id else None
-
+            
+            recipe_info = "No specific recipe found. Proceeding with general data science reasoning."
             if recipe:
                 knowledge_report = ReconciliationReport(
                     recipe_id=recipe.id,
@@ -443,13 +419,17 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     skippable_nodes=[],
                     schema_warnings=[]
                 )
-                search_task.status = "completed"
-                search_task.result_json = {"stdout": f"Applied SOP: {recipe.id}\nRationale: {recipe.rationale}"}
-            else:
-                search_task.status = "completed"
-                search_task.result_json = {"stdout": "No specific recipe found. Proceeding with general data science reasoning."}
-            session.add(search_task)
+                recipe_info = f"Applied SOP: {recipe.id}\nRationale: {recipe.rationale}"
+
+            route_task.status = "completed"
+            route_task.result_json = {
+                "stdout": f"Task Type: {intent.task_type}\nModality: {intent.data_modality}\nMatched Recipe: {intent.matched_recipe_id}\nConfidence: {intent.confidence}\n\n--- KNOWLEDGE BASE ---\n{recipe_info}",
+                "model_used": router_model
+            }
+            session.add(route_task)
             session.commit()
+
+        print(f"  [Router] Intent: {intent.task_type} (Recipe: {intent.matched_recipe_id})", flush=True)
 
         if await is_cancelled(): return
 
@@ -460,11 +440,26 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
 
         from gads.agents.planner import FileMetadata as FM
         planner_files = []
+        detected_schemas = {}
         for f in current_files_meta:
             columns_dtypes = None
             if f["name"].endswith(".csv") or f["name"].endswith(".parquet"):
                 columns_dtypes = await _probe_file_schema(executor, project_id, f["name"])
+                if columns_dtypes:
+                    detected_schemas[f["name"]] = columns_dtypes
             planner_files.append(FM(name=f["name"], size_mb=f["size_mb"], columns_and_dtypes=columns_dtypes))
+
+        if detected_schemas:
+            with Session(engine) as session:
+                project = session.get(Project, project_id)
+                if project:
+                    state = project.last_state_json or {}
+                    schemas = state.get("__schemas__", {})
+                    schemas.update(detected_schemas)
+                    state["__schemas__"] = schemas
+                    project.last_state_json = state
+                    session.add(project)
+                    session.commit()
 
         planner_res = None
         span = trace.span(name="Project Planning")
@@ -1123,8 +1118,88 @@ def _mount_external_dataset(workspace_dir: str, host_path: str):
     except Exception as e:
         raise Exception(f"Failed to create symlink: {e}")
 
+async def _probe_file_schema(executor: ExecutionManager, project_id: uuid.UUID, filename: str) -> Optional[Dict[str, Any]]:
+    """Safe, time-capped schema and dtype extraction using DuckDB."""
+    print(f"    [Introspection] Probing schema for {filename}...", flush=True)
+    
+    # Strictly capped DuckDB query for safe type inference
+    code = f"""
+import duckdb
+import json
+try:
+    # Use read_csv_auto with limited sample for speed and safety
+    if "{filename}".endswith(".csv"):
+        res = duckdb.query("DESCRIBE SELECT * FROM read_csv_auto('{filename}', sample_size=1024)").to_df()
+        sample_df = duckdb.query("SELECT * FROM read_csv_auto('{filename}', sample_size=1024) LIMIT 5").to_df()
+    elif "{filename}".endswith(".parquet"):
+        res = duckdb.query("DESCRIBE SELECT * FROM '{filename}'").to_df()
+        sample_df = duckdb.query("SELECT * FROM '{filename}' LIMIT 5").to_df()
+    else:
+        print(json.dumps({{"error": "Unsupported format"}}))
+        exit()
+    
+    # Map DuckDB types to simple string descriptions
+    schema = dict(zip(res['column_name'], res['column_type']))
+    
+    # Convert sample to json-friendly records
+    sample_json_str = sample_df.to_json(orient="records", date_format="iso")
+    sample_records = json.loads(sample_json_str)
+
+    print(json.dumps({{"schema": schema, "sample": sample_records}}))
+except Exception as e:
+    print(json.dumps({{"error": str(e)}}))
+"""
+    try:
+        # 30s timeout for schema probe, using a dedicated session to avoid interfering with project kernel
+        res = await asyncio.wait_for(
+            executor.sandbox.execute(code, project_id=project_id, session_id=f"probe_{project_id}"),
+            timeout=30.0
+        )
+        if res.stdout:
+            # Parse the last line as JSON to handle any pre-output
+            lines = res.stdout.strip().split('\n')
+            data = None
+            for line in reversed(lines):
+                try:
+                    data = json.loads(line)
+                    break
+                except Exception: continue
+                
+            if data and "error" not in data:
+                print(f"    [Introspection] Detected schema for {filename}", flush=True)
+                return data
+    except Exception as e:
+        print(f"    [Introspection] Probe failed for {filename}: {e}", flush=True)
+    return None
+
+async def _background_probe_and_update(project_id: uuid.UUID, filename: str):
+    """Background worker to probe schema and update project state."""
+    executor = ExecutionManager()
+    schema = await _probe_file_schema(executor, project_id, filename)
+    if schema:
+        with Session(engine) as session:
+            project = session.get(Project, project_id)
+            if project:
+                state = project.last_state_json or {}
+                schemas = state.get("__schemas__", {})
+                schemas[filename] = schema
+                state["__schemas__"] = schemas
+                project.last_state_json = state
+                session.add(project)
+                
+                # Update UI via outbox
+                workspace_dir = f"{WORKSPACE_ROOT}/{project_id}"
+                current_files = _get_recursive_files(workspace_dir)
+                hub = ExecutionHub(session)
+                hub.create_outbox_event("STATE_UPDATED", {
+                    "files": current_files, 
+                    "state": state
+                })
+                session.commit()
+                print(f"    [Introspection] Persisted schema for {filename} to project state.", flush=True)
+
 @app.post("/projects/{project_id}/register-external", response_model=ProjectResponse)
-async def register_external_file(project_id: uuid.UUID, req: ExternalPathRequest):
+async def register_external_file(project_id: uuid.UUID, req: ExternalPathRequest, background_tasks: BackgroundTasks):
     with Session(engine) as session:
         project = session.get(Project, project_id)
         if not project: raise HTTPException(status_code=404, detail="Project not found")
@@ -1137,6 +1212,10 @@ async def register_external_file(project_id: uuid.UUID, req: ExternalPathRequest
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
         
+        filename = os.path.basename(req.path)
+        if filename.endswith(".csv") or filename.endswith(".parquet"):
+            background_tasks.add_task(_background_probe_and_update, project_id, filename)
+
         current_files = _get_recursive_files(workspace_dir)
         hub = ExecutionHub(session)
         hub.create_outbox_event("STATE_UPDATED", {"files": current_files, "state": project.last_state_json or {}})
@@ -1150,45 +1229,6 @@ async def download_file(project_id: uuid.UUID, file_path: str, download: bool = 
     if not os.path.abspath(full_path).startswith(os.path.abspath(workspace_dir)): raise HTTPException(status_code=403, detail="Denied")
     if not os.path.exists(full_path): raise HTTPException(status_code=404, detail="Not found")
     return FileResponse(full_path, filename=os.path.basename(full_path)) if download else FileResponse(full_path)
-
-async def _probe_file_schema(executor: ExecutionManager, project_id: uuid.UUID, filename: str) -> Optional[Dict[str, str]]:
-    """Safe, time-capped schema and dtype extraction using DuckDB."""
-    print(f"    [Introspection] Probing schema for {filename}...", flush=True)
-    
-    # Strictly capped DuckDB query for safe type inference
-    code = f"""
-import duckdb
-import json
-try:
-    # Use read_csv_auto with limited sample for speed and safety
-    if "{filename}".endswith(".csv"):
-        res = duckdb.query("DESCRIBE SELECT * FROM read_csv_auto('{filename}', sample_size=1024)").to_df()
-    elif "{filename}".endswith(".parquet"):
-        res = duckdb.query("DESCRIBE SELECT * FROM '{filename}'").to_df()
-    else:
-        print(json.dumps({{"error": "Unsupported format"}}))
-        exit()
-    
-    # Map DuckDB types to simple string descriptions
-    schema = dict(zip(res['column_name'], res['column_type']))
-    print(json.dumps(schema))
-except Exception as e:
-    print(json.dumps({{"error": str(e)}}))
-"""
-    try:
-        # 30s timeout for schema probe
-        res = await asyncio.wait_for(
-            executor.sandbox.execute(code, project_id=project_id, session_id=str(project_id)),
-            timeout=30.0
-        )
-        if res.stdout:
-            data = json.loads(res.stdout.strip().split('\n')[-1])
-            if "error" not in data:
-                print(f"    [Introspection] Detected schema: {data}", flush=True)
-                return data
-    except Exception as e:
-        print(f"    [Introspection] Probe failed for {filename}: {e}", flush=True)
-    return None
 
 def _mark_workflow_failed(session: Session, project_id: uuid.UUID, reason: str):
     """Idempotently halts a workflow and cancels all pending tasks."""
