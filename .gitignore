@@ -27,6 +27,7 @@ stress_test_routing.py
 stress_test_routing_prompt.txt
 main.py
 *.ipynb
+critique_prompt_plan.py
 
 # Architecture and design notes
 approach_docs/
