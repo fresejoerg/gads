@@ -7,6 +7,7 @@ __pycache__/
 .DS_Store
 .env
 *.log
+gads.db
 
 # IDEs
 .vscode/
@@ -28,6 +29,15 @@ stress_test_routing_prompt.txt
 main.py
 *.ipynb
 critique_prompt_plan.py
+stress_test_plan.py
+test_llm_call.py
+test_planner.py
+update_server_synthesizer.py
+run_manual.py
+fix_planner.py
+patch_server.py
+fix_indentation.py
+inspect_project.py
 
 # Architecture and design notes
 approach_docs/

@@ -193,7 +193,8 @@ Your goal is to evaluate an agent-generated synthesis for logical consistency, a
 1. **Adherence to Intent (STRICT)**: 
    - Does the synthesis directly answer the user's objective?
    - **SPECIFIC REQUIREMENTS**: If the user asked for a specific output (e.g., "list the top 5", "show a table", "count X"), that output MUST exist as a visual artifact embedded in the `FINAL DASHBOARD HTML`. 
-   - If a specific requested output is missing from the dashboard HTML, you MUST fail the evaluation (`is_approved = False`).
+   - **BYPASS EXCEPTION**: If a task was marked as `[bypassed]` in the context (due to runtime/complexity constraints), do NOT fail the evaluation for missing that specific output, PROVIDED that the synthesis narrative explicitly explains WHY it was bypassed and refers the user to the `handover_bundle` artifact for offline execution.
+   - If a specific requested output is missing and was NOT intentionally bypassed, you MUST fail the evaluation (`is_approved = False`).
 2. **Logical Consistency**: Are the claims supported by the provided task outputs?
 3. **Visualization Integrity**: 
    - Are there multiple plots showing the same information?
@@ -203,9 +204,39 @@ Your goal is to evaluate an agent-generated synthesis for logical consistency, a
 
 ### OUTPUT FORMAT:
 You MUST provide:
-- `is_approved`: Boolean (True ONLY if all specific user requirements are met and visible in artifacts).
+- `is_approved`: Boolean (True ONLY if all specific user requirements are met or gracefully bypassed).
 - `critique_feedback`: String (Specific, actionable feedback if False; "Looks good" if True).
 - `redundant_artifacts`: List of strings (Filenames of redundant or poor-quality plots to be removed).
+""".strip(),
+
+    "PlanCritique": """
+You are a Senior Project Auditor. 
+Your goal is to evaluate a proposed list of Data Science tasks for completeness and logical soundness BEFORE they are executed.
+
+### EVALUATION CRITERIA:
+1. **Adherence to Intent**: 
+   - Does the sequence of tasks, if completed successfully, FULLY fulfill the user's objective?
+   - Look for "lazy" plans that only perform EDA when the user asked for a model.
+2. **SOP Alignment**:
+   - If a `KNOWLEDGE REPORT` (SOP) is provided, does the plan include all mandatory DAG nodes?
+   - Mandatory nodes for Classification usually include: Data Validation, Train/Test Split, Model Training, Evaluation, and Feature Importance.
+   - If the plan is missing a mandatory step from the SOP, you MUST fail it.
+3. **Data Availability**:
+   - Do the tasks reference files that are actually available?
+4. **Logical Progression**:
+   - Are the tasks in the right order? (e.g., don't train before cleaning).
+
+### OUTPUT FORMAT:
+You MUST provide:
+- `is_approved`: Boolean (True if the plan is robust and complete).
+- `feedback`: String (Detailed explanation of why the plan was failed, or "Plan approved").
+- `missing_requirements`: List of strings (Specific requirements or SOP nodes that are missing).
+
+## KNOWLEDGE REPORT:
+{knowledge_json}
+
+## USER OBJECTIVE:
+{objective}
 """.strip()
 }
 
@@ -215,7 +246,8 @@ REQUIRED_VARS = {
     "CodeGenerator": ["skills_context", "contract_json", "state_summary", "files_list"],
     "Synthesizer": ["previous_state"],
     "NLPExtractor": [],
-    "Critique": []
+    "Critique": [],
+    "PlanCritique": ["knowledge_json", "objective"]
 }
 
 class PromptRegistry:

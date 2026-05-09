@@ -118,8 +118,10 @@ def api_post(path, json_data=None):
     try:
         with httpx.Client(timeout=10.0) as client:
             resp = client.post(f"{BACKEND_URL}{path}", json=json_data)
+            resp.raise_for_status()
             return resp.json()
-    except Exception:
+    except Exception as e:
+        print(f"  [API] POST {path} failed: {e}")
         return None
 
 def api_delete(path):
@@ -526,17 +528,26 @@ def render_orchestrator_panel():
                     last_instr_id = curr_instr_id
 
                 st_icon = "⚪"
-                if t['status'] == "completed": st_icon = "🟢"
+                if t['assigned_to'] == "Router": st_icon = "📐"
+                elif t['assigned_to'] == "Planner": st_icon = "📋"
+                elif t['status'] == "completed": st_icon = "🟢"
                 elif t['status'] == "failed": st_icon = "🔴"
                 elif t['status'] == "running": st_icon = "🔵"
                 
-                with st.expander(f"{st_icon} {t['description'][:85]}...", expanded=(t['status'] == "running")):
+                expanded = (t['status'] == "running") or (t['assigned_to'] in ["Router", "Planner"] and t['status'] == "completed")
+                
+                with st.expander(f"{st_icon} {t['description'][:85]}...", expanded=expanded):
                     res = t.get("result_json") or {}
                     model_name = res.get("model_used")
                     
-                    st.caption(f"Worker: `{t['assigned_to']}`")
-                    if model_name:
-                        st.caption(f"Model: `{model_name}`")
+                    if t['assigned_to'] == "Router":
+                        st.caption(f"Architect: `{model_name or 'N/A'}`")
+                    elif t['assigned_to'] == "Planner":
+                        st.caption(f"Project Manager: `{model_name or 'N/A'}`")
+                    else:
+                        st.caption(f"Worker: `{t['assigned_to']}`")
+                        if model_name:
+                            st.caption(f"Model: `{model_name}`")
                     
                     if t['status'] == "running":
                         stream_data = api_get(f"/tasks/{t['id']}/stream")
@@ -544,7 +555,6 @@ def render_orchestrator_panel():
                             reasoning = stream_data.get("reasoning", "")
                             stdout = stream_data.get("stdout", "")
                             if reasoning:
-                                # Truncate reasoning to avoid freezing the UI on massive outputs
                                 if len(reasoning) > 5000:
                                     reasoning = "... [truncated] ...\n" + reasoning[-5000:]
                                 st.markdown("**🤔 Reasoning:**")
@@ -558,13 +568,26 @@ def render_orchestrator_panel():
                                 st.markdown("**🖥️ Sandbox Output:**")
                                 st.code(stdout, language="text")
                             else:
-                                st.caption("🖥️ Sandbox is starting up...")
+                                if t['assigned_to'] not in ["Router", "Planner"]:
+                                    st.caption("🖥️ Sandbox is starting up...")
                         else:
                             st.caption("Initializing...")
                             
                     res = t.get("result_json")
                     if res and res.get("stdout"):
-                        st.code(res["stdout"], language="text")
+                        if t['assigned_to'] == "Router":
+                            # Attempt to parse and format nicely
+                            stdout = res["stdout"]
+                            if "Decision Reasoning:" in stdout:
+                                parts = stdout.split("--- KNOWLEDGE BASE ---")
+                                st.markdown(parts[0])
+                                if len(parts) > 1:
+                                    with st.expander("KNOWLEDGE RETRIEVAL", expanded=True):
+                                        st.markdown(parts[1])
+                            else:
+                                st.markdown(stdout)
+                        else:
+                            st.markdown(res["stdout"])
                     if t.get("error"):
                         st.error(t["error"])
 
@@ -586,15 +609,16 @@ def render_grounding_panel():
                     "objective": ""
                 }
                 res = api_post("/projects", payload)
-                if res:
+                if res and "project" in res:
                     st.session_state.current_project_id = res["project"]["id"]
+                else:
+                    detail = res.get("detail", "Unknown error") if isinstance(res, dict) else "Connection failed"
+                    st.error(f"Failed to create project session. Backend returned: {detail}")
             
             if st.session_state.current_project_id:
                 api_post(f"/projects/{st.session_state.current_project_id}/register-external", {"path": os.path.join(host_datasets_root, selected)})
                 st.toast(f"Mounted {selected}")
                 st.rerun() # Refresh to show in workspace
-            else:
-                st.error("Failed to create project session.")
     
     st.markdown("---")
     

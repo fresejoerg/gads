@@ -106,7 +106,11 @@ class SandboxClient:
         try:
             response = await self.client.post(
                 f"{self.base_url}/execute",
-                json={"code": code, "session_id": str(project_id)}
+                json={
+                    "code": code, 
+                    "session_id": str(project_id),
+                    "timeout": 300.0 # 5 minute execution limit
+                }
             )
             response.raise_for_status()
             return ExecutionResult(**response.json())

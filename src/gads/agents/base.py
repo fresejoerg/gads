@@ -20,7 +20,7 @@ class BaseAgent(ABC, Generic[TIn, TOut]):
         self.system_prompt = system_prompt
         self.output_schema = output_schema
 
-    async def run(self, input_data: TIn, **kwargs) -> AgentResponse[TOut]:
+    async def run(self, input_data: TIn, stream_callback=None, **kwargs) -> AgentResponse[TOut]:
         """Execute the agent's logic using instructor for structured output."""
         from gads.core.prompts import prompt_registry
         self.system_prompt = prompt_registry.get_prompt(self.name)
@@ -34,6 +34,7 @@ class BaseAgent(ABC, Generic[TIn, TOut]):
             model=self.model,
             response_model=self.output_schema,
             messages=messages,
+            stream_callback=stream_callback,
             **kwargs
         )
         

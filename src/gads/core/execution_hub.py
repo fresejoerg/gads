@@ -153,6 +153,16 @@ class ExecutionHub:
             self.create_outbox_event("TASK_COMPLETED", {"task_id": str(task_id), "result": result})
             self.session.commit()
 
+    def bypass_task(self, task_id: uuid.UUID, result: dict):
+        """Mark a task as bypassed due to complexity."""
+        task = self.session.get(Task, task_id)
+        if task:
+            task.status = "bypassed"
+            task.result_json = result
+            self.session.add(task)
+            self.create_outbox_event("TASK_BYPASSED", {"task_id": str(task_id), "result": result})
+            self.session.commit()
+
     def fail_task(self, task_id: uuid.UUID, error: str, result: Optional[dict] = None):
         """Mark a task as failed."""
         task = self.session.get(Task, task_id)

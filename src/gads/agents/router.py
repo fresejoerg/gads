@@ -25,7 +25,7 @@ class DataScienceRouter(BaseAgent[RouterInput, RouterOutput]):
             output_schema=RouterOutput
         )
 
-    async def run(self, input_data: RouterInput) -> Any:
+    async def run(self, input_data: RouterInput, stream_callback=None, **kwargs) -> Any:
         # Refresh prompt from registry
         self.system_prompt = prompt_registry.get_prompt(self.name)
         
@@ -41,7 +41,9 @@ class DataScienceRouter(BaseAgent[RouterInput, RouterOutput]):
         content = await get_structured_completion(
             model=self.model,
             response_model=self.output_schema,
-            messages=messages
+            messages=messages,
+            stream_callback=stream_callback,
+            **kwargs
         )
         
         from gads.agents.base import AgentResponse

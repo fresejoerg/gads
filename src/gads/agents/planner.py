@@ -26,7 +26,7 @@ class PlannerTask(BaseModel):
 class FileMetadata(BaseModel):
     name: str
     size_mb: float
-    columns_and_dtypes: Optional[Dict[str, str]] = None
+    columns_and_dtypes: Optional[Dict[str, Any]] = None
 
 class PlannerInput(BaseModel):
     objective: str
@@ -50,7 +50,7 @@ class DataSciencePlanner(BaseAgent[PlannerInput, PlannerOutput]):
             output_schema=PlannerOutput
         )
 
-    async def run(self, input_data: PlannerInput) -> Any:
+    async def run(self, input_data: PlannerInput, stream_callback=None, **kwargs) -> Any:
         # Refresh prompt from registry in case of hot-reload
         self.system_prompt = prompt_registry.get_prompt(self.name)
         
@@ -88,7 +88,9 @@ class DataSciencePlanner(BaseAgent[PlannerInput, PlannerOutput]):
         content = await get_structured_completion(
             model=self.model,
             response_model=self.output_schema,
-            messages=messages
+            messages=messages,
+            stream_callback=stream_callback,
+            **kwargs
         )
         
         from gads.agents.base import AgentResponse

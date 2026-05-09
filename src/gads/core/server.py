@@ -18,10 +18,11 @@ from gads.core.database import init_db, engine
 from gads.core.models import Project, Task, Artifact, Instruction
 from gads.agents.planner import DataSciencePlanner, PlannerInput, ReconciliationReport, FileMetadata
 from gads.agents.router import DataScienceRouter, RouterInput
+from gads.agents.plan_critique import PlanCritiqueAgent, PlanCritiqueInput
 from gads.agents.workers.synthesizer import SynthesizerAgent, SynthesizerInput
 from gads.agents.workers.critique import CritiqueAgent, CritiqueInput
 from gads.core.executor import ExecutionManager
-from gads.core.registry import get_model_hierarchy, get_local_only, set_local_only, get_random_routing, set_random_routing
+from gads.core.registry import get_model_hierarchy, get_local_only, set_local_only, get_random_routing, set_random_routing, get_next_model_dynamic
 from gads.core.knowledge import KnowledgeRegistry
 from gads.core.reporting import create_master_reports
 from gads.core.prompts import prompt_registry
@@ -38,7 +39,30 @@ langfuse_client = Langfuse(
     host=os.getenv("LANGFUSE_HOST")
 )
 
+ACTIVE_WORKFLOWS: set[uuid.UUID] = set()
+
+async def run_agent_workflow_wrapper(project_id: uuid.UUID, objective: str, instruction_id: Optional[uuid.UUID] = None):
+    """Wrapper to manage the ACTIVE_WORKFLOWS lock."""
+    try:
+        await run_agent_workflow(project_id, objective, instruction_id)
+    finally:
+        if project_id in ACTIVE_WORKFLOWS:
+            ACTIVE_WORKFLOWS.remove(project_id)
+
 app = FastAPI(title="GADS Core API")
+
+@app.middleware("http")
+async def catch_exceptions_middleware(request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as e:
+        import traceback
+        with open("crash_debug.log", "a") as f:
+            f.write(f"\n\n--- CRASH AT {datetime.now()} ---\n")
+            f.write(f"URL: {request.url}\n")
+            f.write(traceback.format_exc())
+        raise e
+
 registry = KnowledgeRegistry("src/gads/knowledge/recipes")
 WORKSPACE_ROOT = "/home/joergf/projects/MyLocalStack/data/workspaces"
 
@@ -159,8 +183,7 @@ def reset_prompt(agent_name: str):
         raise HTTPException(status_code=404, detail="Override not found")
     return {"status": "ok"}
 
-@app.get("/skills"
-, response_model=List[str])
+@app.get("/skills", response_model=List[str])
 def list_skills_files():
     return registry.list_skill_files()
 
@@ -312,6 +335,7 @@ def _get_recursive_files(workspace_dir: str) -> List[Dict[str, Any]]:
                 size_mb = 0.0
             all_files.append({"name": rel_path, "size_mb": size_mb})
     return sorted(all_files, key=lambda x: x["name"])
+
 async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_id: Optional[uuid.UUID] = None):
     from gads.core.llm import trace_context
     
@@ -340,6 +364,20 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 p = s.get(Project, project_id)
                 return p and p.narrative and "[CANCELLED]" in p.narrative
 
+        # 0. IMMEDIATELY CREATE AN ORCHESTRATOR TASK TO BLOCK DUPLICATES
+        with Session(engine) as session:
+            init_task = Task(
+                project_id=project_id,
+                instruction_id=instruction_id,
+                description="System is grounding session state and re-syncing kernel...",
+                assigned_to="System",
+                status="running",
+                heartbeat=datetime.now()
+            )
+            session.add(init_task)
+            session.commit()
+            init_task_id = init_task.id
+
         executor = ExecutionManager()
         hierarchy = await get_model_hierarchy()
 
@@ -352,352 +390,545 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         current_files_meta = _get_recursive_files(workspace_dir)
 
         # Dummy execute to trigger state introspection
-        res = await executor.sandbox.execute("pass", project_id=project_id, session_id=str(project_id))
-        if res.kernel_state:
-            executor.authoritative_state.update(res.kernel_state)
-            print(f"  [Workflow] Synchronized {len(executor.authoritative_state)} variables from kernel.", flush=True)
-            with Session(engine) as session:
-                project = session.get(Project, project_id)
-                if project:
-                    project.last_state_json = executor.authoritative_state
-                    session.add(project)
-                    session.commit()
+        try:
+            res = await asyncio.wait_for(executor.sandbox.execute("pass", project_id=project_id, session_id=str(project_id)), timeout=10.0)
+            if res.kernel_state:
+                executor.authoritative_state.update(res.kernel_state)
+                print(f"  [Workflow] Synchronized {len(executor.authoritative_state)} variables from kernel.", flush=True)
+                with Session(engine) as session:
+                    project = session.get(Project, project_id)
+                    if project:
+                        project.last_state_json = executor.authoritative_state
+                        session.add(project)
+                        session.commit()
+        except Exception as e:
+            print(f"  [Workflow] Grounding failed or timed out: {e}. Proceeding with empty state.", flush=True)
 
-        if await is_cancelled(): return
+        # Mark init task as completed
+        with Session(engine) as session:
+            itask = session.get(Task, init_task_id)
+            if itask:
+                itask.status = "completed"
+                session.add(itask)
+                session.commit()
 
-        # 1. ROUTING (Full Gemini Priority)
+                if await is_cancelled(): return
+
+        # 1. ROUTING (Resilient & Resourced)
         router_fallback = ["local_model"] if get_local_only() else ["gemini-3.1-flash-lite-preview"]
         router_model = hierarchy.get("T3", {}).get("models", router_fallback)[0]
         
-        # Select Critique model (Prefer T2 for quality, fallback to T3)
-        critique_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
-        critique_model = hierarchy.get("T2", {}).get("models", hierarchy.get("T3", {}).get("models", critique_fallback))[0]
-
-        router = DataScienceRouter(model=router_model)
-
         intent = None
         knowledge_report = None
         
-        with Session(engine) as session:
-            route_task = Task(
-                project_id=project_id,
-                instruction_id=instruction_id,
-                description=f"Architect ({router_model}) is classifying intent and consulting knowledge base...",
-                assigned_to="Router",
-                status="running",
-                heartbeat=datetime.now()
-            )
-            session.add(route_task)
-            session.commit()
-            session.refresh(route_task)
-
-            # Create a Span for the Architect
-            span = trace.span(name="Architect Routing", metadata={"task_id": str(route_task.id)})
-            trace_context.get().update({
-                "agent_name": "Router", 
-                "task_id": str(route_task.id),
-                "parent_observation_id": span.id
-            })
-
-            router_res = await router.run(RouterInput(
-                objective=objective,
-                available_recipes=registry.get_recipes_summary()
-            ))
-            intent = router_res.content
-            span.end(output=intent.model_dump())
-
-            # Inline Knowledge Retrieval
-            recipe_id = intent.matched_recipe_id
-            recipe = registry.get_recipe(recipe_id) if recipe_id else None
-            
-            recipe_info = "No specific recipe found. Proceeding with general data science reasoning."
-            if recipe:
-                knowledge_report = ReconciliationReport(
-                    recipe_id=recipe.id,
-                    rationale=recipe.rationale,
-                    recommended_dag_nodes=[node.dict() for node in recipe.dag],
-                    skippable_nodes=[],
-                    schema_warnings=[]
+        while True:
+            with Session(engine) as session:
+                route_task = Task(
+                    project_id=project_id,
+                    instruction_id=instruction_id,
+                    description=f"Architect ({router_model}) is classifying intent and consulting knowledge base...",
+                    assigned_to="Router",
+                    status="running",
+                    heartbeat=datetime.now()
                 )
-                recipe_info = f"Applied SOP: {recipe.id}\nRationale: {recipe.rationale}"
+                session.add(route_task)
+                session.commit()
+                session.refresh(route_task)
 
-            route_task.status = "completed"
-            route_task.result_json = {
-                "stdout": f"Task Type: {intent.task_type}\nModality: {intent.data_modality}\nMatched Recipe: {intent.matched_recipe_id}\nConfidence: {intent.confidence}\n\n--- KNOWLEDGE BASE ---\n{recipe_info}",
-                "model_used": router_model
-            }
-            session.add(route_task)
-            session.commit()
+                # Create a Span for the Architect
+                span = trace.span(name="Architect Routing", metadata={"task_id": str(route_task.id)})
+                trace_context.get().update({
+                    "agent_name": "Router", 
+                    "task_id": str(route_task.id),
+                    "parent_observation_id": span.id
+                })
+
+                rid_str = str(route_task.id)
+                LIVE_STREAMS[rid_str] = {"reasoning": "", "stdout": ""}
+                async def stream_router_callback(token: str):
+                    LIVE_STREAMS[rid_str]["reasoning"] += token
+
+                try:
+                    router = DataScienceRouter(model=router_model)
+                    router_res = await router.run(RouterInput(
+                        objective=objective,
+                        available_recipes=registry.get_recipes_summary()
+                    ), stream_callback=stream_router_callback)
+                    intent = router_res.content
+                    span.end(output=intent.model_dump())
+
+                    # Inline Knowledge Retrieval
+                    recipe_id = intent.matched_recipe_id
+                    recipe = registry.get_recipe(recipe_id) if recipe_id else None
+                    
+                    recipe_info = "No specific recipe found. Proceeding with general data science reasoning."
+                    if recipe:
+                        knowledge_report = ReconciliationReport(
+                            recipe_id=recipe.id,
+                            rationale=recipe.rationale,
+                            recommended_dag_nodes=[node.dict() for node in recipe.dag],
+                            skippable_nodes=[],
+                            schema_warnings=[]
+                        )
+                        recipe_info = f"Applied SOP: {recipe.id}\nRationale: {recipe.rationale}"
+
+                    route_task.status = "completed"
+                    route_task.result_json = {
+                        "stdout": f"**Decision Reasoning:**\n{intent.reasoning}\n\n**Intent Classification:**\n- Task Type: `{intent.task_type}`\n- Modality: `{intent.data_modality}`\n- Confidence: `{intent.confidence}`\n- Matched Recipe: `{intent.matched_recipe_id or 'None'}`\n\n--- KNOWLEDGE BASE ---\n{recipe_info}",
+                        "model_used": router_model
+                    }
+                    session.add(route_task)
+                    session.commit()
+                    if rid_str in LIVE_STREAMS: del LIVE_STREAMS[rid_str]
+                    break # Success
+                except Exception as e:
+                    print(f"  [Router] Call failed: {e}. Attempting escalation...", flush=True)
+                    span.end(output={"error": str(e)})
+                    if rid_str in LIVE_STREAMS: del LIVE_STREAMS[rid_str]
+                    
+                    next_model = get_next_model_dynamic(router_model, hierarchy)
+                    if next_model and next_model != router_model:
+                        route_task.status = "failed"
+                        route_task.error = f"Service unavailable, retrying with {next_model}: {str(e)}"
+                        session.add(route_task)
+                        session.commit()
+                        router_model = next_model
+                        continue
+                    else:
+                        raise e
 
         print(f"  [Router] Intent: {intent.task_type} (Recipe: {intent.matched_recipe_id})", flush=True)
 
         if await is_cancelled(): return
 
-        # 3. PLANNING
-        planner_fallback = ["local_model"] if get_local_only() else ["gemini-3.1-pro-preview"]
-        planner_model = hierarchy.get("T1", {}).get("models", planner_fallback)[0]
-        planner = DataSciencePlanner(model=planner_model)
-
-        from gads.agents.planner import FileMetadata as FM
-        planner_files = []
-        detected_schemas = {}
-        for f in current_files_meta:
-            columns_dtypes = None
-            if f["name"].endswith(".csv") or f["name"].endswith(".parquet"):
-                columns_dtypes = await _probe_file_schema(executor, project_id, f["name"])
-                if columns_dtypes:
-                    detected_schemas[f["name"]] = columns_dtypes
-            planner_files.append(FM(name=f["name"], size_mb=f["size_mb"], columns_and_dtypes=columns_dtypes))
-
-        if detected_schemas:
-            with Session(engine) as session:
-                project = session.get(Project, project_id)
-                if project:
-                    state = project.last_state_json or {}
-                    schemas = state.get("__schemas__", {})
-                    schemas.update(detected_schemas)
-                    state["__schemas__"] = schemas
-                    project.last_state_json = state
-                    session.add(project)
-                    session.commit()
-
-        planner_res = None
-        span = trace.span(name="Project Planning")
-        trace_context.get().update({
-            "agent_name": "Planner", 
-            "task_id": "planning-phase", 
-            "parent_observation_id": span.id
-        })
-
-        planner_res = await planner.run(PlannerInput(
-            objective=objective,
-            available_models_hierarchy=hierarchy,
-            available_files=planner_files,
-            knowledge_report=knowledge_report,
-            available_skills=registry.get_skills_summary()
-        ))
-        span.end(output=planner_res.content.model_dump())
-
-        tasks_to_run = []
-        with Session(engine) as session:
-            hub = ExecutionHub(session)
-            for step in planner_res.content.steps:
-                new_task = Task(
-                    project_id=project_id,
-                    instruction_id=instruction_id,
-                    description=step.description,
-                    assigned_to=step.assigned_to,
-                    postcondition_json=step.postcondition,
-                    attached_skills=step.attached_skills,
-                    status="pending"
-                )
-                session.add(new_task)
-                tasks_to_run.append(new_task)
-            session.commit()
-
-            for t in tasks_to_run:
-                session.refresh(t)
-                hub.create_outbox_event("TASK_CREATED", {"task_id": str(t.id), "description": t.description})
-            session.commit()
-            task_ids = [t.id for t in tasks_to_run]
-
-        # 4. EXECUTION
-        for task_id in task_ids:
+        # --- MAIN WORKFLOW LOOP (Planning -> Execution -> Synthesis -> Critique) ---
+        MAX_WORKFLOW_ATTEMPTS = 3
+        workflow_attempt = 0
+        critique_feedback = None
+        
+        while workflow_attempt < MAX_WORKFLOW_ATTEMPTS:
+            workflow_attempt += 1
+            print(f"\n  [Workflow] Starting attempt {workflow_attempt}/{MAX_WORKFLOW_ATTEMPTS}...", flush=True)
+            
             if await is_cancelled(): return
 
-            # Create a Span for this specific worker task
-            task_span = trace.span(name="Task Execution", metadata={"task_id": str(task_id)})
+            # 3. PLANNING (Resilient Decomposition)
+            planner_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
+            planner_model = hierarchy.get("T2", {}).get("models", planner_fallback)[0]
+            
+            from gads.agents.planner import FileMetadata as FM
+            planner_files = []
+            detected_schemas = {}
+            for f in current_files_meta:
+                columns_dtypes = None
+                if f["name"].endswith(".csv") or f["name"].endswith(".parquet"):
+                    columns_dtypes = await _probe_file_schema(executor, project_id, f["name"])
+                    if columns_dtypes:
+                        detected_schemas[f["name"]] = columns_dtypes
+                planner_files.append(FM(name=f["name"], size_mb=f["size_mb"], columns_and_dtypes=columns_dtypes))
 
+            if detected_schemas:
+                with Session(engine) as session:
+                    project = session.get(Project, project_id)
+                    if project:
+                        state = project.last_state_json or {}
+                        schemas = state.get("__schemas__", {})
+                        schemas.update(detected_schemas)
+                        state["__schemas__"] = schemas
+                        project.last_state_json = state
+                        session.add(project)
+                        session.commit()
+
+            planner_res = None
             while True:
-                desc, assigned_to = "", ""
+                # Create a Task for the Planner to show in the UI
                 with Session(engine) as session:
-                    hub = ExecutionHub(session)
-                    task_obj = session.get(Task, task_id)
-                    if not task_obj: break
-                    if hub.claim_task(task_id):
-                        executor.coder.model = task_obj.assigned_to
-                        desc = task_obj.description
-                    else: break 
+                    plan_task = Task(
+                        project_id=project_id,
+                        instruction_id=instruction_id,
+                        description=f"Planner ({planner_model}) is decomposing objective into discrete tasks (Attempt {workflow_attempt})...",
+                        assigned_to="Planner",
+                        status="running",
+                        heartbeat=datetime.now()
+                    )
+                    session.add(plan_task)
+                    session.commit()
+                    session.refresh(plan_task)
+                    
+                    pid_str = str(plan_task.id)
+                    LIVE_STREAMS[pid_str] = {"reasoning": "", "stdout": ""}
+                    async def stream_planner_callback(token: str):
+                        LIVE_STREAMS[pid_str]["reasoning"] += token
 
-                # Dynamic Skill Discovery (Planner-led + Keyword Fallback)
-                assigned_skills = task_obj.attached_skills or []
-                matched_skills = registry.find_skills(desc)
+                    span = trace.span(name=f"Project Planning (Attempt {workflow_attempt})", metadata={"task_id": pid_str})
+                    trace_context.get().update({
+                        "agent_name": "Planner", 
+                        "task_id": pid_str, 
+                        "parent_observation_id": span.id
+                    })
 
-                # Deduplicate and Fetch Full Content
-                all_skill_ids = list(set(assigned_skills + [s.id for s in matched_skills]))
-                skills_to_inject = []
-                for sid in all_skill_ids:
-                    s_obj = registry.skills.get(sid)
-                    if s_obj: skills_to_inject.append(s_obj)
+                    try:
+                        planner = DataSciencePlanner(model=planner_model)
+                        planner_res = await planner.run(PlannerInput(
+                            objective=objective,
+                            available_models_hierarchy=hierarchy,
+                            available_files=planner_files,
+                            knowledge_report=knowledge_report,
+                            available_skills=registry.get_skills_summary(),
+                            critique_feedback=critique_feedback
+                        ), stream_callback=stream_planner_callback)
+                        span.end(output=planner_res.content.model_dump())
 
-                skills_ctx = None
-                if skills_to_inject:
-                    skills_ctx = "\n\n".join([f"### Skill: {s.id}\n{s.content}" for s in skills_to_inject])
-                    print(f"    [Workflow] Applied skills: {[s.id for s in skills_to_inject]}", flush=True)
+                        plan_task.status = "completed"
+                        plan_task.result_json = {
+                            "stdout": f"Successfully decomposed objective into {len(planner_res.content.steps)} discrete tasks.",
+                            "model_used": planner_model
+                        }
+                        session.add(plan_task)
+                        session.commit()
+                        if pid_str in LIVE_STREAMS: del LIVE_STREAMS[pid_str]
+                        break # Success
+                    except Exception as e:
+                        print(f"  [Planner] Call failed: {e}. Attempting escalation...", flush=True)
+                        span.end(output={"error": str(e)})
+                        if pid_str in LIVE_STREAMS: del LIVE_STREAMS[pid_str]
 
-                tid_str = str(task_id)
-                LIVE_STREAMS[tid_str] = {"reasoning": "", "stdout": ""}
-
-                async def stream_reasoning_callback(token: str):
-                    LIVE_STREAMS[tid_str]["reasoning"] += token
-
-                async def stream_stdout_callback(text: str):
-                    print(f"    [Workflow] Updating LIVE_STREAMS for {tid_str} ({len(text)} chars)", flush=True)
-                    LIVE_STREAMS[tid_str]["stdout"] = text
-
-                trace_context.get().update({
-                    "agent_name": "CodeGenerator", 
-                    "task_id": tid_str,
-                    "parent_observation_id": task_span.id
-                })
-
-                res, model_used = await executor.run_task(
-                    desc, 
-                    project_id=project_id, 
-                    session_id=str(project_id), 
-                    skills_context=skills_ctx, 
-                    task_id=task_id,
-                    stdout_callback=stream_stdout_callback,
-                    stream_callback=stream_reasoning_callback,
-                    cancel_check=is_cancelled
-                )
-
-                # Update task span with result details
-                task_span.update(output={"model": model_used, "code_len": len(res.code) if res.code else 0})
-
-                with Session(engine) as session:
-                    hub = ExecutionHub(session)
-                    task_obj = session.get(Task, task_id)
-                    error_msg = res.error.get("evalue", "Unknown error") if res.error else hub.validate_contract(task_obj, res.stdout, executor.authoritative_state)
-
-                    if error_msg:
-                        if hub.escalate_task(task_id, error_msg, hierarchy):
+                        next_model = get_next_model_dynamic(planner_model, hierarchy)
+                        if next_model and next_model != planner_model:
+                            plan_task.status = "failed"
+                            plan_task.error = f"Service unavailable, retrying with {next_model}: {str(e)}"
+                            session.add(plan_task)
                             session.commit()
-                            continue 
+                            planner_model = next_model
+                            continue
                         else:
-                            hub.fail_task(task_id, error_msg, result={"stdout": res.stdout, "stderr": res.stderr, "code": res.code})
-                            task_span.end(output={"error": error_msg})
-                            session.commit()
-                            break
-                    else:
-                        hub.complete_task(task_id, {"stdout": res.stdout, "model_used": model_used, "code": res.code})
-                        files_after = _get_recursive_files(workspace_dir)
-                        hub.create_outbox_event("STATE_UPDATED", {"files": files_after, "state": executor.authoritative_state})
+                            raise e
 
-                        project = session.get(Project, project_id)
-                        if project:
-                            project.last_state_json = executor.authoritative_state
-                            session.add(project)
-                            session.commit()
+            
+            # 3.1 PLAN CRITIQUE
+            plan_critique_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
+            plan_critique_model = hierarchy.get("T2", {}).get("models", plan_critique_fallback)[0]
+            
+            plan_critique = None
+            while True:
+                with Session(engine) as session:
+                    pc_task = Task(
+                        project_id=project_id,
+                        instruction_id=instruction_id,
+                        description=f"Auditor ({plan_critique_model}) is evaluating the proposed plan (Attempt {workflow_attempt})...",
+                        assigned_to="PlanCritique",
+                        status="running",
+                        heartbeat=datetime.now()
+                    )
+                    session.add(pc_task)
+                    session.commit()
+                    session.refresh(pc_task)
 
-                        for i, plot_b64 in enumerate(res.plots):
-                            art = Artifact(project_id=project_id, type="plot", description=f"In-memory plot {i+1}", content_json={"image_base64": plot_b64}, agent_id="CodeGenerator")
+                    span = trace.span(name=f"Plan Critique (Attempt {workflow_attempt})", metadata={"task_id": str(pc_task.id)})
+                    trace_context.get().update({
+                        "agent_name": "PlanCritique", 
+                        "task_id": str(pc_task.id),
+                        "parent_observation_id": span.id
+                    })
+
+                    try:
+                        pc_agent = PlanCritiqueAgent(model=plan_critique_model)
+                        pc_res = await pc_agent.run(PlanCritiqueInput(
+                            objective=objective,
+                            proposed_steps=planner_res.content.steps,
+                            knowledge_report=knowledge_report
+                        ))
+                        plan_critique = pc_res.content
+                        span.end(output=plan_critique.model_dump())
+
+                        pc_task.status = "completed"
+                        pc_task.result_json = {
+                            "stdout": f"**Plan Evaluation:**\n- Approved: `{plan_critique.is_approved}`\n- Missing: `{', '.join(plan_critique.missing_requirements) if plan_critique.missing_requirements else 'None'}`\n\n**Feedback:**\n{plan_critique.feedback}",
+                            "model_used": plan_critique_model
+                        }
+                        session.add(pc_task)
+                        session.commit()
+                        break # Successfully audited
+                    except Exception as e:
+                        print(f"  [PlanCritique] Call failed: {e}. Attempting escalation...", flush=True)
+                        span.end(output={"error": str(e)})
+                        
+                        next_model = get_next_model_dynamic(plan_critique_model, hierarchy)
+                        if next_model and next_model != plan_critique_model:
+                            pc_task.status = "failed"
+                            pc_task.error = f"Service unavailable, retrying with {next_model}: {str(e)}"
+                            session.add(pc_task)
+                            session.commit()
+                            plan_critique_model = next_model
+                            continue
+                        else:
+                            raise e
+
+            if not plan_critique.is_approved:
+                print(f"  [Workflow] ❌ Plan attempt {workflow_attempt} rejected by Auditor. Feedback: {plan_critique.feedback[:100]}...", flush=True)
+                critique_feedback = plan_critique.feedback
+                continue # Back to Planning
+
+
+            tasks_to_run = []
+            with Session(engine) as session:
+                hub = ExecutionHub(session)
+                for step in planner_res.content.steps:
+                    new_task = Task(
+                        project_id=project_id,
+                        instruction_id=instruction_id,
+                        description=step.description,
+                        assigned_to=step.assigned_to,
+                        postcondition_json=step.postcondition,
+                        attached_skills=step.attached_skills,
+                        status="pending"
+                    )
+                    session.add(new_task)
+                    tasks_to_run.append(new_task)
+                session.commit()
+
+                for t in tasks_to_run:
+                    session.refresh(t)
+                    hub.create_outbox_event("TASK_CREATED", {"task_id": str(t.id), "description": t.description})
+                session.commit()
+                task_ids = [t.id for t in tasks_to_run]
+
+            # 4. EXECUTION
+            for task_id in task_ids:
+                if await is_cancelled(): return
+
+                # Create a Span for this specific worker task
+                task_span = trace.span(name="Task Execution", metadata={"task_id": str(task_id)})
+
+                while True:
+                    desc, assigned_to = "", ""
+                    with Session(engine) as session:
+                        hub = ExecutionHub(session)
+                        task_obj = session.get(Task, task_id)
+                        if not task_obj: break
+                        if hub.claim_task(task_id):
+                            executor.coder.model = task_obj.assigned_to
+                            desc = task_obj.description
+                        else: break 
+
+                    # Dynamic Skill Discovery (Planner-led + Keyword Fallback)
+                    assigned_skills = task_obj.attached_skills or []
+                    matched_skills = registry.find_skills(desc)
+
+                    # Deduplicate and Fetch Full Content
+                    all_skill_ids = list(set(assigned_skills + [s.id for s in matched_skills]))
+                    skills_to_inject = []
+                    for sid in all_skill_ids:
+                        s_obj = registry.skills.get(sid)
+                        if s_obj: skills_to_inject.append(s_obj)
+
+                    skills_ctx = None
+                    if skills_to_inject:
+                        skills_ctx = "\n\n".join([f"### Skill: {s.id}\n{s.content}" for s in skills_to_inject])
+                        print(f"    [Workflow] Applied skills: {[s.id for s in skills_to_inject]}", flush=True)
+
+                    tid_str = str(task_id)
+                    LIVE_STREAMS[tid_str] = {"reasoning": "", "stdout": ""}
+
+                    async def stream_reasoning_callback(token: str):
+                        LIVE_STREAMS[tid_str]["reasoning"] += token
+
+                    async def stream_stdout_callback(text: str):
+                        LIVE_STREAMS[tid_str]["stdout"] = text
+
+                    trace_context.get().update({
+                        "agent_name": "CodeGenerator", 
+                        "task_id": tid_str,
+                        "parent_observation_id": task_span.id
+                    })
+
+                    res, model_used = await executor.run_task(
+                        desc, 
+                        project_id=project_id, 
+                        session_id=str(project_id), 
+                        skills_context=skills_ctx, 
+                        task_id=task_id,
+                        stdout_callback=stream_stdout_callback,
+                        stream_callback=stream_reasoning_callback,
+                        cancel_check=is_cancelled
+                    )
+
+                    # Update task span with result details
+                    task_span.update(output={"model": model_used, "code_len": len(res.code) if res.code else 0})
+
+                    with Session(engine) as session:
+                        hub = ExecutionHub(session)
+                        task_obj = session.get(Task, task_id)
+                        
+                        # 1. Handle Bypassed (Handover)
+                        if res.result and res.result.startswith("HANDOVER_BUNDLE:"):
+                            bundle_file = res.result.split(":")[1]
+                            hub.bypass_task(task_id, {"stdout": res.stdout, "bundle_file": bundle_file, "model_used": model_used})
+                            
+                            # Register ZIP as an interactive artifact
+                            art = Artifact(
+                                project_id=project_id, 
+                                type="handover_bundle", 
+                                description=f"Reproducible Project Bundle (Estimated {task_obj.estimated_runtime_s/60:.1f}m)", 
+                                content_json={"filename": bundle_file}, 
+                                agent_id="CodeGenerator"
+                            )
                             session.add(art)
                             session.commit()
-                            hub.create_outbox_event("ARTIFACT_CREATED", {"type": "plot", "description": art.description, "content_json": art.content_json})
+                            hub.create_outbox_event("ARTIFACT_CREATED", {"type": "handover_bundle", "description": art.description, "content_json": art.content_json})
+                            break # Move to next task or abort subflow
 
-                        new_files_names = set([f["name"] for f in files_after]) - set([f["name"] for f in current_files_meta])
-                        for nf in new_files_names:
-                            full_path = os.path.join(workspace_dir, nf)
-                            if nf.lower().endswith(".png"):
-                                try:
-                                    with open(full_path, "rb") as img_file:
-                                        img_b64 = base64.b64encode(img_file.read()).decode("utf-8")
-                                    art = Artifact(project_id=project_id, type="plot", description=f"Workspace artifact: {nf}", content_json={"image_base64": img_b64}, agent_id="CodeGenerator")
-                                    session.add(art)
-                                    session.commit()
-                                    hub.create_outbox_event("ARTIFACT_CREATED", {"type": "plot", "description": art.description, "content_json": art.content_json})
-                                except Exception: pass
-                            elif nf.lower().endswith(".html"):
-                                try:
-                                    art = Artifact(project_id=project_id, type="interactive_plot", description=f"Interactive: {nf}", content_json={"filename": nf}, agent_id="CodeGenerator")
-                                    session.add(art)
-                                    session.commit()
-                                    hub.create_outbox_event("ARTIFACT_CREATED", {"type": "interactive_plot", "description": art.description, "content_json": art.content_json, "project_id": str(project_id)})
-                                except Exception: pass
+                        # 2. Handle Errors & Contract Violations
+                        error_msg = res.error.get("evalue", "Unknown error") if res.error else hub.validate_contract(task_obj, res.stdout, executor.authoritative_state)
 
-                        current_files_meta = files_after
-                        task_span.end(output={"stdout": res.stdout, "model_used": model_used, "code": res.code})
+                        if error_msg:
+                            if hub.escalate_task(task_id, error_msg, hierarchy):
+                                session.commit()
+                                continue 
+                            else:
+                                hub.fail_task(task_id, error_msg, result={"stdout": res.stdout, "stderr": res.stderr, "code": res.code})
+                                task_span.end(output={"error": error_msg})
+                                session.commit()
+                                break
+                        else:
+                            # 3. Handle Success
+                            hub.complete_task(task_id, {"stdout": res.stdout, "model_used": model_used, "code": res.code})
+                            files_after = _get_recursive_files(workspace_dir)
+                            hub.create_outbox_event("STATE_UPDATED", {"files": files_after, "state": executor.authoritative_state})
+
+                            project = session.get(Project, project_id)
+                            if project:
+                                project.last_state_json = executor.authoritative_state
+                                session.add(project)
+                                session.commit()
+
+                            for i, plot_b64 in enumerate(res.plots):
+                                art = Artifact(project_id=project_id, type="plot", description=f"In-memory plot {i+1}", content_json={"image_base64": plot_b64}, agent_id="CodeGenerator")
+                                session.add(art)
+                                session.commit()
+                                hub.create_outbox_event("ARTIFACT_CREATED", {"type": "plot", "description": art.description, "content_json": art.content_json})
+
+                            new_files_names = set([f["name"] for f in files_after]) - set([f["name"] for f in current_files_meta])
+                            for nf in new_files_names:
+                                if nf == "final_dashboard.html": continue # Avoid recursion
+                                full_path = os.path.join(workspace_dir, nf)
+                                if nf.lower().endswith(".png"):
+                                    try:
+                                        with open(full_path, "rb") as img_file:
+                                            img_b64 = base64.b64encode(img_file.read()).decode("utf-8")
+                                        art = Artifact(project_id=project_id, type="plot", description=f"Workspace artifact: {nf}", content_json={"image_base64": img_b64}, agent_id="CodeGenerator")
+                                        session.add(art)
+                                        session.commit()
+                                        hub.create_outbox_event("ARTIFACT_CREATED", {"type": "plot", "description": art.description, "content_json": art.content_json})
+                                    except Exception: pass
+                                elif nf.lower().endswith(".html"):
+                                    try:
+                                        art = Artifact(project_id=project_id, type="interactive_plot", description=f"Interactive: {nf}", content_json={"filename": nf}, agent_id="CodeGenerator")
+                                        session.add(art)
+                                        session.commit()
+                                        hub.create_outbox_event("ARTIFACT_CREATED", {"type": "interactive_plot", "description": art.description, "content_json": art.content_json, "project_id": str(project_id)})
+                                    except Exception: pass
+
+                            current_files_meta = files_after
+                            task_span.end(output={"stdout": res.stdout, "model_used": model_used, "code": res.code})
+                            session.commit()
+                            break
+
+                # HARD ABORT MECHANISM (Per Task)
+                with Session(engine) as session:
+                    task_obj = session.get(Task, task_id)
+                    if task_obj and task_obj.status == "failed":
+                        reason = f"Terminal failure in prerequisite task (ID: {task_id}). Halting workflow attempt."
+                        print(f"    [Workflow] 🛑 ABORT ATTEMPT: {reason}", flush=True)
+                        break 
+
+                        if await is_cancelled(): return
+
+            # 5. SYNTHESIS & CRITIQUE LOOP
+            final_synth = None
+            redundant_plots = []
+
+            # Default models (Escalatable)
+            synthesizer_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
+            synthesizer_model = hierarchy.get("T2", {}).get("models", synthesizer_fallback)[0]
+            
+            critique_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
+            critique_model = hierarchy.get("T2", {}).get("models", hierarchy.get("T3", {}).get("models", critique_fallback))[0]
+
+            # --- SYNTHESIS RELIABILITY LOOP ---
+            while True:
+                with Session(engine) as session:
+                    synth_task = Task(
+                        project_id=project_id, 
+                        instruction_id=instruction_id,
+                        description=f"Lead Data Scientist ({synthesizer_model}) is synthesizing results (Attempt {workflow_attempt})...", 
+                        assigned_to="Synthesizer", 
+                        status="running",
+                        heartbeat=datetime.now()
+                    )
+                    session.add(synth_task)
+                    session.commit()
+                    session.refresh(synth_task)
+
+                    span = trace.span(name=f"Synthesis Attempt {workflow_attempt}")
+                    trace_context.get().update({
+                        "agent_name": "Synthesizer", 
+                        "task_id": str(synth_task.id),
+                        "parent_observation_id": span.id
+                    })
+
+                    all_tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
+                    context_parts = [f"Task: {t.description}\nStatus: {t.status}\nOutput: {(t.result_json or {}).get('stdout','')[:4000]}" for t in all_tasks]
+                    
+                    artifacts = session.exec(select(Artifact).where(Artifact.project_id == project_id)).all()
+                    artifact_descriptions = [f"Artifact: {a.description} (Type: {a.type})" for a in artifacts]
+                    
+                    if artifact_descriptions:
+                        context_parts.append("--- GENERATED ARTIFACTS ---\n" + "\n".join(artifact_descriptions))
+
+                    context = "\n\n---\n\n".join(context_parts)
+
+                    proj = session.get(Project, project_id)
+                    existing_narrative = proj.narrative if proj else None
+                    existing_takeaways = proj.takeaways if proj else None
+
+                    try:
+                        synthesizer = SynthesizerAgent(model=synthesizer_model)
+                        synth_res = await synthesizer.run(SynthesizerInput(
+                            objective=objective, 
+                            context_artifacts=context,
+                            existing_narrative=existing_narrative,
+                            existing_takeaways=existing_takeaways
+                        ))
+                        final_synth = synth_res.content
+                        span.end(output=final_synth.model_dump())
+
+                        stask = session.get(Task, synth_task.id)
+                        if stask:
+                            stask.status = "completed"
+                            stask.result_json = {
+                                "stdout": "Draft generated.", 
+                                "narrative": final_synth.narrative, 
+                                "takeaways": final_synth.key_takeaways,
+                                "artifact_insights": [ins.dict() for ins in final_synth.artifact_insights],
+                                "model_used": synthesizer_model
+                            }
                         session.commit()
-                        break
-
-            # HARD ABORT MECHANISM
-            with Session(engine) as session:
-                task_obj = session.get(Task, task_id)
-                if task_obj and task_obj.status == "failed":
-                    reason = f"Terminal failure in prerequisite task (ID: {task_id}). Halting workflow to prevent cascade failures."
-                    print(f"    [Workflow] 🛑 HARD ABORT: {reason}", flush=True)
-                    _mark_workflow_failed(session, project_id, reason)
-                    return 
-
-        if await is_cancelled(): return
-
-        # 5. SYNTHESIS & CRITIQUE LOOP
-        MAX_ATTEMPTS = 2
-        attempt = 0
-        final_synth = None
-        redundant_plots = []
-
-        while attempt < MAX_ATTEMPTS:
-            attempt += 1
-            print(f"  [Workflow] Synthesis attempt {attempt}/{MAX_ATTEMPTS}...", flush=True)
-
-            with Session(engine) as session:
-                synth_task = Task(
-                    project_id=project_id, 
-                    instruction_id=instruction_id,
-                    description=f"Lead Data Scientist is synthesizing results (Attempt {attempt})...", 
-                    assigned_to="Synthesizer", 
-                    status="running",
-                    heartbeat=datetime.now()
-                )
-                session.add(synth_task)
-                session.commit()
-                session.refresh(synth_task)
-
-                span = trace.span(name=f"Synthesis Attempt {attempt}")
-                trace_context.get().update({
-                    "agent_name": "Synthesizer", 
-                    "task_id": str(synth_task.id),
-                    "parent_observation_id": span.id
-                })
-
-                all_tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
-                context_parts = [f"Task: {t.description}\nStatus: {t.status}\nOutput: {(t.result_json or {}).get('stdout','')[:4000]}" for t in all_tasks]
-                
-                # Fetch actual artifacts to include in context
-                artifacts = session.exec(select(Artifact).where(Artifact.project_id == project_id)).all()
-                artifact_descriptions = [f"Artifact: {a.description} (Type: {a.type})" for a in artifacts]
-                
-                if artifact_descriptions:
-                    context_parts.append("--- GENERATED ARTIFACTS ---\n" + "\n".join(artifact_descriptions))
-
-                context = "\n\n---\n\n".join(context_parts)
-
-                proj = session.get(Project, project_id)
-                existing_narrative = proj.narrative if proj else None
-                existing_takeaways = proj.takeaways if proj else None
-
-                synthesizer = SynthesizerAgent(model=planner_model)
-                synth_res = await synthesizer.run(SynthesizerInput(
-                    objective=objective, 
-                    context_artifacts=context,
-                    existing_narrative=existing_narrative,
-                    existing_takeaways=existing_takeaways
-                ))
-                final_synth = synth_res.content
-                span.end(output=final_synth.model_dump())
-
-                stask = session.get(Task, synth_task.id)
-                if stask:
-                    stask.status = "completed"
-                    stask.result_json = {
-                        "stdout": "Draft generated.", 
-                        "narrative": final_synth.narrative, 
-                        "takeaways": final_synth.key_takeaways,
-                        "model_used": planner_model # Synthesizer currently uses planner_model
-                    }
-                session.commit()
+                        break # Success
+                    except Exception as e:
+                        print(f"  [Synthesizer] Call failed: {e}. Attempting escalation...", flush=True)
+                        span.end(output={"error": str(e)})
+                        
+                        next_model = get_next_model_dynamic(synthesizer_model, hierarchy)
+                        if next_model and next_model != synthesizer_model:
+                            synth_task.status = "failed"
+                            synth_task.error = f"Service unavailable, retrying with {next_model}: {str(e)}"
+                            session.add(synth_task)
+                            session.commit()
+                            synthesizer_model = next_model
+                            continue
+                        else:
+                            raise e
 
             # Generate draft dashboard for Critique
             with Session(engine) as session:
@@ -719,59 +950,79 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
 
             # 6. CRITIQUE
             if await is_cancelled(): return
-            print(f"  [Workflow] Quality Assurance Critique (Attempt {attempt})...", flush=True)
-            with Session(engine) as session:
-                critique_task = Task(
-                    project_id=project_id,
-                    instruction_id=instruction_id,
-                    description=f"QA Specialist is evaluating synthesis quality (Attempt {attempt})...",
-                    assigned_to="Critique",
-                    status="running",
-                    heartbeat=datetime.now()
-                )
-                session.add(critique_task)
-                session.commit()
-                session.refresh(critique_task)
+            print(f"  [Workflow] Quality Assurance Critique (Attempt {workflow_attempt})...", flush=True)
 
-                span = trace.span(name=f"Critique Attempt {attempt}")
-                trace_context.get().update({
-                    "agent_name": "Critique",
-                    "task_id": str(critique_task.id),
-                    "parent_observation_id": span.id
-                })
+            critique = None
+            while True:
+                with Session(engine) as session:
+                    critique_task = Task(
+                        project_id=project_id,
+                        instruction_id=instruction_id,
+                        description=f"QA Specialist ({critique_model}) is evaluating synthesis quality (Attempt {workflow_attempt})...",
+                        assigned_to="Critique",
+                        status="running",
+                        heartbeat=datetime.now()
+                    )
+                    session.add(critique_task)
+                    session.commit()
+                    session.refresh(critique_task)
 
-                critique_agent = CritiqueAgent(model=critique_model) # Use specialized model for critique
-                critique_res = await critique_agent.run(CritiqueInput(
-                    objective=objective,
-                    context_artifacts=context,
-                    synthesis_narrative=final_synth.narrative,
-                    synthesis_takeaways=final_synth.key_takeaways,
-                    dashboard_html=sanitized_html
-                ))
-                critique = critique_res.content
-                span.end(output=critique.model_dump())
+                    span = trace.span(name=f"Critique Attempt {workflow_attempt}")
+                    trace_context.get().update({
+                        "agent_name": "Critique",
+                        "task_id": str(critique_task.id),
+                        "parent_observation_id": span.id
+                    })
 
-                ctask = session.get(Task, critique_task.id)
-                if ctask:
-                    ctask.status = "completed"
-                    ctask.result_json = {
-                        "stdout": f"Approved: {critique.is_approved}\nFeedback: {critique.critique_feedback}",
-                        "model_used": critique_model
-                    }
-                session.commit()
+                    try:
+                        critique_agent = CritiqueAgent(model=critique_model) 
+                        critique_res = await critique_agent.run(CritiqueInput(
+                            objective=objective,
+                            context_artifacts=context,
+                            synthesis_narrative=final_synth.narrative,
+                            synthesis_takeaways=final_synth.key_takeaways,
+                            dashboard_html=sanitized_html
+                        ))
+                        critique = critique_res.content
+                        span.end(output=critique.model_dump())
 
-                if critique.is_approved or attempt >= MAX_ATTEMPTS:
-                    redundant_plots = critique.redundant_artifacts
-                    break
-                else:
-                    # Inject feedback for next attempt
-                    feedback_msg = f"\n\n--- CRITIQUE FEEDBACK (REJECTED) ---\n{critique.critique_feedback}\n\nPlease revise the narrative and takeaways to address these points."
-                    with Session(engine) as session:
-                        proj = session.get(Project, project_id)
-                        if proj:
-                            proj.narrative = (proj.narrative or "") + feedback_msg
-                            session.add(proj)
+                        ctask = session.get(Task, critique_task.id)
+                        if ctask:
+                            ctask.status = "completed"
+                            ctask.result_json = {
+                                "stdout": f"Approved: {critique.is_approved}\nFeedback: {critique.critique_feedback}",
+                                "model_used": critique_model
+                            }
+                        session.commit()
+                        break # Success
+                    except Exception as e:
+                        print(f"  [Critique] Call failed: {e}. Attempting escalation...", flush=True)
+                        span.end(output={"error": str(e)})
+
+                        next_model = get_next_model_dynamic(critique_model, hierarchy)
+                        if next_model and next_model != critique_model:
+                            critique_task.status = "failed"
+                            critique_task.error = f"Service unavailable, retrying with {next_model}: {str(e)}"
+                            session.add(critique_task)
                             session.commit()
+                            critique_model = next_model
+                            continue
+                        else:
+                            raise e
+
+            if critique.is_approved:
+                redundant_plots = critique.redundant_artifacts
+                break
+            else:
+                # Inject feedback for next attempt at PLANNING level
+                print(f"  [Workflow] ❌ Attempt {workflow_attempt} rejected by QA. Feedback: {critique.critique_feedback[:100]}...", flush=True)
+                critique_feedback = critique.critique_feedback
+                with Session(engine) as session:
+                    proj = session.get(Project, project_id)
+                    if proj:
+                        proj.narrative = (proj.narrative or "") + f"\n\n--- QA REJECTION ---\n{critique_feedback}"
+                        session.add(proj)
+                        session.commit()
 
         # 7. FINAL REPORTING & PRUNING
         with Session(engine) as session:
@@ -837,9 +1088,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             session.commit()
 
     except Exception as e:
-        print(f"❌ FATAL ERROR: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"❌ FATAL ERROR: {traceback.format_exc()}")
         with Session(engine) as session:
             _mark_workflow_failed(session, project_id, f"Fatal system error: {str(e)}")
     finally:
@@ -953,7 +1202,7 @@ async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundT
         
         instruction_content = objective
         if meta.recipes:
-            instruction_content += f"\n\n--- PREFERRED RECIPES ---\nPlease prioritize the following recipes for this objective: {', '.join(meta.recipes)}"
+            instruction_content += f"\\n\\n--- PREFERRED RECIPES ---\\nPlease prioritize the following recipes for this objective: {', '.join(meta.recipes)}"
             
         instruction = Instruction(project_id=project.id, content=instruction_content)
         session.add(instruction)
@@ -977,7 +1226,9 @@ async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundT
         session.refresh(project)
         
         if req.launch_workflow:
-            background_tasks.add_task(run_agent_workflow, project.id, objective, instruction.id)
+            if project.id in ACTIVE_WORKFLOWS: raise HTTPException(status_code=400, detail="Workflow already in progress")
+            ACTIVE_WORKFLOWS.add(project.id)
+            background_tasks.add_task(run_agent_workflow_wrapper, project.id, objective, instruction.id)
         
         current_files = _get_recursive_files(workspace_dir)
         instructions = session.exec(select(Instruction).where(Instruction.project_id == project.id).order_by(Instruction.created_at.asc())).all()
@@ -1090,7 +1341,8 @@ async def create_project(req: ProjectCreateRequest, background_tasks: Background
         current_files = _get_recursive_files(workspace_dir)
 
         if req.objective.strip():
-            background_tasks.add_task(run_agent_workflow, project.id, req.objective, instr_id)
+            ACTIVE_WORKFLOWS.add(project.id)
+            background_tasks.add_task(run_agent_workflow_wrapper, project.id, req.objective, instr_id)
 
         # Fetch instructions to return
         instructions = session.exec(select(Instruction).where(Instruction.project_id == project.id).order_by(Instruction.created_at.asc())).all()
@@ -1157,7 +1409,7 @@ except Exception as e:
         )
         if res.stdout:
             # Parse the last line as JSON to handle any pre-output
-            lines = res.stdout.strip().split('\n')
+            lines = res.stdout.strip().split('\\n')
             data = None
             for line in reversed(lines):
                 try:

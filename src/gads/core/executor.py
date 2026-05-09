@@ -9,6 +9,8 @@ from gads.tools.sandbox import SandboxClient, ExecutionResult
 from gads.core.models import Artifact, Task
 from gads.core.database import engine
 from gads.core.bus import bus
+from gads.core.runtime_oracle import RuntimeOracle
+from gads.core.handover import HandoverManager
 from sqlmodel import Session
 
 class ExecutionManager:
@@ -17,6 +19,7 @@ class ExecutionManager:
     def __init__(self, sandbox_url: str = "http://localhost:8000"):
         self.coder = CodeGeneratorAgent()
         self.sandbox = SandboxClient(base_url=sandbox_url)
+        self.handover = HandoverManager(sandbox_url=sandbox_url)
         self.authoritative_state: Dict[str, Any] = {} # Persistent memory for the project run
 
     async def run_task(
@@ -134,6 +137,41 @@ class ExecutionManager:
                 
                 current_code = coder_res.content.code
                 
+                # --- PREDICTIVE RUNTIME ORACLE ---
+                # 1. Gather Data Dimensions
+                n_rows, m_cols = 0, 0
+                for var_info in self.authoritative_state.values():
+                    if var_info.get("type") == "DataFrame":
+                        shape = var_info.get("shape", [0, 0])
+                        n_rows = max(n_rows, shape[0])
+                        m_cols = max(m_cols, shape[1])
+                
+                # 2. Estimate
+                est_seconds = RuntimeOracle.estimate_runtime(current_code, n_rows, m_cols)
+                print(f"    [Oracle] Estimated Runtime: {est_seconds:.1f}s (N={n_rows}, M={m_cols})", flush=True)
+
+                if task_id:
+                    with Session(engine) as session:
+                        from gads.core.models import Task as DBTask
+                        t_obj = session.get(DBTask, task_id)
+                        if t_obj: 
+                            t_obj.estimated_runtime_s = est_seconds
+                            session.add(t_obj)
+                            session.commit()
+
+                # 3. Decision Branch (300s limit)
+                if est_seconds > 280.0: # 20s buffer
+                    print(f"    [Executor] ⚠️ TASK BYPASSED: Likely to exceed safety limit. Generating handover bundle...", flush=True)
+                    bundle_file = await self.handover.create_bundle(project_id, current_code, est_seconds)
+                    
+                    return ExecutionResult(
+                        stdout=f"BYPASSED: Task estimated to take {est_seconds/60:.1f} minutes. Handover bundle created: {bundle_file}",
+                        stderr="",
+                        result=f"HANDOVER_BUNDLE:{bundle_file}",
+                        execution_time_ms=0,
+                        kernel_state={}
+                    ), coder_res.model_used
+
                 # 0.5. Check Cancellation before Sandbox execution
                 if cancel_check and await cancel_check():
                     print(f"    [Executor] 🛑 Aborting execution due to user cancellation.", flush=True)
@@ -151,6 +189,15 @@ class ExecutionManager:
                 try:
                     exec_result = await self.sandbox.execute(current_code, project_id=project_id, session_id=session_id)
                     exec_result.code = current_code # Attach code for persistence
+                    
+                    # LOG ACTUAL RUNTIME FOR LEARNING
+                    # Scan for first estimator to log
+                    estimators = RuntimeOracle.analyze_code(current_code)
+                    if estimators:
+                        RuntimeOracle.log_execution(
+                            estimators[0].name, n_rows, m_cols, 
+                            estimators[0].params, exec_result.execution_time_ms / 1000.0
+                        )
                 finally:
                     poller.cancel()
                     with contextlib.suppress(asyncio.CancelledError):

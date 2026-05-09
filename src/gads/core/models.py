@@ -32,8 +32,9 @@ class Task(SQLModel, table=True):
     instruction_id: Optional[uuid.UUID] = Field(default=None, foreign_key="instruction.id")
     description: str
     assigned_to: str
-    status: str = "pending"  # pending, running, completed, failed
+    status: str = "pending"  # pending, running, completed, failed, bypassed
     escalation_count: int = 0
+    estimated_runtime_s: Optional[float] = None
     postcondition_json: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     attached_skills: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))
     heartbeat: Optional[datetime] = None
@@ -43,6 +44,17 @@ class Task(SQLModel, table=True):
     
     project: Project = Relationship(back_populates="tasks")
     instruction: Optional[Instruction] = Relationship(back_populates="tasks")
+
+class ExecutionLog(SQLModel, table=True):
+    """Historical data for the Runtime Oracle's learned estimator."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    estimator_class: str = Field(index=True)
+    n_rows: int
+    m_cols: int
+    params_json: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    hardware_id: str
+    actual_runtime_s: float
+    created_at: datetime = Field(default_factory=datetime.now)
 
 class Artifact(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)

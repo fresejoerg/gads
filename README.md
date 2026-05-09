@@ -15,16 +15,17 @@ A foundational requirement of GADS is the ability to run on **local LLMs** and *
 ## Key Features
 
 *   **Project Manager (The Planner)**: A high-reasoning agent that decomposes user objectives into a deterministic task list with unique "Figure N" assignments and strict postcondition contracts.
-*   **Architect (The Router)**: Classifies user objectives into structured intents (e.g., `binary_classification.tabular`) and seamlessly consults the Knowledge Base to fetch matching expert SOPs in a single consolidated step.
-*   **GADS Control Center (UI)**: A 3-panel **Streamlit** IDE featuring a unified, professional UI styling, persistent **Project Archive** with timestamps, and real-time **Task Tracking** via auto-refreshing fragments.
-*   **Automatic Data Introspection**: Instantly extracts file schemas and data samples (top 5 rows) using fast, low-memory DuckDB queries the moment an external dataset is mounted, allowing you to preview data structures without heavy processing.
-*   **Professional Reporting Engine**: Automatically assembles an integrated **Interactive HTML Dashboard** and a formal **Markdown Research Report** (anchored by Figure numbers) at the end of every analysis.
-*   **Durable Project Memory**: All analytical results (Narratives, Takeaways) and Sandbox Variable States are persisted in a PostgreSQL database, ensuring projects are fully reloadable and stateful.
-*   **Automated Maintenance**: Background tasks for periodic archive cleanup of old artifacts (>30 days) and orphaned task detection.
+*   **Auditor (Plan Critique)**: A Senior Auditor agent that evaluates proposed plans *before* execution, rejecting "lazy" or incomplete sequences and providing feedback for automatic re-planning.
+*   **Architect (The Router)**: Classifies user objectives into structured intents (e.g., `binary_classification.tabular`) and seamlessly consults the Knowledge Base to fetch matching expert SOPs.
+*   **Predictive Runtime Oracle**: Proactively predicts the execution time of generated code using AST analysis and data dimensions. If a task is estimated to exceed safety thresholds (e.g., 5 minutes), it is gracefully bypassed to prevent system hangs.
+*   **Reproducible Project Bundles**: Automatically generates a complete handover ZIP for bypassed tasks, containing exported data artifacts (Parquet/Pickle), an end-to-end training script, and environment requirements for offline local execution.
+*   **Automated Model Escalation**: Built-in resilience that automatically shifts tasks to higher-tier models (e.g., Haiku -> Sonnet -> Opus) upon execution failure or contract violation.
+*   **GADS Control Center (UI)**: A 3-panel **Streamlit** IDE featuring a unified, professional UI styling, persistent **Project Archive**, and real-time **Task Tracking**.
+*   **Professional Reporting Engine**: Automatically assembles an integrated **Interactive HTML Dashboard** and a formal **Markdown Research Report**. Now supports embedding static plots, interactive charts, and handover bundle links in a single narrative thread.
+*   **Automatic Data Introspection**: Instantly extracts file schemas and data samples using fast, low-memory DuckDB queries the moment an external dataset is mounted.
 *   **Stateful Python Sandbox**: A secure, Docker-isolated execution environment using **IPython Kernels** to maintain variable state across multiple agent turns.
     *   **ML Ready**: Pre-installed with `scikit-learn`, `pandas`, `plotly`, `kaleido`, and `joblib`.
-    *   **Automatic Plot Capture**: Captures **Plotly Express** and `matplotlib`/`seaborn` figures as interactive HTML or base64 artifacts.
-    *   **Professional Defaults**: Pre-configured with the `plotly_white` template and professional color palettes.
+    *   **Automatic Plot Capture**: Captures both interactive HTML and static base64 visualizations.
 
 ---
 

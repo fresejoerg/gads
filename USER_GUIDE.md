@@ -41,7 +41,15 @@ If you know your file is massive (e.g., over 500MB or millions of rows), mention
 
 ---
 
-## 5. Follow-up and Iteration
+## 5. Understanding "Bypassed" Tasks & Handover Bundles
+For very heavy computations (e.g., training a large Random Forest on millions of rows), GADS uses a **Predictive Runtime Oracle**.
+*   **Safety Threshold**: If a task is estimated to take more than **5 minutes**, the system will mark it as **"Bypassed"** in the timeline.
+*   **Handover ZIP**: Instead of failing, GADS generates a **Reproducible Project Bundle**. You can download this ZIP from the dashboard. It contains your cleaned data artifacts, a standalone Python script, and instructions to run the heavy training code on your local machine.
+*   **Why?**: This prevents your browser session or the server from hanging, while still giving you the exact code you need to finish the job.
+
+---
+
+## 6. Follow-up and Iteration
 GADS features **Durable Project Memory**. This means you can build on previous results without starting over.
 
 *   **Best Practice**: Reference variables or findings from earlier in the session.
