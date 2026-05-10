@@ -29,4 +29,9 @@ dependencies = [
     "streamlit-ace>=0.1.1",
     "langfuse<3.0.0",
     "pyyaml>=6.0.3",
+    "jinja2>=3.1.0",
+    "plotly>=6.0.0",
+    "kaleido>=0.2.1",
+    "leather>=0.4.1",
+    "pygal>=3.1.0",
 ]

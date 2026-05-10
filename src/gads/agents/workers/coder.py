@@ -18,6 +18,7 @@ class CoderInput(BaseModel):
     skills_context: Optional[str] = None
     task_id: Optional[str] = None
     postcondition_contract: Optional[Dict[str, Any]] = None
+    state_summary: Optional[str] = None
 
 class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
     def __init__(self, model: str = "claude-sonnet-4.6"):
@@ -32,7 +33,9 @@ class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
         # Refresh prompt from registry
         self.system_prompt = prompt_registry.get_prompt(self.name)
         
-        state_summary = json.dumps(input_data.authoritative_state, indent=2)
+        # Use provided state summary or fallback to JSON of dict
+        state_summary = input_data.state_summary or json.dumps(input_data.authoritative_state, indent=2)
+        
         files_summary = ", ".join([f"'{f}'" for f in input_data.available_files]) if input_data.available_files else "None"
         contract_summary = json.dumps(input_data.postcondition_contract, indent=2) if input_data.postcondition_contract else "None. Just fulfill the task description."
         

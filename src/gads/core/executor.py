@@ -31,7 +31,8 @@ class ExecutionManager:
         task_id: Optional[uuid.UUID] = None,
         stdout_callback = None,
         stream_callback = None,
-        cancel_check = None
+        cancel_check = None,
+        state_summary: Optional[str] = None
     ) -> Tuple[ExecutionResult, str]:
         """
         Runs the full loop with State Introspection. 
@@ -124,7 +125,8 @@ class ExecutionManager:
                         error_feedback=error_feedback,
                         skills_context=skills_context,
                         task_id=str(task_id) if task_id else None,
-                        postcondition_contract=contract
+                        postcondition_contract=contract,
+                        state_summary=state_summary
                     ), stream_callback=debounced_stream_callback),
                     timeout=300.0
                 )

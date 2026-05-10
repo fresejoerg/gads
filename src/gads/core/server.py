@@ -25,6 +25,8 @@ from gads.core.executor import ExecutionManager
 from gads.core.registry import get_model_hierarchy, get_local_only, set_local_only, get_random_routing, set_random_routing, get_next_model_dynamic
 from gads.core.knowledge import KnowledgeRegistry
 from gads.core.reporting import create_master_reports
+from gads.core.introspection import summarize_artifact
+from gads.core.distiller import distill_dashboard_to_markdown
 from gads.core.prompts import prompt_registry
 from langfuse import Langfuse
 from sqlmodel import select, Session
@@ -140,7 +142,7 @@ async def startup_event():
     init_db()
     asyncio.create_task(dispatcher_loop())
     asyncio.create_task(watchdog_loop())
-    asyncio.create_task(archive_cleanup_loop())
+    # # asyncio.create_task(archive_cleanup_loop())
 
 @app.get("/recipes", response_model=List[str])
 def list_recipes_files():
@@ -505,6 +507,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         MAX_WORKFLOW_ATTEMPTS = 3
         workflow_attempt = 0
         critique_feedback = None
+        final_synth = None
+        redundant_plots = []
         
         while workflow_attempt < MAX_WORKFLOW_ATTEMPTS:
             workflow_attempt += 1
@@ -636,14 +640,15 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         pc_res = await pc_agent.run(PlanCritiqueInput(
                             objective=objective,
                             proposed_steps=planner_res.content.steps,
-                            knowledge_report=knowledge_report
+                            knowledge_report=knowledge_report,
+                            available_files=[f["name"] for f in current_files_meta]
                         ))
                         plan_critique = pc_res.content
                         span.end(output=plan_critique.model_dump())
 
                         pc_task.status = "completed"
                         pc_task.result_json = {
-                            "stdout": f"**Plan Evaluation:**\n- Approved: `{plan_critique.is_approved}`\n- Missing: `{', '.join(plan_critique.missing_requirements) if plan_critique.missing_requirements else 'None'}`\n\n**Feedback:**\n{plan_critique.feedback}",
+                            "stdout": f"**Plan Evaluation:**\n- Approved: `{plan_critique.is_approved}`\n- Terminal Failure: `{plan_critique.is_terminal_failure}`\n- Missing: `{', '.join(plan_critique.missing_requirements) if plan_critique.missing_requirements else 'None'}`\n\n**Feedback:**\n{plan_critique.feedback}",
                             "model_used": plan_critique_model
                         }
                         session.add(pc_task)
@@ -666,6 +671,25 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
 
             if not plan_critique.is_approved:
                 print(f"  [Workflow] ❌ Plan attempt {workflow_attempt} rejected by Auditor. Feedback: {plan_critique.feedback[:100]}...", flush=True)
+                
+                if plan_critique.is_terminal_failure:
+                    print(f"  [Workflow] 🛑 TERMINAL FAILURE detected by Auditor. Halting.", flush=True)
+                    with Session(engine) as session:
+                        proj = session.get(Project, project_id)
+                        if proj:
+                            proj.narrative = f"[HALTED] {plan_critique.feedback}"
+                            session.add(proj)
+                            
+                        # Also mark all current workflow attempts as failed to clear the UI
+                        statement = select(Task).where(Task.project_id == project_id, Task.status == "running")
+                        running_tasks = session.exec(statement).all()
+                        for rt in running_tasks:
+                            rt.status = "failed"
+                            rt.error = "Workflow halted due to terminal environmental issue."
+                            session.add(rt)
+                        session.commit()
+                    return # Exit the workflow entirely
+
                 critique_feedback = plan_critique.feedback
                 continue # Back to Planning
 
@@ -727,6 +751,64 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         skills_ctx = "\n\n".join([f"### Skill: {s.id}\n{s.content}" for s in skills_to_inject])
                         print(f"    [Workflow] Applied skills: {[s.id for s in skills_to_inject]}", flush=True)
 
+                    # 4.1 CONTEXT HARDENING: SLIDING WINDOW & INTROSPECTION
+                    all_tasks = session.exec(select(Task).where(Task.project_id == project_id).order_by(Task.created_at.asc())).all()
+                    
+                    # Sliding Window (2+1 Model: First Task + Last 2 Tasks)
+                    # All others are reduced to their metadata summary
+                    hardened_context_parts = []
+                    for i, t in enumerate(all_tasks):
+                        # Determine if this task should be in full detail
+                        is_first = (i == 0)
+                        is_recent = (i >= len(all_tasks) - 2)
+                        
+                        stdout_str = (t.result_json or {}).get("stdout", "")
+                        code_str = (t.result_json or {}).get("code", "")
+                        
+                        if is_first or is_recent:
+                            # Full detail
+                            task_ctx = f"### TASK: {t.description}\nStatus: {t.status}\nCode Used:\n```python\n{code_str}\n```\nStdout Output:\n{stdout_str[:2000]}"
+                        else:
+                            # Distilled metadata only
+                            summary = (t.result_json or {}).get("orchestrator_summary", f"Completed: {t.description}")
+                            task_ctx = f"### TASK (HISTORICAL): {t.description}\nStatus: {t.status}\nSummary: {summary}"
+                        
+                        hardened_context_parts.append(task_ctx)
+
+                    # 4.2 KERNEL NAMESPACE SNAPSHOT (Preventing Amnesia)
+                    # Before each task, we probe the kernel for live variables and dtypes
+                    snapshot_code = """
+import json
+import pandas as pd
+import numpy as np
+_vars = dir()
+_summary = {}
+for _v in _vars:
+    if _v.startswith('_'): continue
+    try:
+        _obj = globals()[_v]
+        if isinstance(_obj, pd.DataFrame):
+            _summary[_v] = f"DataFrame ({_obj.shape[0]}x{_obj.shape[1]}) - Columns: {list(_obj.columns)}"
+        elif isinstance(_obj, (list, dict, np.ndarray)):
+            _summary[_v] = f"{type(_obj).__name__} (len: {len(_obj)})"
+        elif hasattr(_obj, 'predict') and hasattr(_obj, 'fit'):
+            _summary[_v] = f"Model ({type(_obj).__name__})"
+    except: pass
+print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
+"""
+                    namespace_summary = "No live variables detected."
+                    try:
+                        snap_res = await asyncio.wait_for(executor.sandbox.execute(snapshot_code, project_id=project_id, session_id=str(project_id)), timeout=5.0)
+                        if "GADS_STATE_SNAPSHOT:" in snap_res.stdout:
+                            raw_snap = snap_res.stdout.split("GADS_STATE_SNAPSHOT:")[1].strip().split("\n")[0]
+                            namespace_summary = json.loads(raw_snap)
+                    except Exception as e:
+                        print(f"    [Workflow] Warning: Namespace snapshot failed: {e}")
+
+                    # Authoritative prompt building
+                    context = "\n\n---\n\n".join(hardened_context_parts)
+                    state_summary_str = json.dumps(namespace_summary, indent=2)
+
                     tid_str = str(task_id)
                     LIVE_STREAMS[tid_str] = {"reasoning": "", "stdout": ""}
 
@@ -750,7 +832,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         task_id=task_id,
                         stdout_callback=stream_stdout_callback,
                         stream_callback=stream_reasoning_callback,
-                        cancel_check=is_cancelled
+                        cancel_check=is_cancelled,
+                        state_summary=state_summary_str # Pass the ground truth
                     )
 
                     # Update task span with result details
@@ -760,26 +843,34 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         hub = ExecutionHub(session)
                         task_obj = session.get(Task, task_id)
                         
-                        # 1. Handle Bypassed (Handover)
+                        # Handle Bypassed (Handover)
                         if res.result and res.result.startswith("HANDOVER_BUNDLE:"):
                             bundle_file = res.result.split(":")[1]
                             hub.bypass_task(task_id, {"stdout": res.stdout, "bundle_file": bundle_file, "model_used": model_used})
                             
-                            # Register ZIP as an interactive artifact
                             art = Artifact(
                                 project_id=project_id, 
                                 type="handover_bundle", 
-                                description=f"Reproducible Project Bundle (Estimated {task_obj.estimated_runtime_s/60:.1f}m)", 
+                                description=f"Reproducible Project Bundle", 
                                 content_json={"filename": bundle_file}, 
                                 agent_id="CodeGenerator"
                             )
                             session.add(art)
                             session.commit()
                             hub.create_outbox_event("ARTIFACT_CREATED", {"type": "handover_bundle", "description": art.description, "content_json": art.content_json})
-                            break # Move to next task or abort subflow
+                            break 
 
                         # 2. Handle Errors & Contract Violations
                         error_msg = res.error.get("evalue", "Unknown error") if res.error else hub.validate_contract(task_obj, res.stdout, executor.authoritative_state)
+
+                        # --- HALLUCINATION GUARD ---
+                        hallucination_tokens = [
+                            "no files provided", "no data available", "simulating data", 
+                            "mock data", "dummy data", "environment is empty",
+                            "no file available to process"
+                        ]
+                        if not error_msg and any(token in res.stdout.lower() for token in hallucination_tokens):
+                            error_msg = "Task Failed: Agent detected missing environment files and attempted to simulate/skip instead of erroring."
 
                         if error_msg:
                             if hub.escalate_task(task_id, error_msg, hierarchy):
@@ -792,9 +883,25 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                                 break
                         else:
                             # 3. Handle Success
-                            hub.complete_task(task_id, {"stdout": res.stdout, "model_used": model_used, "code": res.code})
-                            files_after = _get_recursive_files(workspace_dir)
-                            hub.create_outbox_event("STATE_UPDATED", {"files": files_after, "state": executor.authoritative_state})
+                            # ORCHESTRATOR-SIDE INTROSPECTION (No Hallucinations)
+                            new_files_after = _get_recursive_files(workspace_dir)
+                            new_names = set([f["name"] for f in new_files_after]) - set([f["name"] for f in current_files_meta])
+                            
+                            artifact_summaries = []
+                            for nf in new_names:
+                                fpath = os.path.join(workspace_dir, nf)
+                                if os.path.exists(fpath):
+                                    artifact_summaries.append(summarize_artifact(fpath))
+                            
+                            orchestrator_summary = "; ".join(artifact_summaries) if artifact_summaries else "Task completed successfully with no new files."
+                            
+                            hub.complete_task(task_id, {
+                                "stdout": res.stdout, 
+                                "model_used": model_used, 
+                                "code": res.code,
+                                "orchestrator_summary": orchestrator_summary # Persist ground truth
+                            })
+                            files_after = new_files_after
 
                             project = session.get(Project, project_id)
                             if project:
@@ -802,15 +909,19 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                                 session.add(project)
                                 session.commit()
 
-                            for i, plot_b64 in enumerate(res.plots):
-                                art = Artifact(project_id=project_id, type="plot", description=f"In-memory plot {i+1}", content_json={"image_base64": plot_b64}, agent_id="CodeGenerator")
-                                session.add(art)
-                                session.commit()
-                                hub.create_outbox_event("ARTIFACT_CREATED", {"type": "plot", "description": art.description, "content_json": art.content_json})
-
                             new_files_names = set([f["name"] for f in files_after]) - set([f["name"] for f in current_files_meta])
+                            
+                            has_explicit_plots = any(nf.lower().endswith((".json", ".html")) and not nf.endswith(".meta.json") and nf != "final_dashboard.html" for nf in new_files_names)
+
+                            if not has_explicit_plots:
+                                for i, plot_b64 in enumerate(res.plots):
+                                    art = Artifact(project_id=project_id, type="plot", description=f"In-memory plot {i+1}", content_json={"image_base64": plot_b64}, agent_id="CodeGenerator")
+                                    session.add(art)
+                                    session.commit()
+                                    hub.create_outbox_event("ARTIFACT_CREATED", {"type": "plot", "description": art.description, "content_json": art.content_json})
+
                             for nf in new_files_names:
-                                if nf == "final_dashboard.html": continue # Avoid recursion
+                                if nf == "final_dashboard.html": continue 
                                 full_path = os.path.join(workspace_dir, nf)
                                 if nf.lower().endswith(".png"):
                                     try:
@@ -821,12 +932,16 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                                         session.commit()
                                         hub.create_outbox_event("ARTIFACT_CREATED", {"type": "plot", "description": art.description, "content_json": art.content_json})
                                     except Exception: pass
-                                elif nf.lower().endswith(".html"):
+                                elif nf.lower().endswith(".json") and not nf.endswith(".meta.json"):
                                     try:
-                                        art = Artifact(project_id=project_id, type="interactive_plot", description=f"Interactive: {nf}", content_json={"filename": nf}, agent_id="CodeGenerator")
+                                        # Deterministic Server-Side Hardening (Purge Binary Data)
+                                        from gads.core.introspection import harden_json_artifact
+                                        harden_json_artifact(full_path)
+                                        
+                                        art = Artifact(project_id=project_id, type="json_plot", description=f"Interactive: {nf}", content_json={"filename": nf}, agent_id="CodeGenerator")
                                         session.add(art)
                                         session.commit()
-                                        hub.create_outbox_event("ARTIFACT_CREATED", {"type": "interactive_plot", "description": art.description, "content_json": art.content_json, "project_id": str(project_id)})
+                                        hub.create_outbox_event("ARTIFACT_CREATED", {"type": "json_plot", "description": art.description, "content_json": art.content_json, "project_id": str(project_id)})
                                     except Exception: pass
 
                             current_files_meta = files_after
@@ -838,24 +953,16 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 with Session(engine) as session:
                     task_obj = session.get(Task, task_id)
                     if task_obj and task_obj.status == "failed":
-                        reason = f"Terminal failure in prerequisite task (ID: {task_id}). Halting workflow attempt."
-                        print(f"    [Workflow] 🛑 ABORT ATTEMPT: {reason}", flush=True)
+                        print(f"    [Workflow] 🛑 ABORT ATTEMPT: Task failed.", flush=True)
                         break 
 
-                        if await is_cancelled(): return
-
             # 5. SYNTHESIS & CRITIQUE LOOP
-            final_synth = None
-            redundant_plots = []
-
-            # Default models (Escalatable)
             synthesizer_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
             synthesizer_model = hierarchy.get("T2", {}).get("models", synthesizer_fallback)[0]
             
             critique_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
             critique_model = hierarchy.get("T2", {}).get("models", hierarchy.get("T3", {}).get("models", critique_fallback))[0]
 
-            # --- SYNTHESIS RELIABILITY LOOP ---
             while True:
                 with Session(engine) as session:
                     synth_task = Task(
@@ -871,88 +978,78 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     session.refresh(synth_task)
 
                     span = trace.span(name=f"Synthesis Attempt {workflow_attempt}")
-                    trace_context.get().update({
-                        "agent_name": "Synthesizer", 
-                        "task_id": str(synth_task.id),
-                        "parent_observation_id": span.id
-                    })
+                    trace_context.get().update({"agent_name": "Synthesizer", "task_id": str(synth_task.id), "parent_observation_id": span.id})
 
                     all_tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
-                    context_parts = [f"Task: {t.description}\nStatus: {t.status}\nOutput: {(t.result_json or {}).get('stdout','')[:4000]}" for t in all_tasks]
+                    context_parts = []
+                    for t in all_tasks:
+                         summary = (t.result_json or {}).get("orchestrator_summary", f"Completed: {t.description}")
+                         context_parts.append(f"Task: {t.description}\nSummary: {summary}\nOutput: {(t.result_json or {}).get('stdout','')[:2000]}")
                     
                     artifacts = session.exec(select(Artifact).where(Artifact.project_id == project_id)).all()
-                    artifact_descriptions = [f"Artifact: {a.description} (Type: {a.type})" for a in artifacts]
+                    artifact_summaries = []
+                    for a in artifacts:
+                        fname = a.content_json.get("filename")
+                        fpath = os.path.join(workspace_dir, fname) if fname else None
+                        summary = summarize_artifact(fpath) if fpath else f"Artifact: {a.description}"
+                        artifact_summaries.append(summary)
                     
-                    if artifact_descriptions:
-                        context_parts.append("--- GENERATED ARTIFACTS ---\n" + "\n".join(artifact_descriptions))
-
-                    context = "\n\n---\n\n".join(context_parts)
-
-                    proj = session.get(Project, project_id)
-                    existing_narrative = proj.narrative if proj else None
-                    existing_takeaways = proj.takeaways if proj else None
+                    context = "\n\n---\n\n".join(context_parts) + "\n\n--- ARTIFACT SUMMARIES ---\n" + "\n".join(artifact_summaries)
 
                     try:
                         synthesizer = SynthesizerAgent(model=synthesizer_model)
                         synth_res = await synthesizer.run(SynthesizerInput(
                             objective=objective, 
                             context_artifacts=context,
-                            existing_narrative=existing_narrative,
-                            existing_takeaways=existing_takeaways
+                            existing_narrative=None,
+                            existing_takeaways=None
                         ))
                         final_synth = synth_res.content
                         span.end(output=final_synth.model_dump())
 
-                        stask = session.get(Task, synth_task.id)
-                        if stask:
-                            stask.status = "completed"
-                            stask.result_json = {
-                                "stdout": "Draft generated.", 
-                                "narrative": final_synth.narrative, 
-                                "takeaways": final_synth.key_takeaways,
-                                "artifact_insights": [ins.dict() for ins in final_synth.artifact_insights],
-                                "model_used": synthesizer_model
-                            }
+                        synth_task.status = "completed"
+                        synth_task.result_json = {
+                            "stdout": "Draft generated.", 
+                            "narrative": final_synth.narrative, 
+                            "takeaways": final_synth.key_takeaways,
+                            "artifact_insights": [ins.dict() for ins in final_synth.artifact_insights],
+                            "model_used": synthesizer_model
+                        }
+                        session.add(synth_task)
                         session.commit()
-                        break # Success
+                        break 
                     except Exception as e:
-                        print(f"  [Synthesizer] Call failed: {e}. Attempting escalation...", flush=True)
-                        span.end(output={"error": str(e)})
-                        
                         next_model = get_next_model_dynamic(synthesizer_model, hierarchy)
-                        if next_model and next_model != synthesizer_model:
+                        if next_model:
                             synth_task.status = "failed"
-                            synth_task.error = f"Service unavailable, retrying with {next_model}: {str(e)}"
                             session.add(synth_task)
                             session.commit()
                             synthesizer_model = next_model
                             continue
-                        else:
-                            raise e
+                        else: raise e
 
-            # Generate draft dashboard for Critique
+            # Generate distilled markdown preview for Critique
             with Session(engine) as session:
                 artifacts = session.exec(select(Artifact).where(Artifact.project_id == project_id)).all()
-                draft_html = create_master_reports(
-                    project_id=project_id, 
-                    workspace_dir=workspace_dir, 
-                    narrative=final_synth.narrative, 
-                    takeaways=final_synth.key_takeaways, 
-                    artifacts=artifacts,
-                    artifact_insights=final_synth.artifact_insights
+                distiller_cards = []
+                for a in artifacts:
+                    fname = a.content_json.get("filename")
+                    fpath = os.path.join(workspace_dir, fname) if fname else None
+                    distiller_cards.append({
+                        "description": a.description,
+                        "type": a.type,
+                        "caption": "Artifact preview.",
+                        "metadata_summary": summarize_artifact(fpath) if fpath else ""
+                    })
+
+                dashboard_md = distill_dashboard_to_markdown(
+                    narrative=final_synth.narrative,
+                    takeaways=final_synth.key_takeaways,
+                    cards=distiller_cards
                 )
-            
-            # Sanitize HTML for Critique context (strip scripts/data blobs)
-            import re
-            sanitized_html = re.sub(r'<script.*?>.*?</script>', '<script>/* JS OMITTED FOR BREVITY */</script>', draft_html, flags=re.DOTALL)
-            if len(sanitized_html) > 100000:
-                sanitized_html = sanitized_html[:50000] + "\n... [TRUNCATED] ...\n" + sanitized_html[-50000:]
 
             # 6. CRITIQUE
-            if await is_cancelled(): return
             print(f"  [Workflow] Quality Assurance Critique (Attempt {workflow_attempt})...", flush=True)
-
-            critique = None
             while True:
                 with Session(engine) as session:
                     critique_task = Task(
@@ -968,11 +1065,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     session.refresh(critique_task)
 
                     span = trace.span(name=f"Critique Attempt {workflow_attempt}")
-                    trace_context.get().update({
-                        "agent_name": "Critique",
-                        "task_id": str(critique_task.id),
-                        "parent_observation_id": span.id
-                    })
+                    trace_context.get().update({"agent_name": "Critique", "task_id": str(critique_task.id), "parent_observation_id": span.id})
 
                     try:
                         critique_agent = CritiqueAgent(model=critique_model) 
@@ -981,110 +1074,64 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                             context_artifacts=context,
                             synthesis_narrative=final_synth.narrative,
                             synthesis_takeaways=final_synth.key_takeaways,
-                            dashboard_html=sanitized_html
+                            dashboard_html=dashboard_md # Now passing distilled Markdown!
                         ))
                         critique = critique_res.content
                         span.end(output=critique.model_dump())
 
-                        ctask = session.get(Task, critique_task.id)
-                        if ctask:
-                            ctask.status = "completed"
-                            ctask.result_json = {
-                                "stdout": f"Approved: {critique.is_approved}\nFeedback: {critique.critique_feedback}",
-                                "model_used": critique_model
-                            }
+                        critique_task.status = "completed"
+                        critique_task.result_json = {"stdout": f"Approved: {critique.is_approved}", "model_used": critique_model}
+                        session.add(critique_task)
                         session.commit()
-                        break # Success
+                        break 
                     except Exception as e:
-                        print(f"  [Critique] Call failed: {e}. Attempting escalation...", flush=True)
-                        span.end(output={"error": str(e)})
-
                         next_model = get_next_model_dynamic(critique_model, hierarchy)
-                        if next_model and next_model != critique_model:
+                        if next_model:
                             critique_task.status = "failed"
-                            critique_task.error = f"Service unavailable, retrying with {next_model}: {str(e)}"
                             session.add(critique_task)
                             session.commit()
                             critique_model = next_model
                             continue
-                        else:
-                            raise e
+                        else: raise e
 
             if critique.is_approved:
                 redundant_plots = critique.redundant_artifacts
                 break
             else:
-                # Inject feedback for next attempt at PLANNING level
-                print(f"  [Workflow] ❌ Attempt {workflow_attempt} rejected by QA. Feedback: {critique.critique_feedback[:100]}...", flush=True)
                 critique_feedback = critique.critique_feedback
-                with Session(engine) as session:
-                    proj = session.get(Project, project_id)
-                    if proj:
-                        proj.narrative = (proj.narrative or "") + f"\n\n--- QA REJECTION ---\n{critique_feedback}"
-                        session.add(proj)
-                        session.commit()
 
-        # 7. FINAL REPORTING & PRUNING
+        # 7. FINAL REPORTING
         with Session(engine) as session:
             reporting_task = Task(
-                project_id=project_id,
-                instruction_id=instruction_id,
+                project_id=project_id, instruction_id=instruction_id,
                 description="Publishing final dashboard and research reports...",
-                assigned_to="System",
-                status="running",
-                heartbeat=datetime.now()
+                assigned_to="System", status="running", heartbeat=datetime.now()
             )
             session.add(reporting_task)
             session.commit()
-            session.refresh(reporting_task)
-            hub = ExecutionHub(session)
-            hub.create_outbox_event("TASK_CREATED", {"task_id": str(reporting_task.id), "description": reporting_task.description})
-            session.commit()
 
             artifacts = session.exec(select(Artifact).where(Artifact.project_id == project_id)).all()
-            
-            # Pruning logic
-            filtered_artifacts = []
-            for a in artifacts:
-                is_redundant = False
-                # Check description and filename
-                desc = a.description.lower()
-                fname = a.content_json.get("filename", "").lower()
-                for r in (redundant_plots or []):
-                    r_low = r.lower()
-                    if r_low in desc or (fname and r_low in fname):
-                        is_redundant = True
-                        break
-                if not is_redundant:
-                    filtered_artifacts.append(a)
-                else:
-                    print(f"  [Workflow] Pruning redundant artifact: {a.description}", flush=True)
+            filtered_artifacts = [a for a in artifacts if not any(r.lower() in a.description.lower() for r in (redundant_plots or []))]
 
             create_master_reports(
-                project_id=project_id, 
-                workspace_dir=workspace_dir, 
-                narrative=final_synth.narrative, 
-                takeaways=final_synth.key_takeaways, 
+                project_id=project_id, workspace_dir=workspace_dir, 
+                narrative=final_synth.narrative if final_synth else "Workflow halted.", 
+                takeaways=final_synth.key_takeaways if final_synth else ["No takeaways."], 
                 artifacts=filtered_artifacts,
-                artifact_insights=final_synth.artifact_insights
+                artifact_insights=final_synth.artifact_insights if final_synth else []
             )
 
             proj = session.get(Project, project_id)
             if proj:
-                proj.narrative = final_synth.narrative
-                proj.takeaways = final_synth.key_takeaways
+                proj.narrative = final_synth.narrative if final_synth else "Workflow halted."
+                proj.takeaways = final_synth.key_takeaways if final_synth else ["No takeaways."]
             
-            # Mark reporting task complete
             rtask = session.get(Task, reporting_task.id)
-            if rtask:
-                rtask.status = "completed"
-                rtask.result_json = {"stdout": "Dashboard published successfully (QA warnings may apply)." if not critique.is_approved else "Dashboard published successfully."}
+            if rtask: rtask.status = "completed"
+            session.add(proj)
             session.commit()
-
             hub = ExecutionHub(session)
-            hub.create_outbox_event("WORKFLOW_FINAL_RESULT", {"narrative": final_synth.narrative, "takeaways": final_synth.key_takeaways})
-            hub.create_outbox_event("STATE_UPDATED", {"files": _get_recursive_files(workspace_dir), "state": executor.authoritative_state})
-            hub.create_outbox_event("STEP_COMPLETED", {"message": "Project complete."})
+            hub.create_outbox_event("WORKFLOW_FINAL_RESULT", {"project_id": str(project_id)})
             session.commit()
 
     except Exception as e:
@@ -1094,9 +1141,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
     finally:
         from gads.core.llm import trace_context
         trace_context.reset(ctx_token)
-        # Final flush to ensure everything is sent to Langfuse
         langfuse_client.flush()
-
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, last_seq: int = 0):

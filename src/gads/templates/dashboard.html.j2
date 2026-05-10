@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GADS Research Synthesis</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f8fafc; color: #1e293b; padding-top: 40px; padding-bottom: 40px; }
+        .report-header { background: #ffffff; padding: 40px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .report-header h1 { margin-top: 0; border-bottom: 3px solid #3b82f6; display: inline-block; padding-bottom: 5px; color: #0f172a; }
+        .report-body { background: #ffffff; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+        .card { border: 1px solid #cbd5e1; border-radius: 12px; padding: 25px; margin: 30px 0; background: #ffffff; box-shadow: none; }
+        .plot-container { min-height: 400px; width: 100%; }
+        .insight-text { font-size: 1.05rem; color: #475569; margin-bottom: 20px; padding: 15px; background: #f8fafc; border-radius: 8px; border-left: 4px solid #94a3b8; }
+        .card-footer-custom { margin-top: 15px; font-size: 0.95rem; color: #1e293b; border-top: 1px solid #f1f5f9; padding-top: 10px; }
+        .takeaways { background: #eff6ff; border-left: 4px solid #3b82f6; padding: 25px; margin: 30px 0; border-radius: 0 8px 8px 0; }
+        .narrative { font-size: 1.15rem; color: #334155; margin-bottom: 40px; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                
+                <div class="report-header">
+                    <h1>Research Synthesis Report</h1>
+                    <p class="text-muted">Project ID: {{ project_id }}</p>
+                </div>
+
+                <div class="report-body">
+                    <h2>Executive Summary</h2>
+                    <div class="narrative">{{ narrative }}</div>
+                    
+                    <div class="takeaways">
+                        <h3>Key Takeaways</h3>
+                        <ul>
+                            {% for t in takeaways %}
+                            <li>{{ t }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+
+                    <hr class="my-5" style="border-top: 2px solid #f1f5f9; opacity: 1;">
+                    
+                    <h2>Supporting Data Visualizations</h2>
+                    <p class="text-muted mb-4">The following artifacts provide quantitative grounding for the summary above.</p>
+                    
+                    {% for card in cards %}
+                    <div class="card">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h3 class="m-0">{{ card.description }}</h3>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="toggleRaw('raw-{{ loop.index }}')">View JSON</button>
+                        </div>
+                        
+                        {% if card.ctx_text %}
+                        <div class="insight-text">{{ card.ctx_text }}</div>
+                        {% endif %}
+                        
+                        {% if card.type == 'json_plot' %}
+                        <!-- The data is embedded safely as application/json -->
+                        <script type="application/json" id="data-{{ loop.index }}" class="plotly-data">
+                            {{ card.json_data | safe }}
+                        </script>
+                        <div id="plot-{{ loop.index }}" class="plot-container"></div>
+                        <pre id="raw-{{ loop.index }}" class="d-none mt-3 p-3 bg-light border rounded" style="max-height: 200px; overflow: auto; font-size: 0.8rem;">{{ card.json_data }}</pre>
+                        
+                        {% elif card.type == 'legacy_html' %}
+                        <!-- Legacy HTML support -->
+                        <div class="plot-container" style="border: 1px dashed #e2e8f0; padding: 10px;">
+                            {{ card.html_content | safe }}
+                        </div>
+                        
+                        {% elif card.type == 'static_plot' %}
+                        <div class="text-center">
+                            <img src="data:image/png;base64,{{ card.img_b64 }}" style="max-width: 100%; border-radius: 8px;" alt="{{ card.description }}">
+                        </div>
+
+                        {% elif card.type == 'handover_bundle' %}
+                        <div style="padding: 20px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 8px; text-align: center;">
+                            <p style="color: #92400e; font-weight: bold;">⚠️ Heavy Computation Handover</p>
+                            <p>This task was bypassed due to high estimated runtime. Download the bundle to run the code locally.</p>
+                            <a href="{{ card.filename }}" class="btn btn-warning mt-2 text-white" style="background-color: #d97706; border-color: #d97706;">Download Project Bundle (.zip)</a>
+                        </div>
+                        {% endif %}
+
+                        <div class="card-footer-custom">
+                            <strong>{{ card.caption }}</strong>
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                </div>
+
+                <div class="text-center mt-5 mb-4 text-muted" style="font-size: 0.85rem;">
+                    Generated by GADS (Generative-augmented Data Science)
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Client-side rendering for JSON plots -->
+    <script>
+        function toggleRaw(id) {
+            const el = document.getElementById(id);
+            el.classList.toggle('d-none');
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            console.log("Dashboard DOM loaded. Starting chart renders.");
+            const plotElements = document.querySelectorAll('script[type="application/json"].plotly-data');
+            
+            Promise.allSettled(Array.from(plotElements).map(async (scriptTag) => {
+                const targetDivId = scriptTag.id.replace('data-', 'plot-');
+                const targetDiv = document.getElementById(targetDivId);
+                
+                try {
+                    const rawJson = scriptTag.textContent.trim();
+                    if (!rawJson) throw new Error("JSON payload is empty.");
+                    
+                    const figure = JSON.parse(rawJson);
+                    
+                    // Defensive check for Plotly binary bdata
+                    if (figure.data && figure.data[0] && figure.data[0].z && figure.data[0].z.bdata) {
+                        console.error("Binary bdata detected:", figure.data[0].z);
+                        throw new Error("Plotly Binary Encoding detected (bdata). Browser cannot render this natively.");
+                    }
+
+                    // Render Plotly
+                    await Plotly.newPlot(targetDivId, figure.data, figure.layout, {responsive: true});
+                } catch (e) {
+                    console.error("Render failed for " + targetDivId + ":", e);
+                    if (targetDiv) {
+                        targetDiv.innerHTML = 
+                            '<div class="alert alert-warning m-3">' +
+                                '<strong>Chart render failed</strong><br>' +
+                                '<small>' + e.message + '</small>' +
+                            '</div>';
+                    }
+                }
+            }));
+        });
+    </script>
+</body>
+</html>

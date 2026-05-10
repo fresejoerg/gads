@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 # --- CONFIGURATION ---
-BACKEND_URL = os.getenv("GADS_BACKEND_URL", "http://localhost:8001")
+BACKEND_URL = os.getenv("GADS_BACKEND_URL", "http://127.0.0.1:8001")
 WORKSPACE_ROOT = "/home/joergf/projects/MyLocalStack/data/workspaces"
 
 st.set_page_config(
@@ -306,7 +306,11 @@ def render_knowledge_panel():
                     st.error(detail)
 
 def render_archive_panel():
-    st.markdown("### ARCHIVE")
+    head_col, refresh_col = st.columns([0.7, 0.3])
+    head_col.markdown("### ARCHIVE")
+    if refresh_col.button("REFRESH", key="refresh_archive_btn", use_container_width=True):
+        st.rerun()
+    
     st.text_input("Filter", placeholder="Search...", label_visibility="collapsed")
     
     projects = api_get("/projects")
@@ -462,19 +466,42 @@ def render_orchestrator_panel():
     ctrl_cols = st.columns(4)
     
     with ctrl_cols[0]:
-        if st.button("LAUNCH", key="btn_launch", help="Start the multi-agent analysis workflow for the provided objective.", use_container_width=True):
-            if objective:
-                payload = {
-                    "name": f"Project {datetime.now().strftime('%m-%d %H:%M')}", 
-                    "objective": objective, 
-                    "existing_project_id": st.session_state.current_project_id
-                }
-                res = api_post("/projects", payload)
-                if res:
-                    st.session_state.current_project_id = res["project"]["id"]
-                    st.rerun()
-            else:
+        # --- PRE-FLIGHT CHECK LOGIC ---
+        if st.button("LAUNCH", key="btn_launch", help="Start the multi-agent analysis workflow.", use_container_width=True):
+            if not objective and not st.session_state.current_project_id:
                 st.warning("Objective required.")
+            else:
+                # Check for files in current workspace (if project exists)
+                has_files = False
+                if st.session_state.current_project_id:
+                    ws_path = f"{WORKSPACE_ROOT}/{st.session_state.current_project_id}"
+                    if os.path.exists(ws_path) and len(os.listdir(ws_path)) > 0:
+                        has_files = True
+                
+                def trigger_launch():
+                    payload = {
+                        "name": f"Project {datetime.now().strftime('%m-%d %H:%M')}", 
+                        "objective": objective, 
+                        "existing_project_id": st.session_state.current_project_id
+                    }
+                    res = api_post("/projects", payload)
+                    if res:
+                        st.session_state.current_project_id = res["project"]["id"]
+                        st.rerun()
+
+                if not has_files:
+                    @st.dialog("Pre-Flight Check: Empty Workspace")
+                    def confirm_empty_launch():
+                        st.warning("⚠️ No datasets are mounted in this workspace.")
+                        st.write("Most research objectives require a dataset. If you proceed, the agents will likely fail or halt.")
+                        col1, col2 = st.columns(2)
+                        if col1.button("MOUNT DATA FIRST", use_container_width=True):
+                            st.rerun()
+                        if col2.button("PROCEED ANYWAY", type="primary", use_container_width=True):
+                            trigger_launch()
+                    confirm_empty_launch()
+                else:
+                    trigger_launch()
 
     with ctrl_cols[1]:
         if st.button("CANCEL", key="btn_cancel", help="Interrupt and cancel the currently running workflow.", use_container_width=True):

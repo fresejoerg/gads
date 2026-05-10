@@ -108,29 +108,39 @@ async def get_structured_completion(model: str, response_model, messages: list, 
             
             cleaned_text = re.sub(r'<think>.*?</think>', '', full_content, flags=re.DOTALL)
             
-            json_match = re.search(r'\{.*\}', cleaned_text, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(0)
+            # Find all JSON-like blocks and try them from largest to smallest
+            # This is more robust than a single greedy regex
+            json_blocks = re.findall(r'\{(?:[^{}]|(?R))*\}', cleaned_text, re.DOTALL)
+            if not json_blocks:
+                # Fallback to simple regex if recursive search fails (Python re doesn't support ?R, but we can approximate)
+                json_match = re.search(r'(\{.*\})', cleaned_text, re.DOTALL)
+                json_blocks = [json_match.group(0)] if json_match else []
+
+            for block in sorted(json_blocks, key=len, reverse=True):
                 try:
-                    data = json.loads(json_str)
+                    data = json.loads(block)
                     return response_model(**data)
-                except Exception as e:
-                    print(f"  [LLM] Manual JSON parse failed: {e}. Attempting Instructor repair.", flush=True)
-            else:
-                print(f"  [LLM] No JSON found in output. Attempting Instructor repair.", flush=True)
+                except Exception:
+                    continue
+
+            print(f"  [LLM] No valid JSON found in {len(json_blocks)} candidate blocks. Attempting Instructor repair.", flush=True)
             
             repair_messages = list(messages)
             repair_messages.append({"role": "assistant", "content": full_content})
-            repair_messages.append({"role": "user", "content": "Your previous response was malformed. Please return ONLY a valid JSON object matching the required schema."})
+            repair_messages.append({"role": "user", "content": "Your previous response was malformed. Please return ONLY a valid JSON object matching the required schema. Ensure you do not include any conversational text or markdown formatting."})
             
-            return await client(
-                model=model,
-                response_model=response_model,
-                messages=repair_messages,
-                custom_llm_provider="openai",
-                max_retries=1,
-                **kwargs
-            )
+            try:
+                return await client(
+                    model=model,
+                    response_model=response_model,
+                    messages=repair_messages,
+                    custom_llm_provider="openai",
+                    max_retries=1,
+                    **kwargs
+                )
+            except Exception as e:
+                # Add raw completion to the error for visibility in the Task log
+                raise ValueError(f"JSON Parsing Error: {str(e)}\nRaw Output: {full_content[:500]}...")
             
         except Exception as e:
             print(f"  [LLM] Streaming failed: {e}", flush=True)

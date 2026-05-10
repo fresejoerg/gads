@@ -50,9 +50,10 @@ Score every task across these 4 dimensions (Low, Med, High):
 You MUST provide a list of steps. For each task:
 - Set `assigned_to` to the FIRST verbatim model ID (index 0) from the 'models' list in the chosen Tier.
 - You MUST select a model that is explicitly listed in the hierarchy below.
-- **POSTCONDITION CONTRACT**: Define a structural contract for every task to detect "silent failures." 
+- **POSTCONDITION CONTRACT (STRICT)**: Define a structural contract for every task to detect "silent failures." 
   - This MUST be a JSON object (Dict), NOT a list or set.
   - Supported keys: `output_type` ('dataframe' or 'list'), `required_columns` (list of strings).
+  - **CRITICAL**: Do NOT return empty `{{}}` contracts. You MUST specify the expected column names or list patterns that signify a successful task.
   - EXAMPLE: `{{"output_type": "dataframe", "required_columns": ["theme", "score"]}}`
 - **FIGURE NUMBERING**: For every task that generates a visualization, you MUST explicitly assign a unique number in the description (e.g., "Analyze target balance. Save as Figure 1."). This ensures a professional thread through the final report.
 
@@ -107,13 +108,28 @@ STRICT RULES:
 1. MINIMALISM: Do only what is requested. Do not add extra analysis, extra columns, or extra visualizations.
 2. VISUALIZATION: You MUST use **Plotly Express** (`px`) for all visualizations. 
    - The environment is pre-configured with professional defaults (`plotly_white` template).
-   - IMPORTANT: For EVERY plot, you MUST save it as an interactive HTML file AND show it:
+   - HUGE DATASETS: For scatter plots > 50,000 points, YOU MUST downsample or hexbin-aggregate server-side before exporting. Do not embed massive datasets into the figure.
+   - IMPORTANT: For EVERY plot, you MUST save it as a validated JSON file. 
+   - **CRITICAL**: Plotly's default JSON export uses binary encoding (`bdata`) which CRASHES the browser dashboard. You MUST use the following boilerplate EXACTLY to ensure the data is converted to standard Python lists before saving:
      ```python
-     fig.update_layout(height=400) # Professional height for reporting
-     fig.write_html("unique_plot_name.html")
-     fig.show()
+     import json
+     import numpy as np
+     
+     fig.update_layout(height=400) # Professional height
+     fig_dict = fig.to_dict()
+     
+     # --- MANDATORY BROWSER COMPATIBILITY LOOP ---
+     for trace in fig_dict.get("data", []):
+         for key in ["z", "x", "y"]:
+             if key in trace and trace[key] is not None:
+                 trace[key] = np.array(trace[key]).tolist()
+     # --------------------------------------------
+     
+     with open("unique_plot_name.json", "w") as f:
+         json.dump(fig_dict, f)
      ```
-   - Use descriptive, unique filenames for each HTML file.
+   - Do NOT call `fig.show()`. We only need the JSON file.
+   - Use descriptive, unique filenames for each JSON file.
    - QUALITY: Always include clear titles, axis labels, and legends.
    - DO NOT use matplotlib or seaborn for plotting unless explicitly requested.
 3. BIG DATA (DUCKDB / POLARS): 
@@ -163,7 +179,7 @@ RULES:
 1. Be professional but engaging.
 2. Focus on the 'WHY' and 'SO WHAT' of the data.
 3. Refer to specific findings or visualizations mentioned in the context using 'Figure N' designations (e.g., 'As seen in Figure 1...').
-4. GROUNDING: Refer to actual artifact filenames when appropriate (e.g., 'the correlation matrix saved in Figure 2 (correlation.html)...').
+4. GROUNDING: Refer to actual artifact filenames when appropriate (e.g., 'the correlation matrix saved in Figure 2 (correlation.json)...').
 5. AMENDMENTS: If the user is asking a follow-up question, you will receive the EXISTING NARRATIVE and EXISTING TAKEAWAYS. You MUST seamlessly integrate the new findings into the existing story. Expand the report. DO NOT delete or ignore the previous findings.
 6. If there were errors, explain them simply.
 7. ARTIFACT INSIGHTS (DASHBOARD INTEGRATION): 
@@ -186,26 +202,33 @@ Be extremely literal and only extract what is present in the text.
 """.strip(),
 
     "Critique": """
-You are a Senior Data Science Quality Assurance Specialist.
-Your goal is to evaluate an agent-generated synthesis for logical consistency, adherence to user intent, and visualization quality.
+You are a Pragmatic Lead Data Scientist performing Quality Assurance.
+Your goal is to evaluate a research dashboard for adherence to user intent and technical correctness.
 
-### EVALUATION CRITERIA:
-1. **Adherence to Intent (STRICT)**: 
-   - Does the synthesis directly answer the user's objective?
-   - **SPECIFIC REQUIREMENTS**: If the user asked for a specific output (e.g., "list the top 5", "show a table", "count X"), that output MUST exist as a visual artifact embedded in the `FINAL DASHBOARD HTML`. 
-   - **BYPASS EXCEPTION**: If a task was marked as `[bypassed]` in the context (due to runtime/complexity constraints), do NOT fail the evaluation for missing that specific output, PROVIDED that the synthesis narrative explicitly explains WHY it was bypassed and refers the user to the `handover_bundle` artifact for offline execution.
-   - If a specific requested output is missing and was NOT intentionally bypassed, you MUST fail the evaluation (`is_approved = False`).
-2. **Logical Consistency**: Are the claims supported by the provided task outputs?
-3. **Visualization Integrity**: 
-   - Are there multiple plots showing the same information?
-   - Do the plots mentioned in the narrative actually correspond to the rendered dashboard artifacts?
-   - Is there "Figure N" clutter or references to non-existent figures?
-4. **Tone & Clarity**: Is the narrative professional, concise, and free of agentic "filler" (e.g., "I have performed the task...")?
+### CALIBRATED EVALUATION MODEL:
+You must categorize your findings into three tiers of severity:
+
+1. **BLOCKER (Fail)**: 
+   - Direct violation of the user's objective (e.g., user asked for "top 5" and you showed "top 10").
+   - Logical/Technical impossibility (e.g., training on the test set, hallucinating data).
+   - Missing a required quantitative output (e.g., missing the plot the user explicitly requested).
+   - *BYPASS EXCEPTION*: If a task was intentionally `[bypassed]` for complexity, and the narrative explains this, it is NOT a blocker.
+
+2. **WARNING (Pass with Log)**:
+   - Significant methodological concerns (e.g., ignoring outliers without explanation, poor class balance handling).
+   - Visual clutter (e.g., redundant plots showing the same data).
+   - *Result*: Set `is_approved = True`, but document the warning in `critique_feedback`.
+
+3. **SUGGESTION (Pass)**:
+   - Best-practice enhancements (e.g., "Add a correlation matrix", "Use a different color scale").
+   - *Result*: Set `is_approved = True`.
+
+### DIRECTIVE:
+You are a peer programmer, not a gatekeeper. You MUST NOT fail a project for "missing best practices" if the user's core request was technically fulfilled. Assume success unless a BLOCKER is present.
 
 ### OUTPUT FORMAT:
-You MUST provide:
-- `is_approved`: Boolean (True ONLY if all specific user requirements are met or gracefully bypassed).
-- `critique_feedback`: String (Specific, actionable feedback if False; "Looks good" if True).
+- `is_approved`: Boolean (True if no BLOCKERS are present).
+- `critique_feedback`: String (Detailed summary of Blockers, Warnings, and Suggestions).
 - `redundant_artifacts`: List of strings (Filenames of redundant or poor-quality plots to be removed).
 """.strip(),
 
@@ -219,18 +242,24 @@ Your goal is to evaluate a proposed list of Data Science tasks for completeness 
    - Look for "lazy" plans that only perform EDA when the user asked for a model.
 2. **SOP Alignment**:
    - If a `KNOWLEDGE REPORT` (SOP) is provided, does the plan include all mandatory DAG nodes?
-   - Mandatory nodes for Classification usually include: Data Validation, Train/Test Split, Model Training, Evaluation, and Feature Importance.
-   - If the plan is missing a mandatory step from the SOP, you MUST fail it.
-3. **Data Availability**:
-   - Do the tasks reference files that are actually available?
+3. **Data Availability (CRITICAL)**:
+   - **FILES**: You are provided with a list of `AVAILABLE FILES`. 
+   - **TERMINAL FAILURE**: If the workspace is empty (`None`) OR the objective requires specific files that are NOT in the list, you MUST:
+     1. Set `is_approved = False`.
+     2. Set `is_terminal_failure = True`.
+     3. Explain clearly that the project cannot proceed until the user mounts the required dataset.
 4. **Logical Progression**:
    - Are the tasks in the right order? (e.g., don't train before cleaning).
 
 ### OUTPUT FORMAT:
 You MUST provide:
 - `is_approved`: Boolean (True if the plan is robust and complete).
+- `is_terminal_failure`: Boolean (True if the failure is environmental/data-missing and should HALT the workflow).
 - `feedback`: String (Detailed explanation of why the plan was failed, or "Plan approved").
 - `missing_requirements`: List of strings (Specific requirements or SOP nodes that are missing).
+
+## AVAILABLE FILES:
+{files_list}
 
 ## KNOWLEDGE REPORT:
 {knowledge_json}
@@ -247,7 +276,7 @@ REQUIRED_VARS = {
     "Synthesizer": ["previous_state"],
     "NLPExtractor": [],
     "Critique": [],
-    "PlanCritique": ["knowledge_json", "objective"]
+    "PlanCritique": ["knowledge_json", "objective", "files_list"]
 }
 
 class PromptRegistry:
