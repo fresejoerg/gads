@@ -45,4 +45,10 @@ approach_docs/
 
 # Tool config and test artefacts
 .antigravitycli/
+.claude/
 *.svg
+
+# Runtime data and local config
+gads_data/
+litellm_config.yaml
+crash_debug.log
