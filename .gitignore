@@ -42,3 +42,7 @@ inspect_project.py
 # Architecture and design notes
 approach_docs/
 .streamlit/
+
+# Tool config and test artefacts
+.antigravitycli/
+*.svg
