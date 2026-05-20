@@ -26,20 +26,20 @@ class CritiqueAgent(BaseAgent[CritiqueInput, CritiqueOutput]):
 
     async def run(self, input_data: CritiqueInput, **kwargs) -> Any:
         # Refresh prompt from registry
-        self.system_prompt = prompt_registry.get_prompt(self.name)
-        
-        messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": f"USER OBJECTIVE: {input_data.objective}\n\nAGENT SYNTHESIS:\nNarrative: {input_data.synthesis_narrative}\nTakeaways: {input_data.synthesis_takeaways}\n\nTASK OUTPUTS AND RAW ARTIFACTS:\n{input_data.context_artifacts}\n\nFINAL DASHBOARD HTML (Draft):\n{input_data.dashboard_html}"}
-        ]
-        
-        from gads.core.llm import get_structured_completion
-        content = await get_structured_completion(
-            model=self.model,
-            response_model=self.output_schema,
-            messages=messages,
+        # Set the prompt for the Pydantic AI agent
+        self.agent._system_prompts = (self.system_prompt,)
+
+        user_content = (
+            f"USER OBJECTIVE: {input_data.objective}\n\n"
+            f"AGENT SYNTHESIS:\nNarrative: {input_data.synthesis_narrative}\n"
+            f"Takeaways: {input_data.synthesis_takeaways}\n\n"
+            f"TASK OUTPUTS AND RAW ARTIFACTS:\n{input_data.context_artifacts}\n\n"
+            f"FINAL DASHBOARD HTML (Draft):\n{input_data.dashboard_html}"
+        )
+
+        # Use super().run
+        return await super().run(
+            user_content,
             **kwargs
         )
-        
-        from gads.agents.base import AgentResponse
-        return AgentResponse(content=content, model_used=self.model)
+

@@ -3,6 +3,7 @@ import uuid
 import time
 import contextlib
 import re
+import json
 from typing import Optional, List, Tuple, Dict, Any
 from gads.agents.workers.coder import CodeGeneratorAgent, CoderInput
 from gads.tools.sandbox import SandboxClient, ExecutionResult
@@ -20,7 +21,8 @@ class ExecutionManager:
         self.coder = CodeGeneratorAgent()
         self.sandbox = SandboxClient(base_url=sandbox_url)
         self.handover = HandoverManager(sandbox_url=sandbox_url)
-        self.authoritative_state: Dict[str, Any] = {} # Persistent memory for the project run
+        self.authoritative_state: Dict[str, Any] = {}
+        self.file_schemas: Dict[str, Any] = {}  # populated by server after schema probe
 
     async def run_task(
         self, 
@@ -120,6 +122,7 @@ class ExecutionManager:
                     self.coder.run(CoderInput(
                         task_description=task_description,
                         available_files=available_files,
+                        file_schemas=self.file_schemas,
                         authoritative_state=self.authoritative_state,
                         previous_code=previous_code,
                         error_feedback=error_feedback,
@@ -187,11 +190,62 @@ class ExecutionManager:
 
                 print(f"    [Executor] Executing code in sandbox...", flush=True)
                 
+                # Wrap code with telemetry hooks
+                telemetry_preamble = """
+if '_gads_insights' not in globals(): _gads_insights = []
+def gads_emit_insight(artifact, insight, evidence=""):
+    _gads_insights.append({"artifact": artifact, "insight": insight, "evidence": evidence})
+"""
+                telemetry_postamble = """
+import json as _json
+print("GADS_INSIGHTS_JSON:" + _json.dumps(_gads_insights))
+_gads_insights = [] # Clear for next task
+"""
+                wrapped_code = telemetry_preamble + "\n" + current_code + "\n" + telemetry_postamble
+
                 poller = asyncio.create_task(poll_logs_loop())
                 try:
-                    exec_result = await self.sandbox.execute(current_code, project_id=project_id, session_id=session_id)
-                    exec_result.code = current_code # Attach code for persistence
+                    exec_result = await self.sandbox.execute(wrapped_code, project_id=project_id, session_id=session_id)
+                    exec_result.code = current_code # Attach ORIGINAL code for persistence
                     
+                    # Parse Semantic Insights
+                    if "GADS_INSIGHTS_JSON:" in exec_result.stdout:
+                        try:
+                            parts = exec_result.stdout.split("GADS_INSIGHTS_JSON:")
+                            raw_json = parts[1].strip().split("\n")[0]
+                            exec_result.semantic_insights = json.loads(raw_json)
+                            exec_result.stdout = parts[0] + "\n".join(parts[1].strip().split("\n")[1:])
+                        except Exception as e:
+                            print(f"    [Executor] Warning: Failed to parse semantic insights: {e}")
+
+                    # --- AUTOMATIC STRUCTURAL TELEMETRY (The 'Verification Floor') ---
+                    # Probe kernel for DataFrames and extract deterministic stats
+                    structural_probe_code = """
+import json as _json
+import pandas as _pd
+import numpy as _np
+_floor = []
+for _name, _obj in {**globals(), **locals()}.items():
+    if isinstance(_obj, _pd.DataFrame):
+        try:
+            _floor.append({
+                "artifact": _name,
+                "insight": f"Structural Floor: {_name} ({_obj.shape[0]}x{_obj.shape[1]})",
+                "evidence": f"Columns: {list(_obj.columns)} | Nulls: {_obj.isna().sum().sum()} | Unique Samples: {_json.dumps({c: str(_obj[c].nunique()) for c in _obj.columns[:5]})}",
+                "is_floor": True
+            })
+        except: pass
+print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
+"""
+                    try:
+                        floor_res = await self.sandbox.execute(structural_probe_code, project_id=project_id, session_id=session_id)
+                        if "GADS_FLOOR_JSON:" in floor_res.stdout:
+                            raw_floor = floor_res.stdout.split("GADS_FLOOR_JSON:")[1].strip().split("\n")[0]
+                            floor_data = json.loads(raw_floor)
+                            exec_result.semantic_insights.extend(floor_data)
+                    except Exception as e:
+                        print(f"    [Executor] Warning: Structural probe failed: {e}")
+
                     # LOG ACTUAL RUNTIME FOR LEARNING
                     # Scan for first estimator to log
                     estimators = RuntimeOracle.analyze_code(current_code)

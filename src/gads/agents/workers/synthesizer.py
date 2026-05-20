@@ -30,26 +30,22 @@ class SynthesizerAgent(BaseAgent[SynthesizerInput, SynthesizerOutput]):
 
     async def run(self, input_data: SynthesizerInput, **kwargs) -> Any:
         # Refresh prompt from registry
-        self.system_prompt = prompt_registry.get_prompt(self.name)
+        base_prompt = prompt_registry.get_prompt(self.name)
         
         prev_state = "No previous report."
         if input_data.existing_narrative:
             prev_state = f"--- EXISTING NARRATIVE ---\n{input_data.existing_narrative}\n\n--- EXISTING TAKEAWAYS ---\n" + "\n".join([f"- {t}" for t in (input_data.existing_takeaways or [])])
             
-        formatted_prompt = self.system_prompt.format(previous_state=prev_state)
-        
-        messages = [
-            {"role": "system", "content": formatted_prompt},
-            {"role": "user", "content": f"USER OBJECTIVE: {input_data.objective}\n\nARTIFACTS AND OUTPUTS:\n{input_data.context_artifacts}"}
-        ]
-        
-        from gads.core.llm import get_structured_completion
-        content = await get_structured_completion(
-            model=self.model,
-            response_model=self.output_schema,
-            messages=messages,
-            **kwargs
+        formatted_prompt = base_prompt.format(previous_state=prev_state)
+        self.agent._system_prompts = (formatted_prompt,)
+
+        user_content = (
+            f"USER OBJECTIVE: {input_data.objective}\n\n"
+            f"ARTIFACTS AND OUTPUTS:\n{input_data.context_artifacts}"
         )
         
-        from gads.agents.base import AgentResponse
-        return AgentResponse(content=content, model_used=self.model)
+        # Use super().run
+        return await super().run(
+            user_content,
+            **kwargs
+        )

@@ -17,7 +17,7 @@ engine = create_engine(DATABASE_URL, echo=False)
 def init_db():
     """Create database tables with retry logic."""
     # IMPORTANT: Import models here so they are registered with SQLModel.metadata
-    from gads.core.models import Project, Task, Artifact, OutboxEvent
+    from gads.core.models import Project, Task, Artifact, OutboxEvent, Instruction, ExecutionLog
     
     max_retries = 5
     for attempt in range(max_retries):

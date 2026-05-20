@@ -12,6 +12,7 @@ class CoderOutput(BaseModel):
 class CoderInput(BaseModel):
     task_description: str
     available_files: List[str] = []
+    file_schemas: Dict[str, Any] = {}  # column→dtype maps keyed by filename
     authoritative_state: Dict[str, Any] = {} # Ground truth from the kernel
     previous_code: Optional[str] = None
     error_feedback: Optional[str] = None
@@ -31,42 +32,56 @@ class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
 
     async def run(self, input_data: CoderInput, **kwargs) -> Any:
         # Refresh prompt from registry
-        self.system_prompt = prompt_registry.get_prompt(self.name)
+        base_prompt = prompt_registry.get_prompt(self.name)
         
         # Use provided state summary or fallback to JSON of dict
         state_summary = input_data.state_summary or json.dumps(input_data.authoritative_state, indent=2)
         
-        files_summary = ", ".join([f"'{f}'" for f in input_data.available_files]) if input_data.available_files else "None"
+        files_lines = []
+        for f in input_data.available_files:
+            schema_info = input_data.file_schemas.get(f, {}).get("schema")
+            if schema_info:
+                files_lines.append(f"'{f}' — columns: {list(schema_info.keys())}")
+            else:
+                files_lines.append(f"'{f}'")
+        files_summary = "\n".join(files_lines) if files_lines else "None"
         contract_summary = json.dumps(input_data.postcondition_contract, indent=2) if input_data.postcondition_contract else "None. Just fulfill the task description."
-        
-        print(f"    [Coder] Preparing prompt. Available files: {files_summary}", flush=True)
 
-        formatted_prompt = self.system_prompt.format(
+        print(f"    [Coder] Preparing prompt. Available files: {', '.join(input_data.available_files)}", flush=True)
+
+        formatted_prompt = base_prompt.format(
             state_summary=state_summary,
             files_list=files_summary,
             skills_context=input_data.skills_context or "No specific skills required for this task.",
             contract_json=contract_summary
         )
         
-        # Strengthen file awareness in the user message
-        user_content = (
-            f"TASK: {input_data.task_description}\n\n"
-            f"CRITICAL: You MUST use the correct filenames. Available files are: {files_summary}\n\n"
-            "Return the required FLAT JSON object."
-        )
+        # Set the prompt for the Pydantic AI agent
+        self.agent._system_prompts = (formatted_prompt,)
 
-        messages = [
-            {"role": "system", "content": formatted_prompt},
-            {"role": "user", "content": user_content}
-        ]
-        
-        from gads.core.llm import get_structured_completion
-        content = await get_structured_completion(
-            model=self.model,
-            response_model=self.output_schema,
-            messages=messages,
+        # Build dynamic kernel-reuse warning from live state
+        kernel_warnings = []
+        try:
+            state_data = json.loads(state_summary) if isinstance(state_summary, str) else state_summary
+            if isinstance(state_data, dict):
+                for var, desc in state_data.items():
+                    if isinstance(desc, str) and desc.startswith("DataFrame"):
+                        kernel_warnings.append(f"`{var}`: {desc}")
+        except Exception:
+            pass
+
+        user_content = f"TASK: {input_data.task_description}\n\n"
+        user_content += f"CRITICAL: Use ONLY these exact filenames: {files_summary}\n\n"
+        if kernel_warnings:
+            user_content += (
+                "KERNEL MEMORY — these DataFrames are ALREADY LOADED. "
+                "Use them directly. DO NOT call pd.read_csv() or reload from disk:\n"
+                + "\n".join(kernel_warnings) + "\n\n"
+            )
+        user_content += "Return the required FLAT JSON object."
+
+        # Use super().run to get streaming support
+        return await super().run(
+            user_content,
             **kwargs
         )
-        
-        from gads.agents.base import AgentResponse
-        return AgentResponse(content=content, model_used=self.model)

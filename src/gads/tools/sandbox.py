@@ -15,6 +15,7 @@ class ExecutionResult(BaseModel):
     error: Optional[Dict[str, Any]] = None
     execution_time_ms: int
     kernel_state: Dict[str, Any] = {} # New field for state introspection
+    semantic_insights: List[Dict[str, Any]] = [] # Insights emitted via gads_emit_insight
 
 class CodeValidator:
     """Proactively scans code for security and syntax issues."""
@@ -88,7 +89,7 @@ class SandboxClient:
         except Exception:
             pass
 
-    async def execute(self, code: str, project_id: uuid.UUID, session_id: str = "default") -> ExecutionResult:
+    async def execute(self, code: str, project_id: uuid.UUID, session_id: str = "default", workspace_id: Optional[str] = None) -> ExecutionResult:
         """Validates and executes code in the sandbox, isolated by project."""
         
         # 1. Local AST Validation
@@ -108,7 +109,8 @@ class SandboxClient:
                 f"{self.base_url}/execute",
                 json={
                     "code": code, 
-                    "session_id": str(project_id),
+                    "session_id": session_id,
+                    "workspace_id": workspace_id,
                     "timeout": 300.0 # 5 minute execution limit
                 }
             )

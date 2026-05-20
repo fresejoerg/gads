@@ -5,6 +5,9 @@ from typing import List, Dict, Any, Optional
 import uuid
 import base64
 from jinja2 import Environment, FileSystemLoader
+from sqlmodel import Session, select
+from gads.core.database import engine
+from gads.core.models import Task
 
 def create_master_reports(
     project_id: uuid.UUID,
@@ -57,8 +60,40 @@ The following artifacts were generated during this analysis:
     env = Environment(loader=FileSystemLoader(template_dir))
     template = env.get_template("dashboard.html.j2")
 
+    # Build a reverse lookup from artifact filenames back to the 'Figure N' labels used in tasks
+    # This ensures that if the Synthesizer says 'Figure 1', we can find which task produced it
+    # and match it to the actual file on disk.
+    artifact_to_figure_label = {}
+    with Session(engine) as session:
+        tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
+        for t in tasks:
+            # Look for all "Figure X" mentions in the description
+            fig_matches = re.findall(r"Figure\s*(\d+)", t.description, re.IGNORECASE)
+            
+            # CRITICAL: Only use tasks that mention EXACTLY ONE figure.
+            # These are the 'Producer' tasks. 
+            # Reference tasks (like synthesis) that mention multiple figures are ignored.
+            if len(fig_matches) == 1:
+                fig_label = f"Figure {fig_matches[0]}"
+                t_res = t.result_json or {}
+                
+                # GROUND TRUTH: Only trust filenames found in the orchestrator summary.
+                # This summary records exactly which files were created/modified by THIS specific task.
+                summary = t_res.get("orchestrator_summary", "")
+                created_filenames = re.findall(r"[\w\d\-_]+\.(?:json|html|png|csv|parquet)", summary, re.IGNORECASE)
+                
+                for fn in created_filenames:
+                    fn_l = fn.lower()
+                    # An artifact belongs to the task that created it.
+                    if fn_l not in artifact_to_figure_label:
+                        artifact_to_figure_label[fn_l] = fig_label
+
+    # We also need the inverse: Figure N -> Filename
+    figure_label_to_artifact = {v.lower(): k for k, v in artifact_to_figure_label.items()}
+
     cards = []
     for a in artifacts:
+        # ... logic ...
         card = {
             "description": a.description,
             "type": a.type,
@@ -70,61 +105,58 @@ The following artifacts were generated during this analysis:
             "filename": None
         }
 
-        artifact_id_for_matching = ""
-        
+        actual_filename = ""
         if a.type == "json_plot":
-            fname = a.content_json.get("filename")
-            artifact_id_for_matching = fname
-            fpath = os.path.join(workspace_dir, fname)
+            actual_filename = a.content_json.get("filename")
+            fpath = os.path.join(workspace_dir, actual_filename)
             if os.path.exists(fpath):
-                with open(fpath, "r") as pf:
-                    card["json_data"] = pf.read()
+                with open(fpath, "r") as pf: card["json_data"] = pf.read()
         
         elif a.type == "interactive_plot":
-            # Legacy HTML
-            card["type"] = "legacy_html"
-            fname = a.content_json.get("filename")
-            artifact_id_for_matching = fname
-            fpath = os.path.join(workspace_dir, fname)
+            actual_filename = a.content_json.get("filename")
+            fpath = os.path.join(workspace_dir, actual_filename)
             if os.path.exists(fpath):
-                with open(fpath, "r") as pf:
-                    content = pf.read()
-                    if "<body" in content:
-                        card["html_content"] = content.split("<body")[1].split(">", 1)[1].split("</body>")[0]
-                    else:
-                        card["html_content"] = content
+                with open(fpath, "r") as pf: card["html_content"] = pf.read()
         
         elif a.type == "plot":
-            # Static image base64
             img_b64 = a.content_json.get("image_base64")
             if img_b64:
                 card["img_b64"] = img_b64
-                artifact_id_for_matching = a.description # Use description for static plots
                 card["type"] = "static_plot"
+                actual_filename = a.description # Use description as ID for static plots
         
         elif a.type == "handover_bundle":
-            fname = a.content_json.get("filename")
-            card["filename"] = fname
-            artifact_id_for_matching = fname
+            actual_filename = a.content_json.get("filename")
+            card["filename"] = actual_filename
 
-        # Skip rendering if we couldn't load the content
         if not (card["json_data"] or card["html_content"] or card["img_b64"] or card["filename"]):
             continue
 
-        # Find matching insight
-        artifact_id_for_matching = artifact_id_for_matching.lower()
-        normalized_a_id = re.sub(r'[^a-z0-9]', '', artifact_id_for_matching)
-        normalized_desc = re.sub(r'[^a-z0-9]', '', a.description.lower())
+        # FIND THE RIGHT INSIGHT
+        # Look for an insight where the artifact_id matches the figure label assigned to THIS artifact
+        assigned_fig_label = artifact_to_figure_label.get(actual_filename.lower()) if actual_filename else None
         
-        insight = insights_map.get(artifact_id_for_matching)
+        insight = None
+        if assigned_fig_label:
+            # Look for the specific figure label in the insights map
+            insight = insights_map.get(assigned_fig_label)
+            if not insight:
+                # Try normalization (e.g. "Figure 1" vs "figure 1")
+                for k, v in insights_map.items():
+                    if k.lower() == assigned_fig_label.lower():
+                        insight = v; break
+        
+        # If no explicit figure match, try filename match or fuzzy match
         if not insight:
-            # Fallback: fuzzy match on normalized IDs
-            for key in insights_map.keys():
-                normalized_key = re.sub(r'[^a-z0-9]', '', key.lower())
-                if normalized_key in normalized_a_id or normalized_key in normalized_desc:
-                    insight = insights_map[key]
-                    break
+            insight = insights_map.get(actual_filename)
         
+        if not insight:
+            norm_desc = re.sub(r'[^a-z0-9]', '', a.description.lower())
+            for k, v in insights_map.items():
+                norm_k = re.sub(r'[^a-z0-9]', '', k.lower())
+                if norm_k in norm_desc:
+                    insight = v; break
+
         if insight:
             card["ctx_text"] = insight.get('contextual_text', "")
             card["caption"] = insight.get('caption', "Generated by GADS workflow.")

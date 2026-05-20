@@ -35,24 +35,28 @@ TIER_MAPPING = {
     "T4": ["local_model"]
 }
 
-TIER_ORDER = ["T4", "T3", "T2", "T1"]
+# Escalation path: only includes cloud tiers. 
+# local_model (T4) is isolated and never escalates to cloud tiers.
+TIER_ORDER = ["T3", "T2", "T1"]
 
 TIER_DESCRIPTIONS = {
     "T1": "Architect tier. Use for complex reasoning, multi-step planning, and novel problem solving.",
     "T2": "Coder tier. Use for complex Python logic, data visualization, and statistical modeling.",
     "T3": "Worker tier. Use for rapid text processing, summarization, and formatting.",
-    "T4": "Local tier. Use for simple, mechanical tasks like regex extraction or basic boilerplate."
+    "T4": "Local tier. Use for simple, mechanical tasks. NEVER escalates to cloud tiers."
 }
 
 async def get_model_hierarchy() -> Dict[str, Any]:
     """Fetches models from LiteLLM and organizes them into capability tiers."""
     if get_local_only():
         print("  [Registry] 🏠 LOCAL ONLY MODE ENABLED. Overriding all tiers to 'local_model'.")
+        # In local mode, everything is pinned to the local model.
+        # No escalation path exists because all tiers lead to the same model.
         return {
             tier: {
-                "description": TIER_DESCRIPTIONS[tier],
+                "description": TIER_DESCRIPTIONS.get(tier, "Local execution only."),
                 "models": ["local_model"]
-            } for tier in TIER_ORDER
+            } for tier in ["T4", "T3", "T2", "T1"]
         }
 
     print(f"  [Registry] Fetching models from: {LITELLM_URL}", flush=True)
@@ -67,9 +71,6 @@ async def get_model_hierarchy() -> Dict[str, Any]:
             
             hierarchy = {}
             for tier, keywords in TIER_MAPPING.items():
-                if not get_local_only() and tier == "T4":
-                    continue
-                
                 # Preservation of order: if gemini is in TIER_MAPPING, it will be first in matching_models
                 matching_models = [m for m in keywords if m in available_models]
                 if matching_models:
@@ -78,7 +79,7 @@ async def get_model_hierarchy() -> Dict[str, Any]:
                         random.shuffle(matching_models)
                         
                     hierarchy[tier] = {
-                        "description": TIER_DESCRIPTIONS[tier],
+                        "description": TIER_DESCRIPTIONS.get(tier, ""),
                         "models": matching_models
                     }
             
@@ -87,12 +88,17 @@ async def get_model_hierarchy() -> Dict[str, Any]:
         print(f"Registry Error: {e}")
         return {"T4": {"description": "Fallback", "models": ["local_model"]}}
 
-def get_next_model_dynamic(current_model: str, hierarchy: Dict[str, Any]) -> Optional[str]:
+def get_next_model_dynamic(current_model: str, hierarchy: Dict[str, Any], aggressive: bool = False) -> Optional[str]:
     """
-    Randomized Escalation Logic:
-    1. If other models exist in the SAME tier, randomize between them (excluding current).
-    2. If no more models in tier, move to the first model of the NEXT tier.
+    Escalation Logic:
+    1. If LOCAL ONLY MODE is active: No escalation is permitted.
+    2. If current model is 'local_model': No escalation to cloud models is permitted.
+    3. If cloud mode: Try other models in same tier, then move to better tiers (T3 -> T2 -> T1).
     """
+    # HARD MANDATE: No escalation in local mode or FROM local model
+    if get_local_only() or current_model == "local_model":
+        return None
+
     import random
     
     current_tier = None
@@ -105,22 +111,30 @@ def get_next_model_dynamic(current_model: str, hierarchy: Dict[str, Any]) -> Opt
             break
             
     if not current_tier:
-        return hierarchy.get("T4", {}).get("models", [None])[0]
+        # Fallback to T3 if current model is unknown
+        return hierarchy.get("T3", {}).get("models", [None])[0]
 
-    # 1. Try to find a fallback model in the SAME tier (Randomize remaining)
-    other_models_in_tier = [m for m in current_tier_models if m != current_model]
-    if other_models_in_tier:
-        return random.choice(other_models_in_tier)
+    # 1. Non-aggressive: Try to find a fallback model in the SAME tier
+    if not aggressive:
+        other_models_in_tier = [m for m in current_tier_models if m != current_model]
+        if other_models_in_tier:
+            return random.choice(other_models_in_tier)
 
-    # 2. No more in current tier? Move to first model of NEXT tier
+    # 2. Aggressive OR no more in current tier? Move to first model of NEXT tier
     try:
-        tier_idx = TIER_ORDER.index(current_tier)
-        if tier_idx + 1 < len(TIER_ORDER):
-            next_tier = TIER_ORDER[tier_idx + 1]
-            if next_tier in hierarchy:
-                # Return the first model in the next tier (which is usually a Gemini)
-                return hierarchy[next_tier]["models"][0]
-    except ValueError:
+        # TIER_ORDER is ["T3", "T2", "T1"]
+        if current_tier in TIER_ORDER:
+            tier_idx = TIER_ORDER.index(current_tier)
+            if tier_idx + 1 < len(TIER_ORDER):
+                next_tier = TIER_ORDER[tier_idx + 1]
+                # Skip tiers that aren't in the actual hierarchy
+                while next_tier not in hierarchy and tier_idx + 1 < len(TIER_ORDER):
+                    tier_idx += 1
+                    next_tier = TIER_ORDER[tier_idx + 1]
+                    
+                if next_tier in hierarchy:
+                    return hierarchy[next_tier]["models"][0]
+    except (ValueError, IndexError):
         pass
         
     return None

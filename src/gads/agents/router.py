@@ -27,24 +27,15 @@ class DataScienceRouter(BaseAgent[RouterInput, RouterOutput]):
 
     async def run(self, input_data: RouterInput, stream_callback=None, **kwargs) -> Any:
         # Refresh prompt from registry
-        self.system_prompt = prompt_registry.get_prompt(self.name)
-        
+        base_prompt = prompt_registry.get_prompt(self.name)
         recipes_str = json.dumps(input_data.available_recipes, indent=2)
-        formatted_prompt = self.system_prompt.format(recipes_json=recipes_str)
-
-        messages = [
-            {"role": "system", "content": formatted_prompt},
-            {"role": "user", "content": f"OBJECTIVE: {input_data.objective}"}
-        ]
+        formatted_prompt = base_prompt.format(recipes_json=recipes_str)
         
-        from gads.core.llm import get_structured_completion
-        content = await get_structured_completion(
-            model=self.model,
-            response_model=self.output_schema,
-            messages=messages,
-            stream_callback=stream_callback,
+        # Inject the specialized prompt into the Pydantic AI agent
+        self.agent._system_prompts = (formatted_prompt,)
+        
+        # Use super().run to get streaming support
+        return await super().run(
+            f"OBJECTIVE: {input_data.objective}",
             **kwargs
         )
-        
-        from gads.agents.base import AgentResponse
-        return AgentResponse(content=content, model_used=self.model)
