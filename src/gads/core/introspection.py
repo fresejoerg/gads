@@ -65,6 +65,7 @@ def summarize_artifact(file_path: str) -> str:
     if not os.path.exists(file_path):
         return f"Error: File not found at {file_path}"
 
+    fname = os.path.basename(file_path)
     ext = os.path.splitext(file_path)[1].lower()
     
     try:
@@ -74,19 +75,19 @@ def summarize_artifact(file_path: str) -> str:
                 try:
                     data = json.load(f)
                 except Exception:
-                    return f"Error: Invalid JSON at {file_path}"
+                    return f"[{fname}] Error: Invalid JSON at {file_path}"
             
             # Plotly signature: has 'data' key as a list
             if isinstance(data, dict) and "data" in data and isinstance(data["data"], list) and len(data["data"]) > 0:
                 chart_type = data["data"][0].get("type", "unknown")
                 trace_names = [t.get("name", "unnamed") for t in data["data"]]
                 title = data.get("layout", {}).get("title", {}).get("text", "Untitled")
-                return f"Plotly {chart_type.capitalize()} Chart: '{title}'. Traces: {', '.join(trace_names[:5])}."
+                return f"[{fname}] Plotly {chart_type.capitalize()} Chart: '{title}'. Traces: {', '.join(trace_names[:5])}."
             else:
                 # Generic JSON data
                 size_kb = os.path.getsize(file_path) / 1024
                 keys = list(data.keys()) if isinstance(data, dict) else []
-                return f"JSON Data File: {size_kb:.1f} KB. Keys: {', '.join(keys[:10])}."
+                return f"[{fname}] JSON Data File: {size_kb:.1f} KB. Keys: {', '.join(keys[:10])}."
 
         elif ext in (".csv", ".parquet"):
             if ext == ".csv":
@@ -98,14 +99,14 @@ def summarize_artifact(file_path: str) -> str:
                 rows = len(df)
             
             cols = list(df.columns)
-            return f"Dataset ({ext[1:].upper()}): {rows} rows, {len(cols)} columns. Schema: {', '.join(cols[:15])}{'...' if len(cols) > 15 else ''}."
+            return f"[{fname}] Dataset ({ext[1:].upper()}): {rows} rows, {len(cols)} columns. Schema: {', '.join(cols[:15])}{'...' if len(cols) > 15 else ''}."
 
         elif ext in (".png", ".jpg", ".jpeg"):
             size_kb = os.path.getsize(file_path) / 1024
-            return f"Static Image ({ext[1:].upper()}): {size_kb:.1f} KB."
+            return f"[{fname}] Static Image ({ext[1:].upper()}): {size_kb:.1f} KB."
 
         else:
-            return f"File ({ext[1:].upper()}): {os.path.getsize(file_path)} bytes."
+            return f"[{fname}] File ({ext[1:].upper()}): {os.path.getsize(file_path)} bytes."
 
     except Exception as e:
-        return f"Error summarizing {file_path}: {str(e)}"
+        return f"[{fname}] Error summarizing: {str(e)}"

@@ -27,6 +27,11 @@ async def get_structured_completion(model: str, response_model, messages: list, 
     and automatic repair via `instructor` if manual extraction fails.
     Injects Langfuse/LiteLLM metadata from trace_context for observability.
     """
+    # CRITICAL: We pass custom_llm_provider="openai" to allow raw model names (like 'local_model')
+    # without requiring a prefix that confuses the proxy server.
+    if "custom_llm_provider" not in kwargs:
+        kwargs["custom_llm_provider"] = "openai"
+
     if "base_url" not in kwargs:
         kwargs["base_url"] = LITELLM_BASE_URL
     if "api_key" not in kwargs:
@@ -37,7 +42,6 @@ async def get_structured_completion(model: str, response_model, messages: list, 
     # Inject observability metadata from global context
     ctx = trace_context.get()
     if ctx:
-        # standard LiteLLM/Langfuse metadata keys
         meta = {
             "trace_id": str(ctx.get("project_id")),
             "session_id": str(ctx.get("project_id")),
@@ -63,17 +67,20 @@ async def get_structured_completion(model: str, response_model, messages: list, 
         
         print(f"  [LLM] Injecting Trace Metadata (Headers + Body): {ctx.get('project_id')}", flush=True)
 
-        try:
-            from gads.core.server import langfuse_client
-            print(f"  [LLM] Triggering Langfuse flush...", flush=True)
-            langfuse_client.flush()
-            print("  [LLM] Langfuse flush complete.", flush=True)
-        except Exception as e:
-            print(f"  [LLM] Langfuse flush failed/skipped: {type(e).__name__} - {e}", flush=True)
-
     # Set a robust default timeout if none specified
     if "timeout" not in kwargs:
         kwargs["timeout"] = 60.0
+
+    # LOCAL MODEL HARDENING: 
+    # 1. Increase repetition penalty to prevent infinite loops (like standard_deviation repetition).
+    # 2. Use a smaller max_tokens for safety.
+    if model == "local_model":
+        if "extra_body" not in kwargs: kwargs["extra_body"] = {}
+        kwargs["extra_body"].update({
+            "repetition_penalty": 1.1,
+            "temperature": 0.1 # Stricter output for local models
+        })
+        if "max_tokens" not in kwargs: kwargs["max_tokens"] = 4096
 
     if stream_callback:
         print(f"  [LLM] Streaming enabled for {model}...", flush=True)
@@ -81,7 +88,6 @@ async def get_structured_completion(model: str, response_model, messages: list, 
             resp = await acompletion(
                 model=model,
                 messages=messages,
-                custom_llm_provider="openai",
                 stream=True,
                 **kwargs
             )
@@ -109,10 +115,9 @@ async def get_structured_completion(model: str, response_model, messages: list, 
             cleaned_text = re.sub(r'<think>.*?</think>', '', full_content, flags=re.DOTALL)
             
             # Find all JSON-like blocks and try them from largest to smallest
-            # This is more robust than a single greedy regex
-            json_blocks = re.findall(r'\{(?:[^{}]|(?R))*\}', cleaned_text, re.DOTALL)
+            json_blocks = re.findall(r'\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}', cleaned_text, re.DOTALL)
             if not json_blocks:
-                # Fallback to simple regex if recursive search fails (Python re doesn't support ?R, but we can approximate)
+                # Fallback to simple greedy regex
                 json_match = re.search(r'(\{.*\})', cleaned_text, re.DOTALL)
                 json_blocks = [json_match.group(0)] if json_match else []
 
@@ -134,7 +139,6 @@ async def get_structured_completion(model: str, response_model, messages: list, 
                     model=model,
                     response_model=response_model,
                     messages=repair_messages,
-                    custom_llm_provider="openai",
                     max_retries=1,
                     **kwargs
                 )
@@ -151,7 +155,6 @@ async def get_structured_completion(model: str, response_model, messages: list, 
             model=model,
             response_model=response_model,
             messages=messages,
-            custom_llm_provider="openai",
             max_retries=0, 
             **kwargs
         )
@@ -169,7 +172,6 @@ async def get_structured_completion(model: str, response_model, messages: list, 
             raw_resp = await acompletion(
                 model=model,
                 messages=fallback_messages,
-                custom_llm_provider="openai",
                 **kwargs
             )
             

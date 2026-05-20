@@ -19,9 +19,11 @@ from gads.core.models import Project, Task, Artifact, Instruction
 from gads.agents.planner import DataSciencePlanner, PlannerInput, ReconciliationReport, FileMetadata
 from gads.agents.router import DataScienceRouter, RouterInput
 from gads.agents.plan_critique import PlanCritiqueAgent, PlanCritiqueInput
+from gads.agents.spec_drafter import SpecDrafterAgent, SpecDraftInput
 from gads.agents.workers.synthesizer import SynthesizerAgent, SynthesizerInput
 from gads.agents.workers.critique import CritiqueAgent, CritiqueInput
 from gads.core.executor import ExecutionManager
+from gads.tools.sandbox import SandboxClient
 from gads.core.registry import get_model_hierarchy, get_local_only, set_local_only, get_random_routing, set_random_routing, get_next_model_dynamic
 from gads.core.knowledge import KnowledgeRegistry
 from gads.core.reporting import create_master_reports
@@ -136,6 +138,10 @@ class ProjectSpecMetadata(BaseModel):
     name: Optional[str] = None
     datasets: List[str] = Field(default_factory=list)
     recipes: List[str] = Field(default_factory=list)
+    target_column: Optional[str] = None
+    feature_columns: List[str] = Field(default_factory=list)
+    filters: Optional[str] = None
+    domain: Optional[str] = None
 
 @app.on_event("startup")
 async def startup_event():
@@ -285,8 +291,7 @@ async def cancel_project(project_id: uuid.UUID):
         session.commit()
 
         # IMMEDIATELY reset sandbox to stop any running local models
-        executor = ExecutionManager()
-        await executor.sandbox.reset_session(str(project_id))
+        await SandboxClient().reset_session(str(project_id))
 
         hub = ExecutionHub(session)
         hub.create_outbox_event("WORKFLOW_CANCELLED", {"project_id": str(project_id)})
@@ -391,20 +396,38 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         workspace_dir = f"{WORKSPACE_ROOT}/{project_id}"
         current_files_meta = _get_recursive_files(workspace_dir)
 
-        # Dummy execute to trigger state introspection
+        # Check sandbox health instead of full execute to avoid heavy state introspection hangs
         try:
-            res = await asyncio.wait_for(executor.sandbox.execute("pass", project_id=project_id, session_id=str(project_id)), timeout=10.0)
-            if res.kernel_state:
-                executor.authoritative_state.update(res.kernel_state)
-                print(f"  [Workflow] Synchronized {len(executor.authoritative_state)} variables from kernel.", flush=True)
-                with Session(engine) as session:
-                    project = session.get(Project, project_id)
-                    if project:
-                        project.last_state_json = executor.authoritative_state
-                        session.add(project)
-                        session.commit()
+            await asyncio.wait_for(executor.sandbox.client.get(f"{executor.sandbox.base_url}/health"), timeout=5.0)
+            print(f"  [Workflow] Sandbox is healthy. Proceeding.", flush=True)
         except Exception as e:
-            print(f"  [Workflow] Grounding failed or timed out: {e}. Proceeding with empty state.", flush=True)
+            print(f"  [Workflow] Grounding health check failed: {e}. Proceeding anyway.", flush=True)
+
+        # 0.5. ONE-SHOT SCHEMA PROBE (runs once before any agent, outside retry loop)
+        print(f"  [Workflow] Probing file schemas...", flush=True)
+        from gads.agents.planner import FileMetadata as FM
+        planner_files = []
+        detected_schemas = {}
+        for f in current_files_meta:
+            columns_dtypes = None
+            if f["name"].endswith(".csv") or f["name"].endswith(".parquet"):
+                columns_dtypes = await _probe_file_schema(executor, project_id, f["name"])
+                if columns_dtypes:
+                    detected_schemas[f["name"]] = columns_dtypes
+            planner_files.append(FM(name=f["name"], size_mb=f["size_mb"], columns_and_dtypes=columns_dtypes))
+
+        if detected_schemas:
+            executor.file_schemas = detected_schemas
+            with Session(engine) as session:
+                project = session.get(Project, project_id)
+                if project:
+                    state = project.last_state_json or {}
+                    schemas = state.get("__schemas__", {})
+                    schemas.update(detected_schemas)
+                    state["__schemas__"] = schemas
+                    project.last_state_json = state
+                    session.add(project)
+                    session.commit()
 
         # Mark init task as completed
         with Session(engine) as session:
@@ -416,13 +439,139 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
 
                 if await is_cancelled(): return
 
+        # 0.6. SPEC DRAFTING — generate or load structured workflow spec
+        # Build files_with_schemas string for SpecDrafter
+        files_schema_lines = []
+        for f in planner_files:
+            if f.columns_and_dtypes and f.columns_and_dtypes.get("schema"):
+                cols = list(f.columns_and_dtypes["schema"].keys())
+                files_schema_lines.append(f"'{f.name}' ({f.size_mb:.2f} MB) — columns: {cols}")
+            else:
+                files_schema_lines.append(f"'{f.name}' ({f.size_mb:.2f} MB)")
+        files_schema_str = "\n".join(files_schema_lines) if files_schema_lines else "None"
+
+        workflow_spec_path = Path(workspace_dir) / "workflow_spec.md"
+        spec_hints: Dict[str, Any] = {}
+        formalized_objective = objective  # default: use raw objective
+
+        if workflow_spec_path.exists():
+            # Re-use existing spec (from-spec path or prior run)
+            print(f"  [SpecDrafter] Found existing workflow_spec.md — loading.", flush=True)
+            try:
+                spec_content = workflow_spec_path.read_text(encoding="utf-8")
+                yaml_data = {}
+                if spec_content.startswith("---"):
+                    parts = spec_content.split("---", 2)
+                    if len(parts) >= 3:
+                        yaml_data = yaml.safe_load(parts[1]) or {}
+                        fo = spec_content.split("---", 2)[2].strip()
+                        if fo:
+                            formalized_objective = fo
+                # Pull hints from YAML frontmatter
+                for key in ("target_column", "feature_columns", "filters", "domain", "recipe_id"):
+                    if key in yaml_data and yaml_data[key]:
+                        spec_hints[key] = yaml_data[key]
+            except Exception as e:
+                print(f"  [SpecDrafter] Failed to parse workflow_spec.md: {e}. Using raw objective.", flush=True)
+        else:
+            # Run SpecDrafter to generate the spec
+            spec_model_fallback = ["local_model"] if get_local_only() else ["claude-haiku-4.5"]
+            spec_model = hierarchy.get("T3", {}).get("models", spec_model_fallback)[0]
+            available_recipe_ids = [r["id"] for r in registry.get_recipes_summary() if "id" in r]
+
+            with Session(engine) as session:
+                spec_task = Task(
+                    project_id=project_id,
+                    instruction_id=instruction_id,
+                    description=f"SpecDrafter ({spec_model}) is formalizing the project specification...",
+                    assigned_to="SpecDrafter",
+                    status="running",
+                    heartbeat=datetime.now()
+                )
+                session.add(spec_task)
+                session.commit()
+                session.refresh(spec_task)
+                spec_task_id = spec_task.id
+
+            spec_draft = None
+            try:
+                spec_span = trace.span(name="Spec Drafting", metadata={"task_id": str(spec_task_id)})
+                trace_context.get().update({
+                    "agent_name": "SpecDrafter",
+                    "task_id": str(spec_task_id),
+                    "parent_observation_id": spec_span.id
+                })
+
+                spec_agent = SpecDrafterAgent(model=spec_model)
+                spec_res = await asyncio.wait_for(
+                    spec_agent.run(SpecDraftInput(
+                        objective=objective,
+                        files_with_schemas=files_schema_str,
+                        available_recipe_ids=available_recipe_ids
+                    )),
+                    timeout=120.0
+                )
+                spec_draft = spec_res.content
+                spec_span.end(output=spec_draft.model_dump())
+
+                formalized_objective = spec_draft.formalized_objective
+                for key in ("target_column", "feature_columns", "filters", "domain", "recipe_id"):
+                    val = getattr(spec_draft, key, None)
+                    if val:
+                        spec_hints[key] = val
+
+                # Write workflow_spec.md to workspace
+                frontmatter: Dict[str, Any] = {"name": spec_draft.name, "datasets": spec_draft.datasets}
+                if spec_draft.recipe_id:
+                    frontmatter["recipe_id"] = spec_draft.recipe_id
+                if spec_draft.target_column:
+                    frontmatter["target_column"] = spec_draft.target_column
+                if spec_draft.feature_columns:
+                    frontmatter["feature_columns"] = spec_draft.feature_columns
+                if spec_draft.filters:
+                    frontmatter["filters"] = spec_draft.filters
+                if spec_draft.domain:
+                    frontmatter["domain"] = spec_draft.domain
+                spec_md = f"---\n{yaml.dump(frontmatter, default_flow_style=False).strip()}\n---\n\n{formalized_objective}\n"
+                workflow_spec_path.write_text(spec_md, encoding="utf-8")
+                print(f"  [SpecDrafter] Wrote workflow_spec.md to workspace.", flush=True)
+
+                with Session(engine) as session:
+                    st = session.get(Task, spec_task_id)
+                    if st:
+                        st.status = "completed"
+                        st.result_json = {
+                            "stdout": f"**Formalized Objective:**\n{formalized_objective}\n\n**Hints:**\n{json.dumps(spec_hints, indent=2)}",
+                            "model_used": spec_model
+                        }
+                        session.add(st)
+                        session.commit()
+
+            except Exception as e:
+                print(f"  [SpecDrafter] Failed: {e}. Writing minimal spec and continuing.", flush=True)
+                # Fallback: write minimal spec so workflow_spec.md always exists
+                minimal_spec = f"---\nname: \"{objective[:60]}\"\ndatasets: {json.dumps([f['name'] for f in current_files_meta])}\n---\n\n{objective}\n"
+                try:
+                    workflow_spec_path.write_text(minimal_spec, encoding="utf-8")
+                except Exception:
+                    pass
+                with Session(engine) as session:
+                    st = session.get(Task, spec_task_id)
+                    if st:
+                        st.status = "failed"
+                        st.error = str(e)
+                        session.add(st)
+                        session.commit()
+
+        print(f"  [SpecDrafter] Formalized objective: {formalized_objective[:80]}...", flush=True)
+
         # 1. ROUTING (Resilient & Resourced)
         router_fallback = ["local_model"] if get_local_only() else ["gemini-3.1-flash-lite-preview"]
         router_model = hierarchy.get("T3", {}).get("models", router_fallback)[0]
-        
+
         intent = None
         knowledge_report = None
-        
+
         while True:
             with Session(engine) as session:
                 route_task = Task(
@@ -440,7 +589,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 # Create a Span for the Architect
                 span = trace.span(name="Architect Routing", metadata={"task_id": str(route_task.id)})
                 trace_context.get().update({
-                    "agent_name": "Router", 
+                    "agent_name": "Router",
                     "task_id": str(route_task.id),
                     "parent_observation_id": span.id
                 })
@@ -453,14 +602,14 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 try:
                     router = DataScienceRouter(model=router_model)
                     router_res = await router.run(RouterInput(
-                        objective=objective,
+                        objective=formalized_objective,
                         available_recipes=registry.get_recipes_summary()
                     ), stream_callback=stream_router_callback)
                     intent = router_res.content
                     span.end(output=intent.model_dump())
 
-                    # Inline Knowledge Retrieval
-                    recipe_id = intent.matched_recipe_id
+                    # Inline Knowledge Retrieval — prefer Router match, fall back to SpecDrafter hint
+                    recipe_id = intent.matched_recipe_id or spec_hints.get("recipe_id")
                     recipe = registry.get_recipe(recipe_id) if recipe_id else None
                     
                     recipe_info = "No specific recipe found. Proceeding with general data science reasoning."
@@ -519,29 +668,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             # 3. PLANNING (Resilient Decomposition)
             planner_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
             planner_model = hierarchy.get("T2", {}).get("models", planner_fallback)[0]
-            
-            from gads.agents.planner import FileMetadata as FM
-            planner_files = []
-            detected_schemas = {}
-            for f in current_files_meta:
-                columns_dtypes = None
-                if f["name"].endswith(".csv") or f["name"].endswith(".parquet"):
-                    columns_dtypes = await _probe_file_schema(executor, project_id, f["name"])
-                    if columns_dtypes:
-                        detected_schemas[f["name"]] = columns_dtypes
-                planner_files.append(FM(name=f["name"], size_mb=f["size_mb"], columns_and_dtypes=columns_dtypes))
-
-            if detected_schemas:
-                with Session(engine) as session:
-                    project = session.get(Project, project_id)
-                    if project:
-                        state = project.last_state_json or {}
-                        schemas = state.get("__schemas__", {})
-                        schemas.update(detected_schemas)
-                        state["__schemas__"] = schemas
-                        project.last_state_json = state
-                        session.add(project)
-                        session.commit()
+            # planner_files and spec_hints are pre-computed above (outside this retry loop)
 
             planner_res = None
             while True:
@@ -558,7 +685,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     session.add(plan_task)
                     session.commit()
                     session.refresh(plan_task)
-                    
+
                     pid_str = str(plan_task.id)
                     LIVE_STREAMS[pid_str] = {"reasoning": "", "stdout": ""}
                     async def stream_planner_callback(token: str):
@@ -566,20 +693,21 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
 
                     span = trace.span(name=f"Project Planning (Attempt {workflow_attempt})", metadata={"task_id": pid_str})
                     trace_context.get().update({
-                        "agent_name": "Planner", 
-                        "task_id": pid_str, 
+                        "agent_name": "Planner",
+                        "task_id": pid_str,
                         "parent_observation_id": span.id
                     })
 
                     try:
                         planner = DataSciencePlanner(model=planner_model)
                         planner_res = await planner.run(PlannerInput(
-                            objective=objective,
+                            objective=formalized_objective,
                             available_models_hierarchy=hierarchy,
                             available_files=planner_files,
                             knowledge_report=knowledge_report,
                             available_skills=registry.get_skills_summary(),
-                            critique_feedback=critique_feedback
+                            critique_feedback=critique_feedback,
+                            user_hints=spec_hints if spec_hints else None
                         ), stream_callback=stream_planner_callback)
                         span.end(output=planner_res.content.model_dump())
 
@@ -697,12 +825,25 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             tasks_to_run = []
             with Session(engine) as session:
                 hub = ExecutionHub(session)
+                
+                # Flatten hierarchy to get valid models
+                valid_models = []
+                for tier_data in hierarchy.values():
+                    valid_models.extend(tier_data.get("models", []))
+                fallback_model = hierarchy.get("T3", {}).get("models", ["gemini-3.1-flash-lite-preview"])[0]
+
                 for step in planner_res.content.steps:
+                    # Sanitize assigned_to to prevent hallucinations from causing un-routable tasks
+                    assigned_model = step.assigned_to
+                    if assigned_model not in valid_models:
+                        print(f"  [Workflow] Warning: Planner hallucinated model '{assigned_model}'. Falling back to '{fallback_model}'.", flush=True)
+                        assigned_model = fallback_model
+
                     new_task = Task(
                         project_id=project_id,
                         instruction_id=instruction_id,
                         description=step.description,
-                        assigned_to=step.assigned_to,
+                        assigned_to=assigned_model,
                         postcondition_json=step.postcondition,
                         attached_skills=step.attached_skills,
                         status="pending"
@@ -762,16 +903,17 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         is_first = (i == 0)
                         is_recent = (i >= len(all_tasks) - 2)
                         
+                        status_str = t.status.upper()
                         stdout_str = (t.result_json or {}).get("stdout", "")
                         code_str = (t.result_json or {}).get("code", "")
                         
                         if is_first or is_recent:
                             # Full detail
-                            task_ctx = f"### TASK: {t.description}\nStatus: {t.status}\nCode Used:\n```python\n{code_str}\n```\nStdout Output:\n{stdout_str[:2000]}"
+                            task_ctx = f"### TASK: {t.description}\nStatus: {status_str}\nCode Used:\n```python\n{code_str}\n```\nStdout Output:\n{stdout_str[:2000]}"
                         else:
                             # Distilled metadata only
-                            summary = (t.result_json or {}).get("orchestrator_summary", f"Completed: {t.description}")
-                            task_ctx = f"### TASK (HISTORICAL): {t.description}\nStatus: {t.status}\nSummary: {summary}"
+                            summary = (t.result_json or {}).get("orchestrator_summary", f"{status_str}: {t.description}")
+                            task_ctx = f"### TASK (HISTORICAL): {t.description}\nStatus: {status_str}\nSummary: {summary}"
                         
                         hardened_context_parts.append(task_ctx)
 
@@ -981,20 +1123,24 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                     trace_context.get().update({"agent_name": "Synthesizer", "task_id": str(synth_task.id), "parent_observation_id": span.id})
 
                     all_tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
-                    context_parts = []
+                    task_log_parts = []
                     for t in all_tasks:
-                         summary = (t.result_json or {}).get("orchestrator_summary", f"Completed: {t.description}")
-                         context_parts.append(f"Task: {t.description}\nSummary: {summary}\nOutput: {(t.result_json or {}).get('stdout','')[:2000]}")
+                         status_str = t.status.upper()
+                         summary = (t.result_json or {}).get("orchestrator_summary", "No summary available.")
+                         task_log_parts.append(f"- Task: {t.description}\n  Status: {status_str}\n  Result: {summary}")
                     
                     artifacts = session.exec(select(Artifact).where(Artifact.project_id == project_id)).all()
-                    artifact_summaries = []
+                    artifact_evidence = []
                     for a in artifacts:
                         fname = a.content_json.get("filename")
                         fpath = os.path.join(workspace_dir, fname) if fname else None
+                        # Use the actual summarized truth from the file
                         summary = summarize_artifact(fpath) if fpath else f"Artifact: {a.description}"
-                        artifact_summaries.append(summary)
+                        artifact_evidence.append(f"### ARTIFACT: {a.description}\nSource: {fname or 'In-Memory'}\nContent Summary: {summary}")
                     
-                    context = "\n\n---\n\n".join(context_parts) + "\n\n--- ARTIFACT SUMMARIES ---\n" + "\n".join(artifact_summaries)
+                    context = "### TASK EXECUTION LOG\n" + "\n\n".join(task_log_parts) + \
+                              "\n\n### GENERATED ARTIFACTS (THE BLACKBOARD)\n" + \
+                              ( "\n\n".join(artifact_evidence) if artifact_evidence else "NO ARTIFACTS GENERATED.")
 
                     try:
                         synthesizer = SynthesizerAgent(model=synthesizer_model)
@@ -1259,6 +1405,9 @@ async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundT
             for ds in meta.datasets:
                 ds_path = (datasets_root / ds).resolve()
                 _mount_external_dataset(workspace_dir, str(ds_path))
+            # Write spec to workspace so the workflow's SpecDrafter stage can skip drafting
+            spec_dest = Path(workspace_dir) / "workflow_spec.md"
+            spec_dest.write_text(content, encoding="utf-8")
         except Exception as e:
             # Rollback DB and filesystem
             session.rollback()
@@ -1266,7 +1415,7 @@ async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundT
                 import shutil
                 shutil.rmtree(workspace_dir)
             raise HTTPException(status_code=500, detail=f"Failed to setup workspace: {e}")
-            
+
         session.commit()
         session.refresh(project)
         
@@ -1346,6 +1495,10 @@ async def create_project(req: ProjectCreateRequest, background_tasks: Background
         if req.existing_project_id:
             project = session.get(Project, uuid.UUID(req.existing_project_id))
             if not project: raise HTTPException(status_code=404, detail="Project not found")
+
+            # Reset cancelled status if resuming
+            if project.narrative and "[CANCELLED]" in project.narrative:
+                project.narrative = None
             # Update objective if provided (for shell projects)
             if req.objective:
                 project.objective = req.objective
@@ -1449,7 +1602,7 @@ except Exception as e:
     try:
         # 30s timeout for schema probe, using a dedicated session to avoid interfering with project kernel
         res = await asyncio.wait_for(
-            executor.sandbox.execute(code, project_id=project_id, session_id=f"probe_{project_id}"),
+            executor.sandbox.execute(code, project_id=project_id, session_id=f"probe_{project_id}", workspace_id=str(project_id)),
             timeout=30.0
         )
         if res.stdout:

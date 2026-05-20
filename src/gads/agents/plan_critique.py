@@ -28,7 +28,7 @@ class PlanCritiqueAgent(BaseAgent[PlanCritiqueInput, PlanCritiqueOutput]):
 
     async def run(self, input_data: PlanCritiqueInput, stream_callback=None, **kwargs) -> Any:
         # Refresh prompt from registry
-        self.system_prompt = prompt_registry.get_prompt(self.name)
+        base_prompt = prompt_registry.get_prompt(self.name)
         
         knowledge_str = json.dumps(input_data.knowledge_report.dict(), indent=2) if input_data.knowledge_report else "No specific SOP was provided."
         files_str = ", ".join([f"'{f}'" for f in input_data.available_files]) if input_data.available_files else "None (Empty Workspace)"
@@ -38,27 +38,21 @@ class PlanCritiqueAgent(BaseAgent[PlanCritiqueInput, PlanCritiqueOutput]):
             steps_summary.append(f"Step {i+1}: {step.description} (Assigned to: {step.assigned_to})")
         steps_str = "\n".join(steps_summary)
         
-        formatted_prompt = self.system_prompt.format(
+        formatted_prompt = base_prompt.format(
             knowledge_json=knowledge_str,
             objective=input_data.objective,
             files_list=files_str
         )
-        
-        user_content = f"PROPOSED PLAN STEPS:\n{steps_str}\n\nAVAILABLE FILES:\n{files_str}\n\nPlease evaluate if these steps fully satisfy the objective and align with the SOP if applicable."
+        self.agent._system_prompts = (formatted_prompt,)
 
-        messages = [
-            {"role": "system", "content": formatted_prompt},
-            {"role": "user", "content": user_content}
-        ]
-        
-        from gads.core.llm import get_structured_completion
-        content = await get_structured_completion(
-            model=self.model,
-            response_model=self.output_schema,
-            messages=messages,
-            stream_callback=stream_callback,
+        user_content = (
+            f"PROPOSED PLAN STEPS:\n{steps_str}\n\n"
+            f"AVAILABLE FILES:\n{files_str}\n\n"
+            "Please evaluate if these steps fully satisfy the objective and align with the SOP if applicable."
+        )
+
+        # Use super().run
+        return await super().run(
+            user_content,
             **kwargs
         )
-        
-        from gads.agents.base import AgentResponse
-        return AgentResponse(content=content, model_used=self.model)

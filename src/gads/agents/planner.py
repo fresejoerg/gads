@@ -14,7 +14,9 @@ class ReconciliationReport(BaseModel):
 class PlannerTask(BaseModel):
     """Simplified task model for the Planner to output."""
     description: str
-    assigned_to: str
+    assigned_to: str = Field(
+        description="MUST be an EXACT verbatim model ID from the AVAILABLE_MODELS_HIERARCHY (e.g. 'gemini-3.1-flash-lite-preview'). DO NOT hallucinate model names."
+    )
     postcondition: Dict[str, Any] = Field(
         description="Structural contract for success. MUST be a valid JSON object with key:value pairs. E.g., {'output_type': 'dataframe', 'required_columns': ['name']}"
     )
@@ -35,6 +37,8 @@ class PlannerInput(BaseModel):
     knowledge_report: Optional[ReconciliationReport] = None
     available_skills: List[Dict[str, Any]] = []
     critique_feedback: Optional[str] = None
+    previous_plan: Optional[List[str]] = None
+    user_hints: Optional[Dict[str, Any]] = None
 
 
 class PlannerOutput(BaseModel):
@@ -52,7 +56,7 @@ class DataSciencePlanner(BaseAgent[PlannerInput, PlannerOutput]):
 
     async def run(self, input_data: PlannerInput, stream_callback=None, **kwargs) -> Any:
         # Refresh prompt from registry in case of hot-reload
-        self.system_prompt = prompt_registry.get_prompt(self.name)
+        base_prompt = prompt_registry.get_prompt(self.name)
         
         hierarchy_str = json.dumps(input_data.available_models_hierarchy, indent=2)
         skills_str = json.dumps(input_data.available_skills, indent=2)
@@ -68,30 +72,28 @@ class DataSciencePlanner(BaseAgent[PlannerInput, PlannerOutput]):
         
         knowledge_str = json.dumps(input_data.knowledge_report.dict(), indent=2) if input_data.knowledge_report else "No matching SOP found. Use generic data science reasoning."
         
-        formatted_prompt = self.system_prompt.format(
+        hints_str = json.dumps(input_data.user_hints, indent=2) if input_data.user_hints else "None provided."
+        formatted_prompt = base_prompt.format(
             hierarchy_json=hierarchy_str,
             files_list=files_str,
             knowledge_json=knowledge_str,
-            skills_json=skills_str
+            skills_json=skills_str,
+            user_hints=hints_str
         )
         
+        # Set the prompt for the Pydantic AI agent
+        self.agent._system_prompts = (formatted_prompt,)
+
         user_content = f"USER OBJECTIVE: {input_data.objective}"
         if input_data.critique_feedback:
-            user_content += f"\n\n--- PREVIOUS ATTEMPT REJECTED BY QA ---\nQA Feedback: {input_data.critique_feedback}\n\nTasks previously executed:\n{knowledge_str}\n\nPlease generate a new plan that specifically addresses the missing requirements noted by QA."
+            user_content += f"\n\n--- PREVIOUS ATTEMPT REJECTED BY QA ---\nQA Feedback: {input_data.critique_feedback}"
+            if input_data.previous_plan:
+                user_content += f"\n\nRejected Plan:\n" + "\n".join([f"- {s}" for s in input_data.previous_plan])
+            
+            user_content += f"\n\nPlease generate a new plan that specifically addresses the missing requirements noted by QA."
 
-        messages = [
-            {"role": "system", "content": formatted_prompt},
-            {"role": "user", "content": user_content}
-        ]
-        
-        from gads.core.llm import get_structured_completion
-        content = await get_structured_completion(
-            model=self.model,
-            response_model=self.output_schema,
-            messages=messages,
-            stream_callback=stream_callback,
+        # Use super().run to get streaming support
+        return await super().run(
+            user_content,
             **kwargs
         )
-        
-        from gads.agents.base import AgentResponse
-        return AgentResponse(content=content, model_used=self.model)

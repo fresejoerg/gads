@@ -306,8 +306,18 @@ def render_knowledge_panel():
                     st.error(detail)
 
 def render_archive_panel():
-    head_col, refresh_col = st.columns([0.7, 0.3])
+    head_col, kill_col, refresh_col = st.columns([0.5, 0.25, 0.25])
     head_col.markdown("### ARCHIVE")
+    
+    if kill_col.button("KILL ALL", key="kill_all_btn", use_container_width=True, help="Forcefully terminate all active workflows system-wide."):
+        res = api_post("/system/cancel-all")
+        if res and res.get("status") == "ok":
+            count = res.get("cancelled_count", 0)
+            st.toast(f"Terminated {count} workflows.")
+            st.rerun()
+        else:
+            st.error("Failed to kill workflows.")
+
     if refresh_col.button("REFRESH", key="refresh_archive_btn", use_container_width=True):
         st.rerun()
     
@@ -571,10 +581,13 @@ def render_orchestrator_panel():
                         st.caption(f"Architect: `{model_name or 'N/A'}`")
                     elif t['assigned_to'] == "Planner":
                         st.caption(f"Project Manager: `{model_name or 'N/A'}`")
+                    elif t['assigned_to'] == "System":
+                        st.caption(f"System Task")
                     else:
-                        st.caption(f"Worker: `{t['assigned_to']}`")
-                        if model_name:
-                            st.caption(f"Model: `{model_name}`")
+                        st.caption(f"Worker: `CodeGenerator`")
+                        st.caption(f"Assigned Model: `{t['assigned_to']}`")
+                        if model_name and model_name != t['assigned_to']:
+                            st.caption(f"Executed Model: `{model_name}`")
                     
                     if t['status'] == "running":
                         stream_data = api_get(f"/tasks/{t['id']}/stream")
