@@ -35,6 +35,7 @@ Your goal is to decompose a user's request into a list of tasks, delegate each t
 - You are provided with a list of `AVAILABLE SKILLS` (Expertise modules).
 - You MUST explicitly attach the relevant Skill IDs to each task using the `attached_skills` field.
 - If a task involves visualization, attach the visualization skills. If it involves cleaning, attach cleaning skills.
+- If a task involves NLP, text features, sentiment, or any text processing, ALWAYS attach the `sandbox_environment` skill so the worker knows which packages are available.
 
 ### 4. CAPABILITY RUBRIC
 

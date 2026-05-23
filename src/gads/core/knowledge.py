@@ -35,6 +35,7 @@ class KnowledgeRegistry:
         self.skills_dir = os.path.join(os.path.dirname(recipes_dir), "skills")
         self.recipes: Dict[str, Recipe] = {}
         self.skills: Dict[str, Skill] = {}
+        self._recipe_filepaths: Dict[str, str] = {}
         self.load_recipes()
         self.load_skills()
 
@@ -50,20 +51,21 @@ class KnowledgeRegistry:
                 try:
                     with open(path, "r") as f:
                         content = f.read()
-                        
+
                     # Extract YAML frontmatter (between --- and ---)
                     match = re.search(r"^---\s*\n(.*?)\n---\s*\n(.*)", content, re.DOTALL)
                     if match:
                         yaml_str = match.group(1)
                         body_str = match.group(2)
-                        
+
                         data = yaml.safe_load(yaml_str)
                         # Extract Rationale from body for the Recipe model
                         rationale_match = re.search(r"# .*?\n\n## Rationale\n(.*?)\n\n##", body_str, re.DOTALL)
                         data["rationale"] = rationale_match.group(1).strip() if rationale_match else ""
-                        
+
                         recipe = Recipe(**data)
                         self.recipes[recipe.id] = recipe
+                        self._recipe_filepaths[recipe.id] = path
                         print(f"  [Registry] Loaded recipe: {recipe.id} (v{recipe.version})")
                 except Exception as e:
                     print(f"  [Registry] Error loading {filename}: {e}")
@@ -98,6 +100,9 @@ class KnowledgeRegistry:
 
     def get_recipe(self, recipe_id: str) -> Optional[Recipe]:
         return self.recipes.get(recipe_id)
+
+    def get_recipe_filepath(self, recipe_id: str) -> Optional[str]:
+        return self._recipe_filepaths.get(recipe_id)
 
     def list_recipes(self) -> List[str]:
         return list(self.recipes.keys())

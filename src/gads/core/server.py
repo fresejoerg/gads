@@ -27,6 +27,7 @@ from gads.tools.sandbox import SandboxClient
 from gads.core.registry import get_model_hierarchy, get_local_only, set_local_only, get_random_routing, set_random_routing, get_next_model_dynamic
 from gads.core.knowledge import KnowledgeRegistry
 from gads.core.reporting import create_master_reports
+from gads.core.notebook_exporter import export_python_script, export_notebook, copy_applied_recipe
 from gads.core.introspection import summarize_artifact
 from gads.core.distiller import distill_dashboard_to_markdown
 from gads.core.prompts import prompt_registry
@@ -1260,12 +1261,31 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
             filtered_artifacts = [a for a in artifacts if not any(r.lower() in a.description.lower() for r in (redundant_plots or []))]
 
             create_master_reports(
-                project_id=project_id, workspace_dir=workspace_dir, 
-                narrative=final_synth.narrative if final_synth else "Workflow halted.", 
-                takeaways=final_synth.key_takeaways if final_synth else ["No takeaways."], 
+                project_id=project_id, workspace_dir=workspace_dir,
+                narrative=final_synth.narrative if final_synth else "Workflow halted.",
+                takeaways=final_synth.key_takeaways if final_synth else ["No takeaways."],
                 artifacts=filtered_artifacts,
                 artifact_insights=final_synth.artifact_insights if final_synth else []
             )
+
+            # Export code bundle: .py script and .ipynb notebook
+            try:
+                py_path = export_python_script(project_id, workspace_dir)
+                nb_path = export_notebook(project_id, workspace_dir)
+                print(f"  [Reporting] Exported code bundle: {os.path.basename(py_path)}, {os.path.basename(nb_path)}", flush=True)
+            except Exception as e:
+                print(f"  [Reporting] Warning: Code bundle export failed: {e}", flush=True)
+
+            # Copy applied recipe into workspace for reproducibility
+            try:
+                applied_recipe_id = (knowledge_report.recipe_id if knowledge_report else None) or spec_hints.get("recipe_id")
+                if applied_recipe_id:
+                    recipe_src = registry.get_recipe_filepath(applied_recipe_id)
+                    dest = copy_applied_recipe(recipe_src, workspace_dir)
+                    if dest:
+                        print(f"  [Reporting] Copied applied recipe: {os.path.basename(dest)}", flush=True)
+            except Exception as e:
+                print(f"  [Reporting] Warning: Recipe copy failed: {e}", flush=True)
 
             proj = session.get(Project, project_id)
             if proj:
