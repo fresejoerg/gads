@@ -11,7 +11,7 @@ The IPython kernel sandbox has a **fixed set of pre-installed packages**. You CA
 | Category | Packages |
 |---|---|
 | Data | pandas, numpy, polars, pyarrow, duckdb |
-| ML/Modeling | scikit-learn, joblib, torch |
+| ML/Modeling | scikit-learn, joblib, torch, lightgbm, xgboost, shap |
 | NLP/Embeddings | sentence-transformers (`all-MiniLM-L6-v2` cached), nltk, textblob |
 | Visualization | matplotlib, seaborn, plotly, kaleido |
 | HTTP/Async | httpx, fastapi, uvicorn |
@@ -20,7 +20,7 @@ The IPython kernel sandbox has a **fixed set of pre-installed packages**. You CA
 ## NOT Available (do NOT import)
 
 - `spacy`, `transformers` (huggingface), `gensim`, `langchain`
-- `xgboost`, `lightgbm`, `catboost` — use `sklearn` (GradientBoostingClassifier, RandomForestClassifier, LogisticRegression)
+- `catboost` — use `lightgbm` or `xgboost` instead
 - `vaderSentiment` standalone — use `nltk.sentiment.vader` instead
 
 ## Sentiment Analysis Pattern
