@@ -1,5 +1,6 @@
 ---
 id: local_text_embedding
+description: "Local sentence-transformer embeddings using all-MiniLM-L6-v2 (cached, no download required)"
 triggers: ["embed", "vectorize", "sentence_transformers", "semantic search", "cosine similarity"]
 ---
 # Local Text Embedding

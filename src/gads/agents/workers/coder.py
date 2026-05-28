@@ -5,9 +5,9 @@ from gads.core.prompts import prompt_registry
 import json
 
 class CoderOutput(BaseModel):
-    explanation: str = Field(description="Brief explanation of what the code does.")
     code: str = Field(description="The complete Python code block to execute.")
-    libraries_used: List[str] = Field(description="List of libraries imported.")
+    libraries_used: List[str] = Field(default_factory=list, description="List of libraries imported.")
+    explanation: Optional[str] = Field(None, description="Brief explanation of what the code does.")
 
 class CoderInput(BaseModel):
     task_description: str
@@ -22,7 +22,7 @@ class CoderInput(BaseModel):
     state_summary: Optional[str] = None
 
 class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
-    def __init__(self, model: str = "claude-sonnet-4.6"):
+    def __init__(self, model: str = "local_model"):
         super().__init__(
             name="CodeGenerator",
             model=model,

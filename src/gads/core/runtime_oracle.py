@@ -77,13 +77,30 @@ class RuntimeOracle:
         
         return estimators
 
+    # Sentence-transformer: ~10s per 1000 rows on CPU (conservative estimate)
+    EMBEDDING_SECONDS_PER_KROW = 15.0
+
+    @classmethod
+    def _detect_embedding(cls, code: str) -> bool:
+        """Returns True if code uses sentence-transformers encode() on a large corpus."""
+        embedding_markers = ["SentenceTransformer", "sentence_transformers", ".encode("]
+        return any(m in code for m in embedding_markers)
+
     @classmethod
     def estimate_runtime(cls, code: str, n_rows: int, m_cols: int) -> float:
         """
         Returns estimated runtime in seconds.
         T = (N * log(N) * M * complexity_factor * multipliers) / HardwareConstant
+        Sentence-transformer encoding is estimated separately: ~15s / 1000 rows.
         """
         import math
+
+        # Sentence-transformer short-circuit: bypass before OOM/timeout
+        if cls._detect_embedding(code) and n_rows > 5000:
+            est = (n_rows / 1000.0) * cls.EMBEDDING_SECONDS_PER_KROW
+            print(f"    [Oracle] Sentence-transformer detected on {n_rows} rows → {est:.0f}s estimate")
+            return est
+
         estimators = cls.analyze_code(code)
         if not estimators:
             return 1.0 # Default low estimate for simple code

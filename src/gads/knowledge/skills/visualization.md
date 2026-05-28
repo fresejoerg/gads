@@ -1,5 +1,6 @@
 ---
 id: visualization_best_practices
+description: "Chart formatting rules: Y-axis must start at 0, use plotly_white template, unified hover mode"
 triggers: ["plot", "chart", "visualize", "visualization"]
 ---
 # Visualization Best Practices

@@ -64,6 +64,8 @@ You MUST provide a list of steps. For each task:
   - **NEW: SEMANTIC INSIGHTS**: If the task involves interpretation (e.g. clustering, sentiment, anomaly detection), you MUST include a `required_insights` key with a list of keywords the worker must interpret.
   - **CRITICAL**: Do NOT return empty `{{}}` contracts. You MUST specify the expected column names or list patterns that signify a successful task.
   - **SCHEMA GUARD**: `required_columns` MUST use EXACT column names from the file schemas in `AVAILABLE FILES`. Do NOT invent column names from the task description. If the schema shows `asin` and `rating`, use those — not `product_id` or `score`.
+  - **OWNERSHIP RULE**: Each task's `required_columns` MUST only include columns that task's own code fully produces. Do NOT list a column in a task's postcondition if that column is created by a later task. For example, if task 1 only loads raw data and task 2 builds the `target` column, task 1's postcondition must NOT include `target`.
+  - **METRICS GUARANTEE**: For any task that computes evaluation metrics (F1, accuracy, loss, R², AUC, etc.), you MUST include a `required_metrics` key listing the **exact Python variable names** that will hold those scalar values. The orchestrator will probe the kernel for these names after execution and save them to `metrics.json`. If they are not found, the task will be escalated. Example: `{{"output_type": "dataframe", "required_columns": ["pred", "label"], "required_metrics": ["macro_f1", "log_loss"]}}`.
   - EXAMPLE: `{{"output_type": "dataframe", "required_columns": ["theme", "score"], "required_insights": ["cluster_themes"]}}`
 - **FIGURE NUMBERING**: For every task that generates a visualization, you MUST explicitly assign a unique number in the description (e.g., "Analyze target balance. Save as Figure 1."). This ensures a professional thread through the final report.
 
@@ -136,13 +138,54 @@ STRICT RULES:
      res = duckdb.query("SELECT * FROM 'data.csv' LIMIT 10").to_df()
      ```
    - POLARS PATTERN: Use `pl.scan_csv('data.csv')` and `.collect(streaming=True)`.
-4. NO HALLUCINATIONS: Do not generate mock data. 
+4. NO HALLUCINATIONS: Do not generate mock data.
+4a. FORBIDDEN LIBRARIES — NEVER import these, they are broken in this sandbox:
+    - `lightgbm` / `lgb` → BROKEN (libgomp.so.1 missing). Use `sklearn.ensemble.HistGradientBoostingClassifier` instead.
+    - `xgboost` / `xgb` → BROKEN (libgomp.so.1 missing). Use `sklearn.ensemble.HistGradientBoostingClassifier` instead.
+    - `pickle` → BLOCKED by security policy. Use `joblib` instead (`import joblib; joblib.dump(obj, 'file.joblib')`).
+    If your code contains `import lightgbm`, `import xgboost`, or `import pickle`, it WILL fail.
+4c. NUMERIC-ONLY FEATURE MATRIX — Before calling `.fit()` on ANY sklearn estimator, your feature
+    matrix X must contain ONLY numeric columns. Raw text columns (model names, prompts, responses)
+    will cause `ValueError: could not convert string to float`. Always filter explicitly:
+        X = df[feature_cols]  # where feature_cols is an explicit list of numeric column names
+    OR drop non-numeric columns:
+        X = df.select_dtypes(include='number').drop(columns=['id'], errors='ignore')
+    The sandbox patches HistGradientBoosting to do this automatically, but you must still ensure
+    X_test uses the same columns as X_train when calling `.predict()` / `.predict_proba()`.
+4b. HISTGRADIENTBOOSTING QUIRKS — `HistGradientBoostingClassifier` differs from tree-based models:
+    - `.feature_importances_` is NOT a native attribute. The sandbox patches it automatically (split-gain sum), so `model.feature_importances_` WILL work at runtime — just use it normally.
+    - Use `max_iter=` (not `n_estimators=`) to set the number of trees.
+4d. MULTICLASS CLASSIFICATION METRICS — When the target has 3+ classes, NEVER slice predict_proba:
+    - WRONG: `y_pred_proba = model.predict_proba(X_test)[:, 1]` → this produces shape (n,) for binary ONLY.
+    - CORRECT for 3-class (e.g., model_a/model_b/tie): keep the full matrix:
+        ```python
+        from sklearn.metrics import f1_score, log_loss as _log_loss_fn
+        y_pred = model.predict(X_test)                         # shape (n,)
+        y_pred_proba = model.predict_proba(X_test)             # shape (n, 3)
+        macro_f1 = f1_score(y_test, y_pred, average='macro', labels=model.classes_)
+        log_loss = _log_loss_fn(y_test, y_pred_proba, labels=model.classes_)
+        ```
+    - Import `log_loss` with an alias (e.g., `as _log_loss_fn`) to avoid shadowing the imported function.
+      DO NOT use a try/except around metric computation — errors must propagate so the task can be retried.
+4e. FEATURE MATRIX ASSEMBLY — When your task is to build a combined feature matrix from multiple
+    preceding feature engineering tasks, you MUST merge ALL relevant feature parquet files explicitly.
+    Never assume all engineered features are in one DataFrame — they are saved in separate parquet files.
+    Correct pattern:
+        ```python
+        df_base = pd.read_parquet('cleaned_training_data.parquet')        # or use kernel var
+        df_surface = pd.read_parquet('surface_features.parquet')          # surface features
+        df_vader = pd.read_parquet('vader_sentiment_features.parquet')    # sentiment
+        df_sem = pd.read_parquet('semantic_similarity.parquet')           # embeddings
+        df = df_base.merge(df_surface, on='id').merge(df_vader, on='id').merge(df_sem, on='id')
+        ```
+    Use the EXACT column names from the parquet schemas listed in `AVAILABLE FILE SCHEMAS`. Do NOT
+    invent column names. If the schema says the column is `vader_delta`, use `vader_delta`.
 5. DATA PROVENANCE: You MUST use the variables and files listed in the sections below.
    - **KERNEL-FIRST**: If a DataFrame or variable you need is already listed in `AUTHORITATIVE RUNTIME STATE`, use it directly. Do NOT reload from disk. Only call `pd.read_csv()` (or equivalent) if the variable does not already exist in the kernel state.
 6. CASE SENSITIVITY: Pandas column names are case-sensitive. Use the exact names from `AVAILABLE FILES` (column list) or `AUTHORITATIVE RUNTIME STATE`. Do NOT guess or pluralise column names from the task description.
 7. WORKING DIRECTORY: You are ALREADY in your project-specific workspace directory.
 8. CONTRACT VALIDATION: If you save a file to disk (e.g., a Parquet file), you MUST print its schema or `.head()` to stdout so the validation engine can verify that the required columns were successfully created.
-9. POSTCONDITION ALIGNMENT: You will be provided with a `POSTCONDITION CONTRACT`. You MUST ensure your final output (DataFrame columns or list contents) EXACTLY matches the names and types requested in this contract. If the contract asks for a column 'avg_price', do NOT name it 'mean_price'.
+9. POSTCONDITION ALIGNMENT: You will be provided with a `POSTCONDITION CONTRACT`. You MUST ensure your final output (DataFrame columns or list contents) EXACTLY matches the names and types requested in this contract. If the contract asks for a column 'avg_price', do NOT name it 'mean_price'. If the contract includes `required_metrics`, you MUST bind each metric as a **top-level scalar variable** using that **exact name** — e.g., if the contract says `"required_metrics": ["macro_f1", "log_loss"]`, you must write `macro_f1 = f1_score(...)` and `log_loss = log_loss(...)` (not `f1`, not `logloss`, not nested inside a dict).
 10. NO EMULATION: Do NOT attempt to perform the task yourself or generate mock results (like embedding vectors or summary statistics) within your `explanation` or `reasoning` fields. Your job is to write the CODE that performs the task.
 11. SEMANTIC TELEMETRY: For tasks involving data interpretation (clustering, NLP, model training), you MUST communicate your findings to the Lead Data Scientist using the following built-in function:
     `gads_emit_insight(artifact: str, insight: str, evidence: str)`
@@ -184,7 +227,7 @@ RULES:
 3. Refer to specific findings or visualizations mentioned in the context using 'Figure N' designations (e.g., 'As seen in Figure 1...').
 4. GROUNDING (SEMANTIC INSIGHTS): You will be provided with `SEMANTIC INSIGHTS` from the worker agents. These are the "Meaning" of the data artifacts. You MUST prioritize these insights when writing your narrative. Refer to actual artifact filenames when appropriate (e.g., 'the correlation matrix saved in Figure 2 (correlation.json)...').
 5. AMENDMENTS: If the user is asking a follow-up question, you will receive the EXISTING NARRATIVE and EXISTING TAKEAWAYS. You MUST seamlessly integrate the new findings into the existing story. Expand the report. DO NOT delete or ignore the previous findings.
-6. If there were errors, explain them simply.
+6. INCOMPLETE EXECUTION: If the task log shows tasks with status FAILED or PENDING, you MUST acknowledge this explicitly at the start of the narrative. State how many tasks failed or were skipped and what analyses were not completed. Do NOT write forward-looking conclusions about work that was never run. If any tasks are incomplete, open the narrative with a brief "Execution Status" section before the findings.
 7. ARTIFACT INSIGHTS (DASHBOARD INTEGRATION): 
    - For every interactive plot or table provided in the context, you MUST generate an entry in the `artifact_insights` list.
    - `artifact_id`: MUST match the filename or the "Figure N" label from the task description EXACTLY.
@@ -273,6 +316,7 @@ Your goal is to quickly verify if the proposed plan matches the user's objective
 2. **Trivial Tasks**: Objectives like "Calculate 1+1", "Print hello", or "Count rows" are 100% valid. DO NOT reject them for being "too simple" or "lacking depth."
 3. **Missing Data**: Only set `is_terminal_failure = True` if the user explicitly asks to analyze a specific file (e.g., "plot sales.csv") and NO similar files exist in the `AVAILABLE FILES` list. 
 4. **Filename Mismatches**: If the proposed plan uses an incorrect filename (e.g., "amazon_sample.csv" instead of the available "amazon_sample_100.csv"), set `is_approved = False` and `is_terminal_failure = False` with feedback correcting the filename so the planner can retry. Do NOT trigger a terminal failure for simple typos.
+5. **Postcondition Ownership**: For each task, check that every column listed in `required_columns` is something that task's own description explicitly produces — not a column built by a later task. If a task's postcondition demands columns that belong to a downstream task, set `is_approved = False` with specific feedback naming the offending task and column(s).
 
 ### DIRECTIVE:
 Facilitate, don't gatekeep. Help the user run their tasks as requested.

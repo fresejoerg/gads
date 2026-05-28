@@ -3,10 +3,75 @@ import json
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from sqlmodel import select, Session
+from pydantic import BaseModel as PydanticModel
 from gads.core.database import engine
 from gads.core.models import Task, OutboxEvent
 from gads.core.registry import get_next_model_dynamic
 import uuid
+
+
+class _ColumnVerdict(PydanticModel):
+    all_satisfied: bool
+    violations: List[str]  # unsatisfied requirement descriptions; empty when all_satisfied
+
+
+async def _semantic_validate_columns(
+    required_cols: List[str],
+    actual_cols: List[str],
+    model: str,
+) -> Optional[str]:
+    """
+    Asks the LLM to classify whether each required column concept is captured by any
+    actual DataFrame column, regardless of exact naming.
+    Falls back to substring matching if the LLM call fails.
+    Returns an error string on violation, None if all requirements are met.
+    """
+    from gads.core.llm import get_structured_completion
+
+    requirements_numbered = "\n".join(f"{i+1}. {col}" for i, col in enumerate(required_cols))
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are a DataFrame schema validator. "
+                "Given actual column names and required data concepts, classify each concept "
+                "as satisfied or not — a different name is fine if the semantics match "
+                "(e.g. 'vader_a' is satisfied by 'vader_score_a'; 'word_len_delta' by 'word_count_delta'). "
+                "Respond with JSON only."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"ACTUAL COLUMNS: {', '.join(actual_cols)}\n\n"
+                f"REQUIRED CONCEPTS:\n{requirements_numbered}\n\n"
+                "List any concepts not covered by any actual column in 'violations'. "
+                "Set 'all_satisfied' to true only when violations is empty."
+            ),
+        },
+    ]
+    try:
+        result = await asyncio.wait_for(
+            get_structured_completion(
+                model=model,
+                response_model=_ColumnVerdict,
+                messages=messages,
+                max_tokens=512,
+            ),
+            timeout=35.0,
+        )
+        if not result.all_satisfied and result.violations:
+            return f"Contract Violation: required column concepts not found: {'; '.join(result.violations)}"
+        return None
+    except Exception as e:
+        print(f"    [ExecutionHub] Semantic column validation failed ({e}), falling back to string match.")
+        # Fallback: bidirectional substring match (original behaviour)
+        for col in required_cols:
+            col_l = col.lower()
+            if not any(col_l in c.lower() or c.lower() in col_l for c in actual_cols):
+                return f"Contract Violation: Column '{col}' not found (string fallback)."
+        return None
+
 
 class ExecutionHub:
     """Manages task lifecycle, heartbeats, and durable execution."""
@@ -27,64 +92,63 @@ class ExecutionHub:
         )
         self.session.add(event)
 
-    def validate_contract(self, task: Task, stdout: str, kernel_state: Optional[Dict[str, Any]] = None, semantic_insights: Optional[List[Dict[str, Any]]] = None) -> Optional[str]:
+    async def validate_contract(
+        self,
+        task: Task,
+        stdout: str,
+        kernel_state: Optional[Dict[str, Any]] = None,
+        semantic_insights: Optional[List[Dict[str, Any]]] = None,
+        validation_model: str = "local_model",
+    ) -> Optional[str]:
         """
         Validates the sandbox output against the task's postcondition contract.
-        Checks both stdout string and kernel_state variables (if provided).
-        Also verifies that required semantic insights were emitted.
+
+        Column validation is a semantic classification task: the LLM determines
+        whether each required concept is captured by any actual DataFrame column,
+        regardless of exact naming.  Falls back to substring matching if the LLM
+        call fails.  Insight validation remains a soft-fail (logs warning only).
         """
         if not task.postcondition_json:
             return None
-            
+
         contract = task.postcondition_json
         ctype = contract.get("output_type")
-        
+
         try:
-            # 1. Structural Validation (Existing Logic)
+            # 1. Column validation — semantic LLM classification
             if ctype == "dataframe":
                 cols = contract.get("required_columns", [])
-                for col in cols:
-                    col_lower = str(col).lower()
-                    in_stdout = col_lower in stdout.lower()
-                    in_kernel = False
+                if cols:
+                    # Collect all actual DataFrame columns from the live kernel
+                    actual_cols: List[str] = []
                     if kernel_state:
-                        for var_name, var_info in kernel_state.items():
+                        for var_info in kernel_state.values():
                             if var_info.get("type") == "DataFrame":
-                                existing_cols_lower = [str(c).lower() for c in var_info.get("columns", [])]
-                                if col_lower in existing_cols_lower:
-                                    in_kernel = True
-                                    break
-                    if not (in_stdout or in_kernel):
-                        return f"Contract Violation: Column '{col}' not found in output or kernel state."
-            
-            # 2. Semantic Insight Validation (New Logic)
+                                actual_cols.extend(var_info.get("columns", []))
+                    actual_cols = list(dict.fromkeys(actual_cols))  # deduplicate, preserve order
+
+                    if actual_cols:
+                        violation = await _semantic_validate_columns(cols, actual_cols, validation_model)
+                        if violation:
+                            return violation
+                    else:
+                        # No DataFrame in kernel yet — fall back to stdout substring match
+                        for col in cols:
+                            if str(col).lower() not in stdout.lower():
+                                return f"Contract Violation: Column '{col}' not found in output."
+
+            # 2. Semantic Insight Validation — soft fail (unchanged)
             required_insights = contract.get("required_insights", [])
             if required_insights:
-                emitted_artifacts = [i.get("artifact", "").lower() for i in (semantic_insights or [])]
-                # Fallback: check if insight field contains the required keyword if no artifact specified
-                emitted_texts = [i.get("insight", "").lower() for i in (semantic_insights or [])]
-                
+                emitted = [i.get("artifact", "").lower() for i in (semantic_insights or [])]
+                emitted += [i.get("insight", "").lower() for i in (semantic_insights or [])]
                 for req in required_insights:
-                    found = False
-                    for em_art in emitted_artifacts:
-                        if req.lower() in em_art:
-                            found = True
-                            break
-                    if not found:
-                        for em_txt in emitted_texts:
-                            if req.lower() in em_txt:
-                                found = True
-                                break
-                    
-                    if not found:
-                        # SOFT FAIL: We log the missing insight for debug but don't fail the task.
-                        # This allows the project to proceed even with 'forgetful' local models.
+                    if not any(req.lower() in e for e in emitted):
                         print(f"    [ExecutionHub] WARNING: Missing required insight '{req}'. Proceeding anyway.")
-                        # return f"Contract Violation: Required semantic insight for '{req}' was not emitted via gads_emit_insight()."
-                    
+
         except Exception as e:
             return f"Validation Error: {str(e)}"
-            
+
         return None
 
     def claim_task(self, task_id: uuid.UUID) -> bool:

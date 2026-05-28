@@ -13,10 +13,10 @@ class RouterOutput(BaseModel):
     data_modality: str = Field(description="One of: tabular, image, text, unstructured_text, audio, or 'unknown'")
     matched_recipe_id: Optional[str] = Field(None, description="The ID of a recipe that perfectly matches the methodology required for the objective.")
     confidence: float = Field(description="Score between 0.0 and 1.0")
-    reasoning: str = Field(description="Brief justification for the classification and recipe choice.")
+    reasoning: Optional[str] = Field(None, description="Brief justification for the classification and recipe choice.")
 
 class DataScienceRouter(BaseAgent[RouterInput, RouterOutput]):
-    def __init__(self, model: str = "claude-haiku-4.5"):
+    def __init__(self, model: str = "local_model"):
         # Use a cheaper/faster model for classification as per Opus suggestion
         super().__init__(
             name="Router",
@@ -34,6 +34,8 @@ class DataScienceRouter(BaseAgent[RouterInput, RouterOutput]):
         # Inject the specialized prompt into the Pydantic AI agent
         self.agent._system_prompts = (formatted_prompt,)
         
+        # Router output is compact JSON (~200 tokens) — cap to fail fast on repetition loops
+        kwargs.setdefault("max_tokens", 1024)
         # Use super().run to get streaming support
         return await super().run(
             f"OBJECTIVE: {input_data.objective}",

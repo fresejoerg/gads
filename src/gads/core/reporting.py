@@ -172,11 +172,27 @@ The following artifacts were generated during this analysis:
 
         cards.append(card)
 
+    # Load persisted metrics (written by the metrics guarantee probe)
+    key_metrics: Dict[str, Any] = {}
+    metrics_path = os.path.join(workspace_dir, "metrics.json")
+    if os.path.exists(metrics_path):
+        try:
+            with open(metrics_path) as f:
+                raw_metrics = json.load(f)
+            for k, v in raw_metrics.items():
+                if isinstance(v, float):
+                    key_metrics[k] = f"{v:.4f}"
+                else:
+                    key_metrics[k] = str(v)
+        except Exception as e:
+            print(f"  [Reporting] Warning: could not load metrics.json: {e}")
+
     html_content = template.render(
         project_id=str(project_id),
         narrative=narrative,
         takeaways=takeaways,
-        cards=cards
+        cards=cards,
+        key_metrics=key_metrics
     )
     
     with open(os.path.join(workspace_dir, "final_dashboard.html"), "w") as f:

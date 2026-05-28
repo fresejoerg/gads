@@ -1,5 +1,6 @@
 ---
 id: sandbox_environment
+description: "Sandbox constraints: pickle BLOCKED (use joblib), lightgbm/xgboost BROKEN (use sklearn HistGradientBoostingClassifier), vectorize all ops on 50K+ rows"
 triggers: ["available packages", "install", "import error", "sentiment", "textblob", "spacy", "nltk", "what packages", "ModuleNotFoundError", "feature engineering", "nlp", "text features", "text analysis", "classification"]
 ---
 # Sandbox Environment
@@ -11,7 +12,7 @@ The IPython kernel sandbox has a **fixed set of pre-installed packages**. You CA
 | Category | Packages |
 |---|---|
 | Data | pandas, numpy, polars, pyarrow, duckdb |
-| ML/Modeling | scikit-learn, joblib, torch, lightgbm, xgboost, shap |
+| ML/Modeling | scikit-learn, joblib, torch, shap |
 | NLP/Embeddings | sentence-transformers (`all-MiniLM-L6-v2` cached), nltk, textblob |
 | Visualization | matplotlib, seaborn, plotly, kaleido |
 | HTTP/Async | httpx, fastapi, uvicorn |
@@ -20,8 +21,10 @@ The IPython kernel sandbox has a **fixed set of pre-installed packages**. You CA
 ## NOT Available (do NOT import)
 
 - `spacy`, `transformers` (huggingface), `gensim`, `langchain`
-- `catboost` — use `lightgbm` or `xgboost` instead
+- `catboost` — blocked
+- `lightgbm`, `xgboost` — **BROKEN**: fail with `libgomp.so.1: cannot open shared object file`. Use sklearn instead (see below).
 - `vaderSentiment` standalone — use `nltk.sentiment.vader` instead
+- `pickle` — **BLOCKED by sandbox security policy**. Use `joblib` for model serialization instead.
 
 ## Sentiment Analysis Pattern
 
@@ -41,8 +44,53 @@ sia = SentimentIntensityAnalyzer()
 scores = sia.polarity_scores(text)  # {'neg': .., 'neu': .., 'pos': .., 'compound': ..}
 ```
 
+## Gradient Boosting — Use sklearn ONLY
+
+`lightgbm` and `xgboost` are broken in this sandbox (missing `libgomp.so.1`). Always use sklearn's built-in GBM:
+
+```python
+from sklearn.ensemble import HistGradientBoostingClassifier
+# Fast, handles large datasets well, no external library deps
+model = HistGradientBoostingClassifier(max_iter=200, random_state=42)
+model.fit(X_train, y_train)
+```
+
+Or for feature importance via a Random Forest:
+```python
+from sklearn.ensemble import RandomForestClassifier
+model = RandomForestClassifier(n_estimators=100, n_jobs=-1, random_state=42)
+```
+
+## Model Serialization
+
+**NEVER use `pickle`** — it is blocked by sandbox security. Use `joblib`:
+
+```python
+import joblib
+joblib.dump(model, 'model.joblib')   # save
+model = joblib.load('model.joblib')  # load
+```
+
+## Vectorization Rules (avoid timeouts on large datasets)
+
+For datasets with 50K+ rows, **never compute row-by-row in a Python loop**. Use vectorized pandas/numpy:
+
+```python
+# Jaccard similarity — vectorized via sets on pre-split tokens
+tokens_a = df['response_a'].str.lower().str.split()
+tokens_b = df['response_b'].str.lower().str.split()
+df['jaccard_sim'] = [
+    len(set(a) & set(b)) / len(set(a) | set(b)) if (set(a) | set(b)) else 0.0
+    for a, b in zip(tokens_a, tokens_b)
+]
+
+# TTR (Type-Token Ratio) — apply is acceptable; avoid nested loops
+df['ttr_a'] = tokens_a.apply(lambda t: len(set(t)) / len(t) if t else 0.0)
+```
+
 ## CRITICAL RULES
 
 1. **NO INSTALLS**: Never write `pip install`, `subprocess.run(["pip", ...])`, or `%pip install`. If a package is not in the list above, it is not available.
 2. **USE ALTERNATIVES**: For any package NOT in the list, find an equivalent from the available list (e.g., use `sklearn.ensemble.GradientBoostingClassifier` instead of `xgboost`).
 3. **NLTK DOWNLOADS**: nltk corpus downloads (e.g., `nltk.download('vader_lexicon', quiet=True)`) are allowed since they fetch small data files, not code packages.
+4. **NO PICKLE**: Use `joblib` for any model or object serialization.

@@ -20,7 +20,7 @@ class SynthesizerOutput(BaseModel):
     artifact_insights: List[ArtifactInsight] = Field(default_factory=list, description="Specific context and captions for each visualization generated.")
 
 class SynthesizerAgent(BaseAgent[SynthesizerInput, SynthesizerOutput]):
-    def __init__(self, model: str = "claude-opus-4.7"):
+    def __init__(self, model: str = "local_model"):
         super().__init__(
             name="Synthesizer",
             model=model,

@@ -1,5 +1,6 @@
 ---
 id: tabular_visualization
+description: "Create interactive Plotly tables for list/top-N/tabular display requests instead of prose"
 triggers: ["list", "table", "tabular", "top", "bottom", "show records", "display dataframe"]
 ---
 # Tabular Visualization with Plotly

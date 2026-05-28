@@ -27,6 +27,7 @@ class Recipe(BaseModel):
 class Skill(BaseModel):
     id: str
     triggers: List[str]
+    description: str = ""
     content: str = ""
 
 class KnowledgeRegistry:
@@ -189,6 +190,16 @@ class KnowledgeRegistry:
             if any(t.lower() in desc_lower for t in skill.triggers):
                 matches.append(skill)
         return matches
+
+    def find_skills_scored(self, task_description: str) -> List[tuple]:
+        """Returns [(Skill, hit_count)] for skills with at least one trigger match."""
+        desc_lower = task_description.lower()
+        results = []
+        for skill in self.skills.values():
+            hits = sum(1 for t in skill.triggers if t.lower() in desc_lower)
+            if hits > 0:
+                results.append((skill, hits))
+        return results
 
     def get_skills_summary(self) -> List[Dict[str, Any]]:
         """Returns a list of available skills with their IDs and triggers for agent awareness."""

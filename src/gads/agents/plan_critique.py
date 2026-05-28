@@ -18,7 +18,7 @@ class PlanCritiqueOutput(BaseModel):
     missing_requirements: List[str] = Field(default_factory=list, description="Specific requirements or SOP nodes that are missing.")
 
 class PlanCritiqueAgent(BaseAgent[PlanCritiqueInput, PlanCritiqueOutput]):
-    def __init__(self, model: str = "gemini-3-flash-preview"):
+    def __init__(self, model: str = "local_model"):
         super().__init__(
             name="PlanCritique",
             model=model,

@@ -16,7 +16,7 @@ class CritiqueOutput(BaseModel):
     redundant_artifacts: List[str] = Field(default_factory=list, description="List of filenames of redundant or low-quality plots to remove.")
 
 class CritiqueAgent(BaseAgent[CritiqueInput, CritiqueOutput]):
-    def __init__(self, model: str = "claude-sonnet-4.6"):
+    def __init__(self, model: str = "local_model"):
         super().__init__(
             name="Critique",
             model=model,

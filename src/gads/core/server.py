@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import uuid
 import traceback
 import json
@@ -327,6 +328,84 @@ async def delete_project(project_id: uuid.UUID):
         session.commit()
         
     return {"status": "success"}
+
+async def _cleanup_stale_sessions(sandbox, current_project_id: uuid.UUID):
+    """Reset sandbox sessions for all projects that have no active (pending/running) tasks.
+
+    Session IDs are str(project_id), so we can enumerate them via the DB without
+    needing a sandbox list-sessions endpoint. Called at the start of each execution
+    phase so stale kernels from previous runs don't accumulate.
+    """
+    try:
+        with Session(engine) as db:
+            all_projects = db.exec(select(Project)).all()
+        reset_count = 0
+        for project in all_projects:
+            if project.id == current_project_id:
+                continue
+            with Session(engine) as db:
+                active = db.exec(
+                    select(Task).where(
+                        Task.project_id == project.id,
+                        Task.status.in_(["pending", "running"])
+                    )
+                ).first()
+            if active is None:
+                try:
+                    await sandbox.reset_session(str(project.id))
+                    reset_count += 1
+                except Exception:
+                    pass
+        if reset_count:
+            print(f"  [SessionCleanup] Reset {reset_count} stale sandbox session(s).", flush=True)
+    except Exception as e:
+        print(f"  [SessionCleanup] Warning: cleanup failed: {e}", flush=True)
+
+    # Always reset the current project's session for a clean kernel slate
+    try:
+        await sandbox.reset_session(str(current_project_id))
+        print(f"  [SessionCleanup] Reset current session {current_project_id}.", flush=True)
+    except Exception as e:
+        print(f"  [SessionCleanup] Warning: could not reset current session: {e}", flush=True)
+
+
+async def _probe_kernel_for_metrics(sandbox, project_id: uuid.UUID, session_id: str, required_metrics: List[str]) -> Dict[str, Any]:
+    """Probe the IPython kernel for named scalar metric variables. Returns found {name: value} pairs."""
+    probe_code = f"""
+import json as _json_m
+_metrics_found = {{}}
+for _m_name in {json.dumps(required_metrics)}:
+    _m_val = globals().get(_m_name)
+    if _m_val is not None:
+        try:
+            _as_float = float(_m_val)
+            _metrics_found[_m_name] = _as_float
+        except (TypeError, ValueError):
+            pass  # Not a numeric scalar — do not record; task will be retried
+print("GADS_METRICS_JSON:" + _json_m.dumps(_metrics_found))
+"""
+    try:
+        result = await sandbox.execute(probe_code, project_id=project_id, session_id=session_id)
+        if "GADS_METRICS_JSON:" in result.stdout:
+            raw = result.stdout.split("GADS_METRICS_JSON:")[1].strip().split("\n")[0]
+            return json.loads(raw)
+    except Exception as e:
+        print(f"  [Metrics] Kernel probe failed: {e}")
+    return {}
+
+def _merge_metrics_json(workspace_dir: str, new_metrics: Dict[str, Any]):
+    """Merge new scalar metrics into workspace metrics.json (creates if absent)."""
+    metrics_path = os.path.join(workspace_dir, "metrics.json")
+    existing: Dict[str, Any] = {}
+    if os.path.exists(metrics_path):
+        try:
+            with open(metrics_path) as f:
+                existing = json.load(f)
+        except Exception:
+            pass
+    existing.update(new_metrics)
+    with open(metrics_path, "w") as f:
+        json.dump(existing, f, indent=2)
 
 def _get_recursive_files(workspace_dir: str) -> List[Dict[str, Any]]:
     """Helper to list all files in workspace recursively with size metadata as JSON-serializable dicts."""
@@ -659,7 +738,9 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         critique_feedback = None
         final_synth = None
         redundant_plots = []
-        
+        task_ids = []
+        workflow_succeeded = False
+
         while workflow_attempt < MAX_WORKFLOW_ATTEMPTS:
             workflow_attempt += 1
             print(f"\n  [Workflow] Starting attempt {workflow_attempt}/{MAX_WORKFLOW_ATTEMPTS}...", flush=True)
@@ -831,7 +912,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 valid_models = []
                 for tier_data in hierarchy.values():
                     valid_models.extend(tier_data.get("models", []))
-                fallback_model = hierarchy.get("T3", {}).get("models", ["gemini-3.1-flash-lite-preview"])[0]
+                fallback_model = hierarchy.get("T3", {}).get("models", ["local_model"])[0]
 
                 for step in planner_res.content.steps:
                     # Sanitize assigned_to to prevent hallucinations from causing un-routable tasks
@@ -851,6 +932,32 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     )
                     session.add(new_task)
                     tasks_to_run.append(new_task)
+
+                # POSTCONDITION SANITIZER (runs before commit so changes persist atomically)
+                # Strip required_columns entries that cannot belong to this task:
+                # any column that isn't in any known file schema AND isn't in any prior
+                # task's declared outputs AND isn't mentioned in this task's description.
+                # This prevents the local_model from assigning downstream-derived target
+                # columns (e.g. 'winner') to upstream merge tasks that never create them.
+                _pc_known: set = set()
+                for _schema in detected_schemas.values():
+                    _pc_known.update(_schema.keys())
+                for _t in tasks_to_run:
+                    _contract = _t.postcondition_json
+                    if _contract and _contract.get("output_type") == "dataframe":
+                        _required = _contract.get("required_columns", [])
+                        _desc_lower = _t.description.lower()
+                        _stripped, _kept = [], []
+                        for _col in _required:
+                            if _col in _pc_known or _col.lower() in _desc_lower:
+                                _kept.append(_col)
+                            else:
+                                _stripped.append(_col)
+                        if _stripped:
+                            print(f"  [PlanSanitizer] '{_t.description[:60]}': stripped downstream columns {_stripped}", flush=True)
+                            _t.postcondition_json = {**_contract, "required_columns": _kept}
+                    _pc_known.update((_t.postcondition_json or {}).get("required_columns", []))
+
                 session.commit()
 
                 for t in tasks_to_run:
@@ -860,6 +967,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 task_ids = [t.id for t in tasks_to_run]
 
             # 4. EXECUTION
+            await _cleanup_stale_sessions(executor.sandbox, project_id)
             for task_id in task_ids:
                 if await is_cancelled(): return
 
@@ -874,24 +982,33 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         if not task_obj: break
                         if hub.claim_task(task_id):
                             executor.coder.model = task_obj.assigned_to
+                            executor.coder.model_str = task_obj.assigned_to
                             desc = task_obj.description
                         else: break 
 
-                    # Dynamic Skill Discovery (Planner-led + Keyword Fallback)
-                    assigned_skills = task_obj.attached_skills or []
-                    matched_skills = registry.find_skills(desc)
+                    # Lazy two-tier skill loading (index always; full body only when needed)
+                    # Planner-attached skills always get full body (curated, intentional).
+                    # Keyword-matched skills need >=2 trigger hits to load full body (avoids weak-match bloat).
+                    KEYWORD_HIT_THRESHOLD = 2
+                    assigned_ids = set(task_obj.attached_skills or [])
+                    scored_matches = registry.find_skills_scored(desc)
 
-                    # Deduplicate and Fetch Full Content
-                    all_skill_ids = list(set(assigned_skills + [s.id for s in matched_skills]))
-                    skills_to_inject = []
-                    for sid in all_skill_ids:
-                        s_obj = registry.skills.get(sid)
-                        if s_obj: skills_to_inject.append(s_obj)
+                    full_body_ids = set(assigned_ids)
+                    for skill, hits in scored_matches:
+                        if skill.id not in full_body_ids and hits >= KEYWORD_HIT_THRESHOLD:
+                            full_body_ids.add(skill.id)
 
-                    skills_ctx = None
-                    if skills_to_inject:
-                        skills_ctx = "\n\n".join([f"### Skill: {s.id}\n{s.content}" for s in skills_to_inject])
-                        print(f"    [Workflow] Applied skills: {[s.id for s in skills_to_inject]}", flush=True)
+                    loaded_skills = [registry.skills[sid] for sid in full_body_ids if sid in registry.skills]
+
+                    ctx_parts = []
+                    index_lines = [f"- {s.id}: {s.description}" for s in registry.skills.values()]
+                    if index_lines:
+                        ctx_parts.append("### SKILLS INDEX (all available)\n" + "\n".join(index_lines))
+                    if loaded_skills:
+                        bodies = "\n\n".join(f"#### {s.id}\n{s.content}" for s in loaded_skills)
+                        ctx_parts.append(f"### LOADED SKILL GUIDANCE\n{bodies}")
+                        print(f"    [Workflow] Applied skills: {[s.id for s in loaded_skills]}", flush=True)
+                    skills_ctx = "\n\n".join(ctx_parts) if ctx_parts else None
 
                     # 4.1 CONTEXT HARDENING: SLIDING WINDOW & INTROSPECTION
                     all_tasks = session.exec(select(Task).where(Task.project_id == project_id).order_by(Task.created_at.asc())).all()
@@ -962,22 +1079,39 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                         LIVE_STREAMS[tid_str]["stdout"] = text
 
                     trace_context.get().update({
-                        "agent_name": "CodeGenerator", 
+                        "agent_name": "CodeGenerator",
                         "task_id": tid_str,
                         "parent_observation_id": task_span.id
                     })
 
-                    res, model_used = await executor.run_task(
-                        desc, 
-                        project_id=project_id, 
-                        session_id=str(project_id), 
-                        skills_context=skills_ctx, 
-                        task_id=task_id,
-                        stdout_callback=stream_stdout_callback,
-                        stream_callback=stream_reasoning_callback,
-                        cancel_check=is_cancelled,
-                        state_summary=state_summary_str # Pass the ground truth
-                    )
+                    # Keepalive: local-model LLM + execution can exceed the 5-min watchdog window.
+                    # Refresh the heartbeat every 60s while run_task is awaited.
+                    async def _heartbeat_loop(tid: uuid.UUID):
+                        while True:
+                            await asyncio.sleep(60)
+                            try:
+                                with Session(engine) as _s:
+                                    ExecutionHub(_s).heartbeat(tid)
+                            except Exception:
+                                pass
+
+                    _hb_task = asyncio.create_task(_heartbeat_loop(task_id))
+                    try:
+                        res, model_used = await executor.run_task(
+                            desc,
+                            project_id=project_id,
+                            session_id=str(project_id),
+                            skills_context=skills_ctx,
+                            task_id=task_id,
+                            stdout_callback=stream_stdout_callback,
+                            stream_callback=stream_reasoning_callback,
+                            cancel_check=is_cancelled,
+                            state_summary=state_summary_str
+                        )
+                    finally:
+                        _hb_task.cancel()
+                        with contextlib.suppress(asyncio.CancelledError):
+                            await _hb_task
 
                     # Update task span with result details
                     task_span.update(output={"model": model_used, "code_len": len(res.code) if res.code else 0})
@@ -1004,7 +1138,14 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                             break 
 
                         # 2. Handle Errors & Contract Violations
-                        error_msg = res.error.get("evalue", "Unknown error") if res.error else hub.validate_contract(task_obj, res.stdout, executor.authoritative_state)
+                        if res.error:
+                            error_msg = res.error.get("evalue", "Unknown error")
+                        else:
+                            error_msg = await hub.validate_contract(
+                                task_obj, res.stdout, executor.authoritative_state,
+                                semantic_insights=res.semantic_insights,
+                                validation_model=task_obj.assigned_to,
+                            )
 
                         # --- HALLUCINATION GUARD ---
                         hallucination_tokens = [
@@ -1029,18 +1170,51 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                             # ORCHESTRATOR-SIDE INTROSPECTION (No Hallucinations)
                             new_files_after = _get_recursive_files(workspace_dir)
                             new_names = set([f["name"] for f in new_files_after]) - set([f["name"] for f in current_files_meta])
-                            
+
                             artifact_summaries = []
                             for nf in new_names:
                                 fpath = os.path.join(workspace_dir, nf)
                                 if os.path.exists(fpath):
                                     artifact_summaries.append(summarize_artifact(fpath))
-                            
+
                             orchestrator_summary = "; ".join(artifact_summaries) if artifact_summaries else "Task completed successfully with no new files."
-                            
+
+                            # --- METRICS GUARANTEE ---
+                            required_metrics = (task_obj.postcondition_json or {}).get("required_metrics", [])
+                            if required_metrics:
+                                found_metrics = await _probe_kernel_for_metrics(
+                                    executor.sandbox, project_id, str(project_id), required_metrics
+                                )
+                                missing = [m for m in required_metrics if m not in found_metrics]
+
+                                if found_metrics:
+                                    _merge_metrics_json(workspace_dir, found_metrics)
+                                    metric_strs = ", ".join(
+                                        f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}"
+                                        for k, v in found_metrics.items()
+                                    )
+                                    orchestrator_summary += f" | Metrics captured: {metric_strs}"
+                                    print(f"  [Metrics] Captured: {metric_strs}", flush=True)
+
+                                if missing:
+                                    missing_str = ", ".join(missing)
+                                    # Try escalation first (only on first attempt)
+                                    if task_obj.escalation_count == 0 and hub.escalate_task(task_id, f"Required metrics not found in kernel: {missing_str}", hierarchy):
+                                        print(f"  [Metrics] Escalating task — missing: {missing_str}", flush=True)
+                                        session.commit()
+                                        continue
+                                    # Can't escalate — fail the task so execution feedback triggers a replan.
+                                    # A silent warning here would let a task with no actual output pass as success.
+                                    error_msg = f"Required metrics not produced: {missing_str}. Code must bind these as top-level scalar variables."
+                                    print(f"  [Metrics] ❌ Failing task — metrics not produced: {missing_str}", flush=True)
+                                    hub.fail_task(task_id, error_msg, result={"stdout": res.stdout, "code": res.code, "orchestrator_summary": orchestrator_summary})
+                                    task_span.end(output={"error": error_msg})
+                                    session.commit()
+                                    break
+
                             hub.complete_task(task_id, {
-                                "stdout": res.stdout, 
-                                "model_used": model_used, 
+                                "stdout": res.stdout,
+                                "model_used": model_used,
                                 "code": res.code,
                                 "orchestrator_summary": orchestrator_summary # Persist ground truth
                             })
@@ -1098,6 +1272,31 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                     if task_obj and task_obj.status == "failed":
                         print(f"    [Workflow] 🛑 ABORT ATTEMPT: Task failed.", flush=True)
                         break 
+
+            # Collect execution failures to feed back into the next replan attempt
+            with Session(engine) as session:
+                current_attempt_tasks = session.exec(
+                    select(Task).where(Task.id.in_(task_ids))
+                ).all()
+                failed_tasks = [t for t in current_attempt_tasks if t.status == "failed"]
+                pending_tasks = [t for t in current_attempt_tasks if t.status == "pending"]
+
+                if failed_tasks or pending_tasks:
+                    lines = []
+                    for t in failed_tasks:
+                        err = (t.error or "Unknown error")[:200]
+                        lines.append(f"- FAILED: '{t.description[:80]}' → {err}")
+                    for t in pending_tasks:
+                        lines.append(f"- SKIPPED (never ran due to prior failure): '{t.description[:80]}'")
+
+                    execution_feedback = (
+                        f"EXECUTION FAILURES FROM ATTEMPT {workflow_attempt}:\n" +
+                        "\n".join(lines) + "\n\n"
+                        "CRITICAL: Revise your plan to address these failures. "
+                        "Ensure each task's postcondition only requires columns that task's own code explicitly produces. "
+                        "Do NOT add a column to a task's postcondition if that column is built by a later task."
+                    )
+                    critique_feedback = execution_feedback + ("\n\n" + critique_feedback if critique_feedback else "")
 
             # 5. SYNTHESIS & CRITIQUE LOOP
             synthesizer_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
@@ -1243,9 +1442,25 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
 
             if critique.is_approved:
                 redundant_plots = critique.redundant_artifacts
+                workflow_succeeded = True
                 break
             else:
                 critique_feedback = critique.critique_feedback
+
+        # Clean up pending tasks left over when MAX_WORKFLOW_ATTEMPTS is exhausted.
+        # Without this, those tasks stay "pending" forever and block monitoring loops.
+        if not workflow_succeeded and task_ids:
+            with Session(engine) as session:
+                leftover = session.exec(
+                    select(Task).where(Task.id.in_(task_ids), Task.status == "pending")
+                ).all()
+                for _t in leftover:
+                    _t.status = "failed"
+                    _t.error = "Workflow exhausted max planning attempts; task never ran."
+                    session.add(_t)
+                if leftover:
+                    print(f"  [Workflow] Marked {len(leftover)} permanently-pending task(s) as failed after max attempts.", flush=True)
+                session.commit()
 
         # 7. FINAL REPORTING
         with Session(engine) as session:
@@ -1471,9 +1686,11 @@ async def get_project_details(project_id: uuid.UUID):
         threshold = datetime.now() - timedelta(minutes=2)
         running_tasks = [t for t in tasks if t.status == "running" and t.heartbeat and t.heartbeat > threshold]
         p_data.is_running = len(running_tasks) > 0
+        p_data.has_dashboard = os.path.exists(f"{WORKSPACE_ROOT}/{project_id}/final_dashboard.html")
+        p_data.has_report = os.path.exists(f"{WORKSPACE_ROOT}/{project_id}/research_report.md")
 
         return {
-            "project": p_data, 
+            "project": p_data,
             "tasks": tasks, 
             "artifacts": artifacts,
             "instructions": instructions
@@ -1571,22 +1788,28 @@ async def create_project(req: ProjectCreateRequest, background_tasks: Background
             instructions=[InstructionRead.from_orm(i) for i in instructions]
         )
 def _mount_external_dataset(workspace_dir: str, host_path: str):
-    """Securely symlinks an external dataset into the workspace."""
+    """Copies an external dataset into the workspace.
+
+    Previously used symlinks, but symlinks allow task code to overwrite the
+    source file (writes go through the link to the original). Copying protects
+    the source dataset from accidental overwrites.
+    """
+    import shutil
     if not os.path.lexists(host_path):
         raise FileNotFoundError(f"Path not found: {host_path}")
-        
+
     os.makedirs(workspace_dir, exist_ok=True)
     filename = os.path.basename(host_path)
     target_path = os.path.join(workspace_dir, filename)
-    
+
     try:
         if os.path.lexists(target_path):
             if os.path.islink(target_path): os.unlink(target_path)
             else: os.remove(target_path)
-        
-        os.symlink(host_path, target_path)
+
+        shutil.copy2(host_path, target_path)
     except Exception as e:
-        raise Exception(f"Failed to create symlink: {e}")
+        raise Exception(f"Failed to copy dataset: {e}")
 
 async def _probe_file_schema(executor: ExecutionManager, project_id: uuid.UUID, filename: str) -> Optional[Dict[str, Any]]:
     """Safe, time-capped schema and dtype extraction using DuckDB."""

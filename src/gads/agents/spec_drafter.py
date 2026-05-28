@@ -39,7 +39,7 @@ class SpecDraft(BaseModel):
 
 
 class SpecDrafterAgent(BaseAgent[SpecDraftInput, SpecDraft]):
-    def __init__(self, model: str = "claude-haiku-4.5"):
+    def __init__(self, model: str = "local_model"):
         super().__init__(
             name="SpecDrafter",
             model=model,

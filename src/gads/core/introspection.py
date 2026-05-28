@@ -84,8 +84,13 @@ def summarize_artifact(file_path: str) -> str:
                 title = data.get("layout", {}).get("title", {}).get("text", "Untitled")
                 return f"[{fname}] Plotly {chart_type.capitalize()} Chart: '{title}'. Traces: {', '.join(trace_names[:5])}."
             else:
-                # Generic JSON data
+                # Generic JSON data — surface scalar values when present
                 size_kb = os.path.getsize(file_path) / 1024
+                if isinstance(data, dict) and size_kb < 10:
+                    scalar_items = [(k, v) for k, v in data.items() if isinstance(v, (int, float, bool, str))]
+                    if scalar_items:
+                        parts = [f"{k}: {v:.4f}" if isinstance(v, float) else f"{k}: {v}" for k, v in scalar_items[:10]]
+                        return f"[{fname}] JSON Data ({size_kb:.1f} KB): {', '.join(parts)}."
                 keys = list(data.keys()) if isinstance(data, dict) else []
                 return f"[{fname}] JSON Data File: {size_kb:.1f} KB. Keys: {', '.join(keys[:10])}."
 

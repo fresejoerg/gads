@@ -14,6 +14,122 @@ from gads.core.runtime_oracle import RuntimeOracle
 from gads.core.handover import HandoverManager
 from sqlmodel import Session
 
+def _sanitize_code(code: str) -> str:
+    """Rewrite broken library imports to sandbox-compatible equivalents.
+
+    lightgbm and xgboost fail at import time (missing libgomp.so.1).
+    pickle is blocked by sandbox security policy.
+    Replacements happen regardless of what the LLM generated.
+    """
+    # lightgbm → sklearn HistGradientBoosting
+    code = re.sub(r'from lightgbm import LGBMClassifier', 'from sklearn.ensemble import HistGradientBoostingClassifier', code)
+    code = re.sub(r'from lightgbm import LGBMRegressor', 'from sklearn.ensemble import HistGradientBoostingRegressor', code)
+    code = re.sub(r'import lightgbm(?:\s+as\s+\w+)?', 'from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor', code)
+    code = re.sub(r'lgb\.LGBMClassifier\b', 'HistGradientBoostingClassifier', code)
+    code = re.sub(r'lgb\.LGBMRegressor\b', 'HistGradientBoostingRegressor', code)
+    code = re.sub(r'\bLGBMClassifier\b', 'HistGradientBoostingClassifier', code)
+    code = re.sub(r'\bLGBMRegressor\b', 'HistGradientBoostingRegressor', code)
+
+    # xgboost → sklearn HistGradientBoosting
+    code = re.sub(r'from xgboost import XGBClassifier', 'from sklearn.ensemble import HistGradientBoostingClassifier', code)
+    code = re.sub(r'from xgboost import XGBRegressor', 'from sklearn.ensemble import HistGradientBoostingRegressor', code)
+    code = re.sub(r'import xgboost(?:\s+as\s+\w+)?', 'from sklearn.ensemble import HistGradientBoostingClassifier, HistGradientBoostingRegressor', code)
+    code = re.sub(r'xgb\.XGBClassifier\b', 'HistGradientBoostingClassifier', code)
+    code = re.sub(r'xgb\.XGBRegressor\b', 'HistGradientBoostingRegressor', code)
+    code = re.sub(r'\bXGBClassifier\b', 'HistGradientBoostingClassifier', code)
+    code = re.sub(r'\bXGBRegressor\b', 'HistGradientBoostingRegressor', code)
+
+    # HistGradientBoosting uses max_iter, not n_estimators
+    code = re.sub(
+        r'(HistGradientBoosting(?:Classifier|Regressor)\s*\([^)]*?)n_estimators\s*=',
+        r'\1max_iter=', code
+    )
+
+    # pickle → joblib
+    code = re.sub(r'\bimport pickle\b', 'import joblib', code)
+    code = re.sub(r'\bpickle\.dump\b', 'joblib.dump', code)
+    code = re.sub(r'\bpickle\.load\b', 'joblib.load', code)
+
+    # HistGradientBoosting auto-numeric patch: fit/predict/predict_proba silently drop
+    # non-numeric (string/object) columns from DataFrames. Prevents the common failure
+    # where model_a/model_b/prompt/response columns are left in X after a naive .drop().
+    # Column selection from fit() is remembered and reused in predict() calls.
+    if 'HistGradientBoosting' in code:
+        _num_patch = """\
+import pandas as _pd_hgb_num
+from sklearn.ensemble import HistGradientBoostingClassifier as _HGBCOrig, HistGradientBoostingRegressor as _HGBROrig
+_hgb_num_cols: dict = {}
+_orig_hgbc_fit = _HGBCOrig.fit
+_orig_hgbc_predict = _HGBCOrig.predict
+_orig_hgbc_predict_proba = _HGBCOrig.predict_proba
+_orig_hgbr_fit = _HGBROrig.fit
+_orig_hgbr_predict = _HGBROrig.predict
+def _hgb_fit_safe(self, X, y, sample_weight=None):
+    if isinstance(X, _pd_hgb_num.DataFrame):
+        _hgb_num_cols[id(self)] = X.select_dtypes(include='number').columns.tolist()
+        X = X[_hgb_num_cols[id(self)]]
+    return _orig_hgbc_fit(self, X, y, sample_weight=sample_weight)
+def _hgb_predict_safe(self, X):
+    if id(self) in _hgb_num_cols and isinstance(X, _pd_hgb_num.DataFrame):
+        X = X[_hgb_num_cols[id(self)]]
+    return _orig_hgbc_predict(self, X)
+def _hgb_predict_proba_safe(self, X):
+    if id(self) in _hgb_num_cols and isinstance(X, _pd_hgb_num.DataFrame):
+        X = X[_hgb_num_cols[id(self)]]
+    return _orig_hgbc_predict_proba(self, X)
+def _hgbr_fit_safe(self, X, y, sample_weight=None):
+    if isinstance(X, _pd_hgb_num.DataFrame):
+        _hgb_num_cols[id(self)] = X.select_dtypes(include='number').columns.tolist()
+        X = X[_hgb_num_cols[id(self)]]
+    return _orig_hgbr_fit(self, X, y, sample_weight=sample_weight)
+def _hgbr_predict_safe(self, X):
+    if id(self) in _hgb_num_cols and isinstance(X, _pd_hgb_num.DataFrame):
+        X = X[_hgb_num_cols[id(self)]]
+    return _orig_hgbr_predict(self, X)
+_HGBCOrig.fit = _hgb_fit_safe
+_HGBCOrig.predict = _hgb_predict_safe
+_HGBCOrig.predict_proba = _hgb_predict_proba_safe
+_HGBROrig.fit = _hgbr_fit_safe
+_HGBROrig.predict = _hgbr_predict_safe
+"""
+        code = _num_patch + "\n" + code
+
+    # HistGradientBoosting has no native .feature_importances_ — patch it via split-gain sums.
+    # Triggered when HGB is in code OR when feature_importances_ is accessed (the model may have
+    # been created by a previous task and exist only in the kernel, not in this code block).
+    if 'feature_importances_' in code:
+        _fi_patch = """\
+import numpy as _np_hgb_fi
+def _hgb_fi_property(self):
+    _fi = _np_hgb_fi.zeros(self.n_features_in_)
+    for _stage in self._predictors:
+        for _predictor in _stage:
+            for _node in _predictor.nodes:
+                if not bool(_node['is_leaf']):
+                    _fi[int(_node['feature_idx'])] += max(0.0, float(_node['gain']))
+    _s = _fi.sum()
+    return _fi / _s if _s > 0 else _fi
+from sklearn.ensemble import HistGradientBoostingClassifier as _HGBCls, HistGradientBoostingRegressor as _HGBReg
+if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
+    _HGBCls.feature_importances_ = property(_hgb_fi_property)
+    _HGBReg.feature_importances_ = property(_hgb_fi_property)
+"""
+        code = _fi_patch + "\n" + code
+
+    # Multiclass predict_proba binary-slice fix:
+    # Replace predict_proba(...)[:, 1] with predict_proba(...) so log_loss gets full matrix.
+    # Only applied when log_loss is also used (classification context).
+    if 'log_loss' in code and re.search(r'\.predict_proba\([^)]+\)\[:,\s*1\]', code):
+        code = re.sub(
+            r'(\.predict_proba\([^)]+\))\[:,\s*1\]',
+            r'\1',
+            code
+        )
+        print("  [Sanitizer] Removed binary predict_proba slice (multiclass context detected)", flush=True)
+
+    return code
+
+
 class ExecutionManager:
     """Manages the Code-Execution-Feedback loop."""
 
@@ -140,8 +256,8 @@ class ExecutionManager:
                     reasoning_buffer.clear()
                     await stream_callback(delta)
                 
-                current_code = coder_res.content.code
-                
+                current_code = _sanitize_code(coder_res.content.code)
+
                 # --- PREDICTIVE RUNTIME ORACLE ---
                 # 1. Gather Data Dimensions
                 n_rows, m_cols = 0, 0
@@ -205,7 +321,11 @@ _gads_insights = [] # Clear for next task
 
                 poller = asyncio.create_task(poll_logs_loop())
                 try:
-                    exec_result = await self.sandbox.execute(wrapped_code, project_id=project_id, session_id=session_id)
+                    _sandbox_timeout = 600.0 if "local_model" in (self.coder.model_str or "") else 300.0
+                    exec_result = await asyncio.wait_for(
+                        self.sandbox.execute(wrapped_code, project_id=project_id, session_id=session_id),
+                        timeout=_sandbox_timeout
+                    )
                     exec_result.code = current_code # Attach ORIGINAL code for persistence
                     
                     # Parse Semantic Insights
@@ -274,17 +394,37 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                     ename = exec_result.error.get("ename", "Error")
                     evalue = exec_result.error.get("evalue", "Unknown error")
                     print(f"    [Executor] ❌ Failure: {ename} - {evalue}", flush=True)
-                    
+
                     error_feedback = f"{ename}: {evalue}"
+
+                    # Enrich KeyError feedback with schema hints when columns are missing
+                    # from the DataFrame being operated on but exist in a known parquet file.
+                    if ename in ("KeyError", "ValueError") and "not in index" in evalue and self.file_schemas:
+                        missing_cols = [c.strip().strip("'\"") for c in re.findall(r"['\"]([^'\"]+)['\"]", evalue)]
+                        hints = []
+                        for fname, schema in self.file_schemas.items():
+                            if not isinstance(schema, dict): continue
+                            found = [c for c in missing_cols if c in schema]
+                            if found:
+                                hints.append(f"  - '{fname}' contains columns: {found}")
+                        if hints:
+                            error_feedback += (
+                                "\n\nHINT: The missing columns exist in separate parquet files. "
+                                "You MUST load each parquet file and merge on 'id' before selecting these columns:\n"
+                                + "\n".join(hints)
+                                + "\nUse: df = df1.merge(df2, on='id').merge(df3, on='id') etc."
+                            )
+                            print(f"    [Executor] Added schema hints for {len(hints)} parquet file(s)", flush=True)
+
                     previous_code = current_code
                     retry_count += 1
 
             except asyncio.TimeoutError:
-                print(f"    [Executor] ❌ Timeout", flush=True)
+                print(f"    [Executor] ❌ Timeout (LLM or sandbox execution)", flush=True)
                 return ExecutionResult(
-                    stdout="", stderr="", 
-                    error={"ename": "TimeoutError", "evalue": "LLM generation timed out"},
-                    execution_time_ms=180000,
+                    stdout="", stderr="",
+                    error={"ename": "TimeoutError", "evalue": "Operation timed out (LLM generation or sandbox execution exceeded limit)"},
+                    execution_time_ms=600000,
                     kernel_state={}
                 ), self.coder.model
             except Exception as e:

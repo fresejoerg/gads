@@ -246,7 +246,7 @@ def render_knowledge_panel():
 
         filename = ""
         if k_type == "Recipes":
-            # --- RECIPE EDITOR (SPLIT) ---
+            # --- RECIPE EDITOR (SPLIT: YAML + plain-text body with preview) ---
             if selected == new_label:
                 filename = st.text_input("Filename", placeholder="e.g. classification.md", key="new_recipe_name")
                 initial_yaml = "id: \nversion: 1.0.0\nauthor: \napplies_when:\n  task_type: []\n  data_modality: []\nrequires:\n  variables: []\n  capabilities: []\ndag: []\n"
@@ -271,23 +271,50 @@ def render_knowledge_panel():
             st.session_state.recipes_buffer_yaml = new_yaml
 
             st.markdown("##### CONTENT (MARKDOWN)")
-            new_md = st_ace(value=initial_md, language="markdown", theme="monokai", height=300, wrap=True, key=f"ace_md_{selected}")
-            st.session_state.recipes_buffer_md = new_md
+            recipe_preview = st.toggle("Preview", key=f"recipe_preview_{selected}", value=False)
+            if recipe_preview:
+                with st.container(border=True, height=300):
+                    st.markdown(st.session_state.get("recipes_buffer_md") or initial_md)
+                new_md = st.session_state.get("recipes_buffer_md") or initial_md
+            else:
+                new_md = st_ace(value=initial_md, language="plain_text", theme="monokai", height=300, wrap=True, key=f"ace_md_{selected}")
+                st.session_state.recipes_buffer_md = new_md
             full_content = f"---\n{new_yaml}\n---\n{new_md}"
         else:
-            # --- SKILL EDITOR (UNIFIED) ---
+            # --- SKILL EDITOR (SPLIT: YAML metadata + plain-text body with preview) ---
             if selected == new_label:
                 filename = st.text_input("Filename", placeholder="e.g. visualization.md", key="new_skill_name")
-                initial_skill = "---\nid: \ntriggers: []\n---\n# Skill Description\n"
+                initial_skill_yaml = "id: \ndescription: \"\"\ntriggers: []"
+                initial_skill_md = "# Skill Description\n"
             else:
                 filename = selected
-                if "skills_buffer_skill" not in st.session_state:
+                if "skills_buffer_yaml" not in st.session_state or "skills_buffer_md" not in st.session_state:
                     res = api_get(f"/skills/{selected}")
-                    st.session_state.skills_buffer_skill = res.get("content", "") if res else ""
-                initial_skill = st.session_state.skills_buffer_skill
+                    raw_skill = res.get("content", "") if res else ""
+                    match = re.search(r"^---\s*\n(.*?)\n---\s*\n(.*)", raw_skill, re.DOTALL)
+                    if match:
+                        st.session_state.skills_buffer_yaml = match.group(1)
+                        st.session_state.skills_buffer_md = match.group(2).strip()
+                    else:
+                        st.session_state.skills_buffer_yaml = ""
+                        st.session_state.skills_buffer_md = raw_skill
+                initial_skill_yaml = st.session_state.skills_buffer_yaml
+                initial_skill_md = st.session_state.skills_buffer_md
 
-            full_content = st_ace(value=initial_skill, language="markdown", theme="monokai", height=500, wrap=True, key=f"ace_skill_{selected}")
-            st.session_state.skills_buffer_skill = full_content
+            st.markdown("##### METADATA (YAML)")
+            new_skill_yaml = st_ace(value=initial_skill_yaml, language="yaml", theme="monokai", height=120, key=f"ace_skill_yaml_{selected}")
+            st.session_state.skills_buffer_yaml = new_skill_yaml
+
+            st.markdown("##### GUIDANCE (MARKDOWN)")
+            skill_preview = st.toggle("Preview", key=f"skill_preview_{selected}", value=False)
+            if skill_preview:
+                with st.container(border=True, height=360):
+                    st.markdown(st.session_state.get("skills_buffer_md") or initial_skill_md)
+                new_skill_md = st.session_state.get("skills_buffer_md") or initial_skill_md
+            else:
+                new_skill_md = st_ace(value=initial_skill_md, language="plain_text", theme="monokai", height=360, wrap=True, key=f"ace_skill_md_{selected}")
+                st.session_state.skills_buffer_md = new_skill_md
+            full_content = f"---\n{new_skill_yaml}\n---\n{new_skill_md}\n"
 
         if st.button(f"SAVE {k_type[:-1].upper()}", use_container_width=True, type="primary"):
             if not filename:
@@ -437,16 +464,48 @@ def render_orchestrator_panel():
         def show_spec():
             if "spec_buffer" not in st.session_state:
                 spec_data = api_get(f"/specs/{st.session_state.view_spec}")
-                st.session_state.spec_buffer = spec_data.get("content", "") if spec_data else ""
-            
-            new_content = st_ace(
-                value=st.session_state.spec_buffer,
-                language="markdown",
+                raw = spec_data.get("content", "") if spec_data else ""
+                # Split YAML frontmatter from markdown body
+                parts = raw.split("---", 2)
+                if len(parts) >= 3:
+                    st.session_state.spec_yaml = parts[1].strip()
+                    st.session_state.spec_md = parts[2].strip()
+                else:
+                    st.session_state.spec_yaml = ""
+                    st.session_state.spec_md = raw.strip()
+                st.session_state.spec_buffer = raw
+
+            import hashlib
+            spec_key = hashlib.md5(st.session_state.view_spec.encode()).hexdigest()[:8]
+            st.markdown("##### FRONTMATTER (YAML)")
+            new_yaml = st_ace(
+                value=st.session_state.spec_yaml,
+                language="yaml",
                 theme="monokai",
-                height=500,
-                wrap=True,
-                key="ace_spec_editor"
+                height=160,
+                key=f"ace_spec_yaml_{spec_key}"
             )
+            st.session_state.spec_yaml = new_yaml
+
+            st.markdown("##### OBJECTIVE")
+            preview_mode = st.toggle("Preview", key=f"spec_preview_{spec_key}", value=False)
+
+            if preview_mode:
+                with st.container(border=True, height=340):
+                    st.markdown(st.session_state.spec_md)
+                new_md = st.session_state.spec_md
+            else:
+                new_md = st_ace(
+                    value=st.session_state.spec_md,
+                    language="plain_text",
+                    theme="monokai",
+                    height=340,
+                    wrap=True,
+                    key=f"ace_spec_md_{spec_key}"
+                )
+                st.session_state.spec_md = new_md
+
+            new_content = f"---\n{new_yaml}\n---\n{new_md}\n"
             st.session_state.spec_buffer = new_content
             
             col1, col2 = st.columns(2)
@@ -454,14 +513,16 @@ def render_orchestrator_panel():
                 res = api_post(f"/specs/{st.session_state.view_spec}", {"content": new_content})
                 if res and res.get("status") == "success":
                     st.toast("Spec saved successfully.")
-                    del st.session_state.spec_buffer
+                    for _k in ("spec_buffer", "spec_yaml", "spec_md"):
+                        st.session_state.pop(_k, None)
                     st.session_state.view_spec = None
                     st.rerun()
                 else:
                     st.error("Failed to save spec.")
             
             if col2.button("CLOSE", use_container_width=True):
-                del st.session_state.spec_buffer
+                for _k in ("spec_buffer", "spec_yaml", "spec_md"):
+                    st.session_state.pop(_k, None)
                 st.session_state.view_spec = None
                 st.rerun()
         show_spec()

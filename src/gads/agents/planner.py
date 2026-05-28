@@ -46,7 +46,7 @@ class PlannerOutput(BaseModel):
 
 
 class DataSciencePlanner(BaseAgent[PlannerInput, PlannerOutput]):
-    def __init__(self, model: str = "claude-opus-4.7"):
+    def __init__(self, model: str = "local_model"):
         super().__init__(
             name="Planner",
             model=model,

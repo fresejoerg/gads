@@ -71,16 +71,18 @@ async def get_structured_completion(model: str, response_model, messages: list, 
     if "timeout" not in kwargs:
         kwargs["timeout"] = 60.0
 
-    # LOCAL MODEL HARDENING: 
+    # LOCAL MODEL HARDENING:
     # 1. Increase repetition penalty to prevent infinite loops (like standard_deviation repetition).
     # 2. Use a smaller max_tokens for safety.
+    # 3. Override timeout: local models are slow (planning tasks can take 3+ minutes).
     if model == "local_model":
         if "extra_body" not in kwargs: kwargs["extra_body"] = {}
         kwargs["extra_body"].update({
             "repetition_penalty": 1.1,
             "temperature": 0.1 # Stricter output for local models
         })
-        if "max_tokens" not in kwargs: kwargs["max_tokens"] = 4096
+        kwargs["max_tokens"] = min(kwargs.get("max_tokens", 4096), 4096)
+        kwargs["timeout"] = 600.0  # 60s default kills local planning; 192s observed in prod
 
     if stream_callback:
         print(f"  [LLM] Streaming enabled for {model}...", flush=True)
@@ -128,6 +130,20 @@ async def get_structured_completion(model: str, response_model, messages: list, 
                 except Exception:
                     continue
 
+            # Partial JSON recovery: scan backwards for last complete key-value pair
+            m_start = re.search(r'\{', cleaned_text)
+            if m_start:
+                raw_partial = cleaned_text[m_start.start():]
+                for i in range(len(raw_partial) - 1, max(0, len(raw_partial) - 512), -1):
+                    if raw_partial[i] in (',', '{'):
+                        try:
+                            data = json.loads(raw_partial[:i] + '}')
+                            result = response_model(**data)
+                            print(f"  [LLM] Streaming partial JSON recovery succeeded.", flush=True)
+                            return result
+                        except Exception:
+                            continue
+
             print(f"  [LLM] No valid JSON found in {len(json_blocks)} candidate blocks. Attempting Instructor repair.", flush=True)
             
             repair_messages = list(messages)
@@ -160,7 +176,30 @@ async def get_structured_completion(model: str, response_model, messages: list, 
         )
     except Exception as e:
         print(f"  [LLM] Instructor parsing failed. Attempting robust manual extraction for {model}...", flush=True)
-        
+
+        # Partial JSON recovery: when max_tokens truncates mid-field, scan backwards for
+        # the last complete key-value pair and close the JSON object there.
+        try:
+            cause = getattr(e, '__cause__', None) or getattr(e, '__context__', None)
+            last_comp = getattr(cause, 'last_completion', None) or getattr(e, 'last_completion', None)
+            if last_comp:
+                raw = getattr(last_comp.choices[0].message, 'content', '') or ''
+                raw = re.sub(r'<think>.*?</think>', '', raw, flags=re.DOTALL)
+                m = re.search(r'\{', raw)
+                if m:
+                    raw = raw[m.start():]
+                    for i in range(len(raw) - 1, max(0, len(raw) - 512), -1):
+                        if raw[i] in (',', '{'):
+                            try:
+                                data = json.loads(raw[:i] + '}')
+                                result = response_model(**data)
+                                print(f"  [LLM] Partial JSON recovery succeeded.", flush=True)
+                                return result
+                            except Exception:
+                                continue
+        except Exception as recovery_ex:
+            print(f"  [LLM] Partial JSON recovery failed: {recovery_ex}", flush=True)
+
         fallback_messages = list(messages)
         schema_str = json.dumps(response_model.model_json_schema())
         fallback_messages.append({
