@@ -47,6 +47,7 @@ approach_docs/
 .antigravitycli/
 .claude/
 *.svg
+test_preference_model.pkl
 
 # Runtime data and local config
 gads_data/
