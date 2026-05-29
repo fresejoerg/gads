@@ -39,7 +39,7 @@ dag:
       - "bayesian_model is not None"
 
   - id: fit_posterior
-    intent: "Fit the model using variational inference (ADVI): idata = bayesian_model.fit(method='advi', num_samples=2000, random_seed=42). Do NOT use MCMC (draws/tune) on large datasets — it will timeout. Store the InferenceData in `idata`."
+    intent: "Fit the model. For ≤5K rows: use MCMC with draws=500, tune=300, chains=1, cores=1, progressbar=False. For >5K rows: call model.build() then use PyMC ADVI via `with model.backend.model: approx=pm.fit(n=20000, method='advi', progressbar=False); idata=approx.sample(2000)`. Store the InferenceData in `idata`."
     depends_on: [specify_bayesian_model]
     worker_tier: T2
     produces: [idata]
