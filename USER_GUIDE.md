@@ -49,7 +49,34 @@ For very heavy computations (e.g., training a large Random Forest on millions of
 
 ---
 
-## 6. Follow-up and Iteration
+## 6. Reproducible Spec-Based Launches
+
+For recurring or well-defined workflows, use a **spec file** (`specs/*.md`) instead of typing an objective each time.  Spec files are Markdown with YAML frontmatter:
+
+```yaml
+---
+name: "My Project"
+datasets:
+  - folder/file.csv
+save_model: true
+---
+Your objective text goes here.
+```
+
+Key frontmatter options:
+
+| Key | Purpose |
+|-----|---------|
+| `datasets` | Files to copy into the workspace (paths relative to `GADS_DATASETS_ROOT`) |
+| `recipes` | Knowledge-base recipe files to load as planning priors |
+| `target_column` | Tells the Planner which column to predict |
+| `save_model` | `true` → always serialise the trained classifier to `model.joblib` after a successful run |
+
+Launch via `POST /projects/from-spec` or the **"Launch from Spec"** button in the UI.
+
+---
+
+## 7. Follow-up and Iteration
 GADS features **Durable Project Memory**. This means you can build on previous results without starting over.
 
 *   **Best Practice**: Reference variables or findings from earlier in the session.

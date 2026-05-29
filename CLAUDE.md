@@ -80,12 +80,26 @@ Tasks declare `postcondition_json` with `output_type`, `required_columns`, and o
 
 ### Project Specs (server.py:launch_from_spec)
 
-`POST /projects/from-spec` reads a Markdown file from `specs/` with YAML frontmatter (`name`, `datasets`, `recipes`). Datasets are resolved against `GADS_DATASETS_ROOT` (default `/home/joergf/datasets`) and **symlinked** into the workspace via `_mount_external_dataset`. Path-traversal is blocked via `Path.is_relative_to` checks; recipes are validated against the registry. The endpoint is fully transactional — failure rolls back DB and rm's the workspace.
+`POST /projects/from-spec` reads a Markdown file from `specs/` with YAML frontmatter. Supported keys:
+
+| Key | Type | Description |
+|-----|------|-------------|
+| `name` | str | Project display name |
+| `datasets` | list[str] | Paths relative to `GADS_DATASETS_ROOT` (default `/home/joergf/datasets`) — **copied** (not symlinked) into workspace |
+| `recipes` | list[str] | Recipe filenames to validate against the registry |
+| `target_column` | str | Forwarded to Planner as a hint |
+| `feature_columns` | list[str] | Forwarded to Planner as a hint |
+| `filters` | str | Forwarded to Planner as a hint |
+| `domain` | str | Forwarded to Planner as a hint |
+| `recipe_id` | str | Forwarded to Planner as a hint |
+| `save_model` | bool | If `true`, a deterministic post-execution hook saves the first fitted sklearn-style classifier found in the kernel (`hasattr(fit) + hasattr(predict) + hasattr(classes_)`) to `model.joblib` via joblib. Runs after all tasks complete successfully, independent of what the Planner generates. NOT forwarded to the Planner. |
+
+Path-traversal is blocked via `Path.is_relative_to` checks; recipes are validated against the registry. The endpoint is fully transactional — failure rolls back DB and rm's the workspace.
 
 ## Conventions & Gotchas
 
 - **Many hardcoded paths**: `WORKSPACE_ROOT = "/home/joergf/projects/MyLocalStack/data/workspaces"` and `host_path = f"/home/joergf/projects/MyLocalStack/..."` in `sandbox.list_workspace_files` are user-specific. If you move the repo, both need updating.
-- **`asyncio.wait_for` is the rule** when calling the sandbox or LLM — every external call has a deliberate timeout to keep the workflow responsive (Executor wraps the Coder in 300s, sandbox health check in 5s, etc.).
+- **`asyncio.wait_for` is the rule** when calling the sandbox or LLM — every external call has a deliberate timeout to keep the workflow responsive. Key timeouts: Coder agent 300s, sandbox health check 5s, sandbox *execution* 720s for `local_model` / 360s for cloud (asyncio wrapper) with the sandbox body timeout set to 600s / 300s respectively. The chain must be ordered: sandbox body timeout < httpx client timeout (720s) ≤ asyncio wrapper, otherwise a transport-layer race produces an empty `ConnectionError` before the proper error surface fires.
 - **`GADS_INSIGHTS_JSON:` / `GADS_FLOOR_JSON:` / `GADS_STATE_SNAPSHOT:` prefixes** — sentinel-prefixed stdout lines parsed back into structured data by the Executor and orchestrator. Don't let task code log lines starting with these strings.
 - **The sliding-window context** (server.py:run_agent_workflow, "2+1 model") gives the Coder full detail for the first + last 2 tasks and only `orchestrator_summary` for the middle. When something is invisible to the Coder, suspect that distillation.
 - **Cascade deletes are manual** — `DELETE /projects/{id}` walks Task/Artifact/Instruction and deletes each before deleting the Project (no FK cascade configured).

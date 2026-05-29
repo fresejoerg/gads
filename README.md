@@ -26,6 +26,7 @@ A foundational requirement of GADS is the ability to run on **local LLMs** and *
 *   **Stateful Python Sandbox**: A secure, Docker-isolated execution environment using **IPython Kernels** to maintain variable state across multiple agent turns.
     *   **ML Ready**: Pre-installed with `scikit-learn`, `pandas`, `plotly`, `kaleido`, and `joblib`.
     *   **Automatic Plot Capture**: Captures both interactive HTML and static base64 visualizations.
+*   **Deterministic Model Artifacts**: Spec files support a `save_model: true` flag that guarantees a `model.joblib` binary is saved after any successful run that trains a classifier — independent of what the Planner generates.
 
 ---
 
