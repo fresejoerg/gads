@@ -4,6 +4,55 @@ from pydantic import BaseModel, Field
 from gads.agents.base import BaseAgent
 from gads.core.prompts import prompt_registry
 
+
+def _format_file_profile(f: "FileMetadata") -> str:
+    """Format a rich data profile into human-readable text for the Planner prompt."""
+    lines = [f"{f.name} ({f.size_mb:.2f} MB)"]
+    d = f.columns_and_dtypes
+    if not d or "error" in d:
+        return lines[0]
+
+    if "schema" in d:
+        ncols = len(d["schema"])
+        nrows = d.get("row_count")
+        count_str = f" | {nrows:,} rows" if nrows else ""
+        col_str = ", ".join(
+            f"{k} [{v}]" for k, v in list(d["schema"].items())[:14]
+        )
+        lines.append(f"  Columns ({ncols}){count_str}: {col_str}")
+
+    if d.get("null_rates"):
+        nr_str = ", ".join(
+            f"{k}: {v*100:.1f}%" for k, v in list(d["null_rates"].items())[:6]
+        )
+        lines.append(f"  Nulls: {nr_str}")
+
+    if d.get("cardinality"):
+        for col, counts in list(d["cardinality"].items())[:4]:
+            top = ", ".join(
+                f"{k}: {v*100:.1f}%" for k, v in list(counts.items())[:6]
+            )
+            lines.append(f"  {col} ({len(counts)} values): {top}")
+
+    if d.get("numeric_stats"):
+        for col, s in list(d["numeric_stats"].items())[:4]:
+            lines.append(
+                f"  {col}: min={s['min']:.2f}, max={s['max']:.2f}, "
+                f"mean={s['mean']:.2f}, std={s['std']:.2f}"
+            )
+
+    # Excel multi-sheet
+    if "excel_sheets" in d:
+        lines.append(f"  Excel sheets: {d['excel_sheets']}")
+
+    # JSON / text types
+    if d.get("type") == "text":
+        lines.append(f"  Text file: {d.get('words', '?')} words, {d.get('lines', '?')} lines")
+    elif d.get("type") in ("records", "object", "array"):
+        lines.append(f"  JSON ({d['type']}): {d.get('row_count', d.get('length', '?'))} items")
+
+    return "\n".join(lines)
+
 class ReconciliationReport(BaseModel):
     recipe_id: str
     rationale: str
@@ -61,14 +110,11 @@ class DataSciencePlanner(BaseAgent[PlannerInput, PlannerOutput]):
         hierarchy_str = json.dumps(input_data.available_models_hierarchy, indent=2)
         skills_str = json.dumps(input_data.available_skills, indent=2)
         
-        # Format files with size and schema for agent awareness
-        files_info = []
-        for f in input_data.available_files:
-            info = f"{f.name} ({f.size_mb:.2f} MB)"
-            if f.columns_and_dtypes:
-                info += f" - Schema: {json.dumps(f.columns_and_dtypes)}"
-            files_info.append(info)
-        files_str = "\n".join([f"- {i}" for i in files_info]) if files_info else "None"
+        # Format files with rich profiles (schema, null rates, cardinality, numeric stats)
+        files_str = (
+            "\n\n".join(_format_file_profile(f) for f in input_data.available_files)
+            if input_data.available_files else "None"
+        )
         
         knowledge_str = json.dumps(input_data.knowledge_report.dict(), indent=2) if input_data.knowledge_report else "No matching SOP found. Use generic data science reasoning."
         

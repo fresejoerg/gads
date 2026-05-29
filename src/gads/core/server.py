@@ -24,6 +24,7 @@ from gads.agents.plan_critique import PlanCritiqueAgent, PlanCritiqueInput
 from gads.agents.spec_drafter import SpecDrafterAgent, SpecDraftInput
 from gads.agents.workers.synthesizer import SynthesizerAgent, SynthesizerInput
 from gads.agents.workers.critique import CritiqueAgent, CritiqueInput
+from gads.agents.workers.completeness_verifier import CompletenessVerifierAgent, CompletenessVerifierInput
 from gads.core.executor import ExecutionManager
 from gads.tools.sandbox import SandboxClient
 from gads.core.registry import get_model_hierarchy, get_local_only, set_local_only, get_random_routing, set_random_routing, get_next_model_dynamic
@@ -485,16 +486,41 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         except Exception as e:
             print(f"  [Workflow] Grounding health check failed: {e}. Proceeding anyway.", flush=True)
 
-        # 0.5. ONE-SHOT SCHEMA PROBE (runs once before any agent, outside retry loop)
-        print(f"  [Workflow] Probing file schemas...", flush=True)
+        # Mark init task completed after health check (schema probe gets its own task below)
+        with Session(engine) as session:
+            itask = session.get(Task, init_task_id)
+            if itask:
+                itask.status = "completed"
+                session.add(itask)
+                session.commit()
+
+        if await is_cancelled(): return
+
+        # 0.5. DATA ANALYZER — rich schema + distribution profiling (runs once, outside retry loop)
+        print(f"  [Workflow] DataAnalyzer: profiling dataset schemas and distributions...", flush=True)
         from gads.agents.planner import FileMetadata as FM
+        with Session(engine) as session:
+            analyzer_task = Task(
+                project_id=project_id,
+                instruction_id=instruction_id,
+                description="DataAnalyzer is profiling dataset schemas, value distributions, and cardinality...",
+                assigned_to="DataAnalyzer",
+                status="running",
+                heartbeat=datetime.now()
+            )
+            session.add(analyzer_task)
+            session.commit()
+            session.refresh(analyzer_task)
+            analyzer_task_id = analyzer_task.id
+
         planner_files = []
         detected_schemas = {}
+        PROFILABLE_EXTS = (".csv", ".parquet", ".xlsx", ".xls", ".json", ".txt", ".md", ".log")
         for f in current_files_meta:
             columns_dtypes = None
-            if f["name"].endswith(".csv") or f["name"].endswith(".parquet"):
+            if any(f["name"].endswith(ext) for ext in PROFILABLE_EXTS):
                 columns_dtypes = await _probe_file_schema(executor, project_id, f["name"])
-                if columns_dtypes:
+                if columns_dtypes and "error" not in columns_dtypes:
                     detected_schemas[f["name"]] = columns_dtypes
             planner_files.append(FM(name=f["name"], size_mb=f["size_mb"], columns_and_dtypes=columns_dtypes))
 
@@ -511,15 +537,31 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     session.add(project)
                     session.commit()
 
-        # Mark init task as completed
+        profile_lines = []
+        for fname, profile in detected_schemas.items():
+            if "schema" in profile:
+                ncols = len(profile["schema"])
+                nrows = profile.get("row_count", "?")
+                nrows_str = f"{nrows:,}" if isinstance(nrows, int) else str(nrows)
+                profile_lines.append(f"**{fname}**: {ncols} columns, {nrows_str} rows")
+            else:
+                profile_lines.append(f"**{fname}**: profiled ({profile.get('type', 'file')})")
+
         with Session(engine) as session:
-            itask = session.get(Task, init_task_id)
-            if itask:
-                itask.status = "completed"
-                session.add(itask)
+            at = session.get(Task, analyzer_task_id)
+            if at:
+                at.status = "completed"
+                at.result_json = {
+                    "stdout": (
+                        "**Data Profiles Generated:**\n" +
+                        "\n".join(f"- {s}" for s in profile_lines)
+                        if profile_lines else "No profilable files found in workspace."
+                    )
+                }
+                session.add(at)
                 session.commit()
 
-                if await is_cancelled(): return
+        if await is_cancelled(): return
 
         # 0.6. SPEC DRAFTING — generate or load structured workflow spec
         # Build files_with_schemas string for SpecDrafter
@@ -1327,6 +1369,122 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                 except Exception as _save_exc:
                     print(f"  [Workflow] ⚠️  Model save exception: {_save_exc}", flush=True)
 
+            # 4c. SEMANTIC COMPLETENESS VERIFIER
+            # Catches two gaps PlanCritique structurally cannot:
+            # (1) required_insights is a soft-fail — tasks complete without emitting interpretive work
+            # (2) bypassed/handover tasks never executed but don't fail the workflow
+            # Only fires when execution succeeded and a replan is still possible.
+            if not (failed_tasks or pending_tasks) and workflow_attempt < MAX_WORKFLOW_ATTEMPTS:
+                cv_model_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
+                cv_model = hierarchy.get("T2", {}).get("models", cv_model_fallback)[0]
+
+                with Session(engine) as session:
+                    cv_task = Task(
+                        project_id=project_id,
+                        instruction_id=instruction_id,
+                        description=f"Completeness Auditor ({cv_model}) is verifying analytical coverage...",
+                        assigned_to="CompletenessVerifier",
+                        status="running",
+                        heartbeat=datetime.now()
+                    )
+                    session.add(cv_task)
+                    session.commit()
+                    session.refresh(cv_task)
+                    cv_task_id = cv_task.id
+
+                    exec_tasks = session.exec(select(Task).where(Task.id.in_(task_ids))).all()
+                    completed_summaries = [
+                        f"[{t.description}]: "
+                        f"{(t.result_json or {}).get('orchestrator_summary', 'completed')}"
+                        for t in exec_tasks if t.status == "completed"
+                    ]
+
+                # Load metrics.json — gives the verifier ground-truth scalar evidence
+                metrics_data = None
+                metrics_path = os.path.join(workspace_dir, "metrics.json")
+                if os.path.exists(metrics_path):
+                    try:
+                        with open(metrics_path) as mf:
+                            metrics_data = json.load(mf)
+                    except Exception:
+                        pass
+
+                cv_span = trace.span(
+                    name=f"Completeness Verification (Attempt {workflow_attempt})",
+                    metadata={"task_id": str(cv_task_id)}
+                )
+                trace_context.get().update({
+                    "agent_name": "CompletenessVerifier",
+                    "task_id": str(cv_task_id),
+                    "parent_observation_id": cv_span.id
+                })
+
+                try:
+                    cv_agent = CompletenessVerifierAgent(model=cv_model)
+                    cv_res = await asyncio.wait_for(
+                        cv_agent.run(CompletenessVerifierInput(
+                            objective=formalized_objective,  # matches what was planned against
+                            completed_task_summaries=completed_summaries,
+                            produced_artifact_names=[f["name"] for f in current_files_meta],
+                            metrics_json=metrics_data
+                        )),
+                        timeout=120.0
+                    )
+                    cv_out = cv_res.content
+                    cv_span.end(output=cv_out.model_dump())
+
+                    with Session(engine) as session:
+                        ct = session.get(Task, cv_task_id)
+                        if ct:
+                            ct.status = "completed"
+                            ct.result_json = {
+                                "stdout": (
+                                    f"**Completeness: {'✅ Complete' if cv_out.is_complete else '❌ Gaps Found'}**\n"
+                                    f"Verdict: {cv_out.verdict}"
+                                    + (
+                                        "\n\n**Missing analyses:**\n" +
+                                        "\n".join(f"- {m}" for m in cv_out.missing_analyses)
+                                        if cv_out.missing_analyses else ""
+                                    )
+                                ),
+                                "model_used": cv_model
+                            }
+                            session.add(ct)
+                            session.commit()
+
+                    # Guard: only replan if there are concrete named gaps (not just is_complete=False)
+                    if not cv_out.is_complete and cv_out.missing_analyses:
+                        missing_str = "; ".join(cv_out.missing_analyses)
+                        critique_feedback = (
+                            f"COMPLETENESS GAPS (attempt {workflow_attempt}):\n{missing_str}\n\n"
+                            f"Verifier verdict: {cv_out.verdict}\n\n"
+                            "Revise the plan to include ALL missing analyses listed above."
+                            + (f"\n\n{critique_feedback}" if critique_feedback else "")
+                        )
+                        print(
+                            f"  [CompletenessVerifier] ❌ Gaps — triggering replan: {missing_str[:100]}",
+                            flush=True
+                        )
+                        continue  # → back to Planning with enriched critique_feedback
+                    else:
+                        print(f"  [CompletenessVerifier] ✅ Execution is analytically complete.", flush=True)
+
+                except Exception as cv_exc:
+                    # Fail-open: verifier failure must never block the workflow
+                    print(
+                        f"  [CompletenessVerifier] ⚠️ Failed ({cv_exc}). Proceeding to synthesis.",
+                        flush=True
+                    )
+                    cv_span.end(output={"error": str(cv_exc)})
+                    with Session(engine) as session:
+                        ct = session.get(Task, cv_task_id)
+                        if ct:
+                            ct.status = "failed"
+                            ct.error = str(cv_exc)
+                            session.add(ct)
+                            session.commit()
+                    # Fail-open: fall through to synthesis
+
             # 5. SYNTHESIS & CRITIQUE LOOP
             synthesizer_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
             synthesizer_model = hierarchy.get("T2", {}).get("models", synthesizer_fallback)[0]
@@ -1841,57 +1999,134 @@ def _mount_external_dataset(workspace_dir: str, host_path: str):
         raise Exception(f"Failed to copy dataset: {e}")
 
 async def _probe_file_schema(executor: ExecutionManager, project_id: uuid.UUID, filename: str) -> Optional[Dict[str, Any]]:
-    """Safe, time-capped schema and dtype extraction using DuckDB."""
-    print(f"    [Introspection] Probing schema for {filename}...", flush=True)
-    
-    # Strictly capped DuckDB query for safe type inference
-    code = f"""
-import duckdb
+    """Rich, time-capped schema + distribution profiling for CSV, Parquet, and text files."""
+    print(f"    [DataAnalyzer] Profiling {filename}...", flush=True)
+
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+
+    if ext in ("csv", "parquet"):
+        code = f"""
+import pandas as pd, numpy as np, json
+try:
+    if "{filename}".endswith(".csv"):
+        df = pd.read_csv("{filename}", nrows=5000)
+    else:
+        import pyarrow.parquet as pq
+        df = pq.read_table("{filename}").to_pandas().head(5000)
+
+    schema = {{str(k): str(v) for k, v in df.dtypes.items()}}
+    row_count = len(df)
+
+    null_rates = {{k: round(float(v), 4)
+                   for k, v in df.isnull().mean().items() if v > 0}}
+
+    cardinality = {{}}
+    for col in df.columns:
+        n_uniq = df[col].nunique()
+        if n_uniq <= 20 or (row_count > 0 and n_uniq / row_count < 0.005):
+            vc = df[col].value_counts(normalize=True).head(8)
+            cardinality[col] = {{str(k): round(float(v), 4) for k, v in vc.items()}}
+
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    numeric_stats = {{}}
+    for col in numeric_cols[:8]:
+        s = df[col].dropna()
+        if len(s):
+            numeric_stats[col] = {{
+                "min": float(s.min()), "max": float(s.max()),
+                "mean": round(float(s.mean()), 4), "std": round(float(s.std()), 4)
+            }}
+
+    def _ser(v):
+        if isinstance(v, float) and v != v: return None
+        if hasattr(v, "item"): return v.item()
+        return v if isinstance(v, (str, int, float, bool, type(None))) else str(v)
+
+    sample = [{{k: _ser(row[k]) for k in row}} for row in df.head(3).to_dict(orient="records")]
+
+    print("PROFILE_JSON:" + json.dumps({{
+        "schema": schema, "row_count": row_count,
+        "null_rates": null_rates, "cardinality": cardinality,
+        "numeric_stats": numeric_stats, "sample": sample
+    }}))
+except Exception as e:
+    print("PROFILE_JSON:" + json.dumps({{"error": str(e)}}))
+""".strip()
+
+    elif ext in ("xlsx", "xls"):
+        code = f"""
+import pandas as pd, json
+try:
+    xl = pd.ExcelFile("{filename}")
+    sheets = xl.sheet_names
+    profiles = {{}}
+    for sheet in sheets[:3]:
+        df = xl.parse(sheet, nrows=1000)
+        profiles[sheet] = {{
+            "schema": {{str(k): str(v) for k, v in df.dtypes.items()}},
+            "rows_sampled": len(df),
+            "sample": df.head(3).fillna("").to_dict(orient="records")
+        }}
+    print("PROFILE_JSON:" + json.dumps({{"type": "excel", "excel_sheets": sheets, "profiles": profiles}}))
+except Exception as e:
+    print("PROFILE_JSON:" + json.dumps({{"error": str(e)}}))
+""".strip()
+
+    elif ext == "json":
+        code = f"""
+import json, pandas as pd
+try:
+    with open("{filename}") as f:
+        data = json.load(f)
+    if isinstance(data, list) and data and isinstance(data[0], dict):
+        df = pd.DataFrame(data[:1000])
+        schema = {{str(k): str(v) for k, v in df.dtypes.items()}}
+        result = {{"type": "records", "schema": schema, "row_count": len(data), "sample": data[:3]}}
+    elif isinstance(data, dict):
+        result = {{"type": "object", "top_level_keys": list(data.keys())[:20],
+                   "sample": {{k: str(v)[:100] for k, v in list(data.items())[:5]}}}}
+    else:
+        result = {{"type": "array", "length": len(data)}}
+    print("PROFILE_JSON:" + json.dumps(result))
+except Exception as e:
+    print("PROFILE_JSON:" + json.dumps({{"error": str(e)}}))
+""".strip()
+
+    elif ext in ("txt", "md", "log"):
+        code = f"""
 import json
 try:
-    # Use read_csv_auto with limited sample for speed and safety
-    if "{filename}".endswith(".csv"):
-        res = duckdb.query("DESCRIBE SELECT * FROM read_csv_auto('{filename}', sample_size=1024)").to_df()
-        sample_df = duckdb.query("SELECT * FROM read_csv_auto('{filename}', sample_size=1024) LIMIT 5").to_df()
-    elif "{filename}".endswith(".parquet"):
-        res = duckdb.query("DESCRIBE SELECT * FROM '{filename}'").to_df()
-        sample_df = duckdb.query("SELECT * FROM '{filename}' LIMIT 5").to_df()
-    else:
-        print(json.dumps({{"error": "Unsupported format"}}))
-        exit()
-    
-    # Map DuckDB types to simple string descriptions
-    schema = dict(zip(res['column_name'], res['column_type']))
-    
-    # Convert sample to json-friendly records
-    sample_json_str = sample_df.to_json(orient="records", date_format="iso")
-    sample_records = json.loads(sample_json_str)
-
-    print(json.dumps({{"schema": schema, "sample": sample_records}}))
+    with open("{filename}", encoding="utf-8", errors="replace") as f:
+        content = f.read(10000)
+    result = {{"type": "text", "chars": len(content),
+               "words": len(content.split()), "lines": content.count("\\n") + 1,
+               "preview": content[:400]}}
+    print("PROFILE_JSON:" + json.dumps(result))
 except Exception as e:
-    print(json.dumps({{"error": str(e)}}))
-"""
+    print("PROFILE_JSON:" + json.dumps({{"error": str(e)}}))
+""".strip()
+
+    else:
+        return None
+
     try:
-        # 30s timeout for schema probe, using a dedicated session to avoid interfering with project kernel
         res = await asyncio.wait_for(
-            executor.sandbox.execute(code, project_id=project_id, session_id=f"probe_{project_id}", workspace_id=str(project_id)),
+            executor.sandbox.execute(
+                code, project_id=project_id,
+                session_id=f"probe_{project_id}",
+                workspace_id=str(project_id)
+            ),
             timeout=30.0
         )
-        if res.stdout:
-            # Parse the last line as JSON to handle any pre-output
-            lines = res.stdout.strip().split('\\n')
-            data = None
-            for line in reversed(lines):
-                try:
-                    data = json.loads(line)
-                    break
-                except Exception: continue
-                
-            if data and "error" not in data:
-                print(f"    [Introspection] Detected schema for {filename}", flush=True)
-                return data
+        for line in reversed(res.stdout.strip().split("\n")):
+            if line.startswith("PROFILE_JSON:"):
+                data = json.loads(line[len("PROFILE_JSON:"):])
+                if "error" not in data:
+                    print(f"    [DataAnalyzer] Profiled {filename}", flush=True)
+                    return data
+                print(f"    [DataAnalyzer] Profile error for {filename}: {data['error']}", flush=True)
     except Exception as e:
-        print(f"    [Introspection] Probe failed for {filename}: {e}", flush=True)
+        print(f"    [DataAnalyzer] Probe failed for {filename}: {e}", flush=True)
     return None
 
 async def _background_probe_and_update(project_id: uuid.UUID, filename: str):

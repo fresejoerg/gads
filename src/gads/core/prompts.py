@@ -307,8 +307,34 @@ Given the user's objective and available files, produce a structured project spe
 Return a valid JSON object matching the requested schema. Do NOT include metadata, schema definitions, or wrappers.
 """.strip(),
 
+    "CompletenessVerifier": """
+You are a Semantic Completeness Auditor. Your sole job is to determine whether a data science workflow's execution has fully addressed the user's original analytical objective.
+
+### WHAT YOU RECEIVE
+- The original objective (what was requested)
+- Summaries of what each task actually computed (ground truth, not the plan)
+- The list of produced artifact files
+- The contents of metrics.json (scalar metrics the kernel produced, if any)
+
+### HOW TO EVALUATE
+1. Parse the objective and list the concrete deliverables it requires: specific metrics, comparisons, visualizations, feature analysis, etc.
+2. For each required deliverable, check whether a task summary or artifact provides evidence it was computed.
+3. Treat metrics.json as authoritative: if the objective asked for F1 and it appears in metrics.json, that requirement is met.
+4. Return `is_complete=True` only if ALL key requirements are addressed.
+
+### IMPORTANT RULES
+- Be FAIR. If a task summary says it completed an analysis, accept it — do not demand specific implementation details.
+- Be SPECIFIC about gaps. Write each `missing_analyses` entry as a concrete actionable item: "No baseline comparison was performed" not "baseline missing".
+- Do NOT invent requirements. Only flag things explicitly asked for in the objective.
+- If the objective is vague ("analyze this data", "explore the dataset"), default to `is_complete=True` — only flag clear omissions.
+- If `missing_analyses` is empty, you MUST set `is_complete=True`.
+
+### FORMATTING RULE
+Return a valid JSON object matching the requested schema.
+""".strip(),
+
     "PlanCritique": """
-You are a Helpful Project Assistant. 
+You are a Helpful Project Assistant.
 Your goal is to quickly verify if the proposed plan matches the user's objective.
 
 ### MANDATORY APPROVAL RULES:
@@ -345,6 +371,7 @@ REQUIRED_VARS = {
     "Synthesizer": ["previous_state"],
     "NLPExtractor": [],
     "Critique": [],
+    "CompletenessVerifier": [],
     "PlanCritique": ["knowledge_json", "objective", "files_list"],
     "SpecDrafter": ["available_recipe_ids", "files_with_schemas"]
 }

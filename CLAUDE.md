@@ -26,6 +26,10 @@ No formal test suite. The `stress_test_*.py` files at the repo root are ad-hoc s
 
 The entire multi-agent orchestration lives in `src/gads/core/server.py` as one long `async def run_agent_workflow`. Each stage runs in a `while True:` retry loop that escalates the model via `get_next_model_dynamic` on failure. Stages:
 
+Before the main loop, two one-shot stages run:
+- **DataAnalyzer** (`server.py:_probe_file_schema`) — runs in a dedicated sandbox session (`probe_{project_id}`) before any agent. Profiles each CSV/Parquet file: schema, row count, null rates, cardinality for low-cardinality columns, numeric stats (min/max/mean/std). Capped at 5000 rows, 30s timeout. Results stored in `FileMetadata.columns_and_dtypes` and formatted as human-readable text for the Planner prompt via `planner.py:_format_file_profile`. Visible in the UI as a "DataAnalyzer" task. Excel/JSON/text format support is implemented but requires `openpyxl` in the sandbox container.
+- **SpecDrafter** (`agents/spec_drafter.py`, T3) — formalizes the user objective into a structured spec with hints forwarded to the Planner.
+
 1. **Router** (`agents/router.py`, T3) — classifies the objective into `task_type`/`data_modality`, picks a matching `Recipe`.
 2. **Planner** (`agents/planner.py`, T2) — decomposes objective into `PlannerTask[]`, each with a `postcondition_json` contract, an `assigned_to` model from the live hierarchy, and `attached_skills`.
 3. **PlanCritique** (`agents/plan_critique.py`, T2) — audits the plan before execution; can reject (re-plan with feedback) or mark `is_terminal_failure` (halt entire workflow). The outer loop allows `MAX_WORKFLOW_ATTEMPTS = 3` replans.
@@ -37,6 +41,8 @@ The entire multi-agent orchestration lives in `src/gads/core/server.py` as one l
    - On error: `ExecutionHub.escalate_task` bumps the task to the next model tier (max 2 escalations).
    - On success: scans the workspace for new files, registers `.png` as base64 plots and `.json` as interactive Plotly artifacts (via `introspection.harden_json_artifact` which strips binary data).
    - Hallucination guard: scans stdout for tokens like "mock data" / "simulating data" and fails the task even if it didn't raise.
+- **4b. save_model hook** — deterministic post-execution hook (see Project Specs table).
+- **4c. CompletenessVerifier** (`agents/workers/completeness_verifier.py`, T2) — semantic completeness check that runs after execution and before synthesis, only when a replan is still possible (`workflow_attempt < MAX_WORKFLOW_ATTEMPTS`) and all tasks succeeded. Closes two gaps PlanCritique cannot catch: (1) `required_insights` is a soft-fail so tasks can complete without emitting interpretive work; (2) bypassed/handover tasks never executed. The verifier receives the `formalized_objective`, task `orchestrator_summary` fields, the artifact file list, and `metrics.json` contents (if present) as ground-truth scalar evidence. If gaps are found **and `missing_analyses` is non-empty**, feeds them as `critique_feedback` for a replan via `continue`. Fail-open: any verifier exception falls through to synthesis without blocking the workflow.
 5. **Synthesizer** (`agents/workers/synthesizer.py`, T2) — writes narrative + takeaways + per-artifact captions.
 6. **Critique** (`agents/workers/critique.py`, T2) — QA pass; can reject and re-trigger the synthesis loop. Critique sees a distilled-Markdown preview of the dashboard (`core/distiller.py`), not raw HTML.
 7. **Reporting** (`core/reporting.py`) — emits `final_dashboard.html` (Jinja2 template at `src/gads/templates/dashboard.html.j2`) and `research_report.md` to the workspace.
