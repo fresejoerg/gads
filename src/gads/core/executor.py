@@ -321,7 +321,7 @@ _gads_insights = [] # Clear for next task
 
                 poller = asyncio.create_task(poll_logs_loop())
                 try:
-                    _sandbox_timeout = 600.0 if "local_model" in (self.coder.model_str or "") else 300.0
+                    _sandbox_timeout = 720.0 if "local_model" in (self.coder.model_str or "") else 360.0
                     exec_result = await asyncio.wait_for(
                         self.sandbox.execute(wrapped_code, project_id=project_id, session_id=session_id),
                         timeout=_sandbox_timeout

@@ -3,6 +3,7 @@ name: "LLM Pairwise Preference Classification"
 datasets:
   - llm-classification-finetuning/train.csv
   - llm-classification-finetuning/semantic_similarity.parquet
+save_model: true
 ---
 Predict which of two LLM responses (response_a or response_b) a human prefers, or whether
 they tie. The dataset contains 57,477 human preference judgments from Chatbot Arena. Each row

@@ -3,6 +3,7 @@ import contextlib
 import uuid
 import traceback
 import json
+import textwrap
 import base64
 import os
 import yaml
@@ -144,6 +145,7 @@ class ProjectSpecMetadata(BaseModel):
     feature_columns: List[str] = Field(default_factory=list)
     filters: Optional[str] = None
     domain: Optional[str] = None
+    save_model: bool = False
 
 @app.on_event("startup")
 async def startup_event():
@@ -548,8 +550,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         if fo:
                             formalized_objective = fo
                 # Pull hints from YAML frontmatter
-                for key in ("target_column", "feature_columns", "filters", "domain", "recipe_id"):
-                    if key in yaml_data and yaml_data[key]:
+                for key in ("target_column", "feature_columns", "filters", "domain", "recipe_id", "save_model"):
+                    if key in yaml_data:
                         spec_hints[key] = yaml_data[key]
             except Exception as e:
                 print(f"  [SpecDrafter] Failed to parse workflow_spec.md: {e}. Using raw objective.", flush=True)
@@ -789,7 +791,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                             knowledge_report=knowledge_report,
                             available_skills=registry.get_skills_summary(),
                             critique_feedback=critique_feedback,
-                            user_hints=spec_hints if spec_hints else None
+                            user_hints={k: v for k, v in spec_hints.items() if k != "save_model"} or None
                         ), stream_callback=stream_planner_callback)
                         span.end(output=planner_res.content.model_dump())
 
@@ -1297,6 +1299,33 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                         "Do NOT add a column to a task's postcondition if that column is built by a later task."
                     )
                     critique_feedback = execution_feedback + ("\n\n" + critique_feedback if critique_feedback else "")
+
+            # 4b. DETERMINISTIC MODEL SAVE (if spec requested it)
+            if spec_hints.get("save_model") and not failed_tasks and not pending_tasks:
+                print(f"  [Workflow] save_model=true — persisting model binary to model.joblib", flush=True)
+                _save_code = textwrap.dedent("""
+                    import joblib as _jl, os as _os
+                    _fitted = {k: v for k, v in globals().items()
+                               if not k.startswith('_')
+                               and hasattr(v, 'fit') and hasattr(v, 'predict')
+                               and hasattr(v, 'classes_')}
+                    if not _fitted:
+                        raise RuntimeError("save_model: no fitted classifier found in kernel namespace")
+                    _mname = sorted(_fitted.keys())[0]
+                    _jl.dump(_fitted[_mname], 'model.joblib')
+                    print(f"Saved model '{_mname}' → model.joblib ({_os.path.getsize('model.joblib')} bytes)")
+                """).strip()
+                try:
+                    _save_res = await asyncio.wait_for(
+                        executor.sandbox.execute(_save_code, project_id=project_id, session_id=str(project_id)),
+                        timeout=30.0
+                    )
+                    if _save_res.error:
+                        print(f"  [Workflow] ⚠️  Model save failed: {_save_res.error}", flush=True)
+                    else:
+                        print(f"  [Workflow] ✅ Model saved: {_save_res.stdout.strip()}", flush=True)
+                except Exception as _save_exc:
+                    print(f"  [Workflow] ⚠️  Model save exception: {_save_exc}", flush=True)
 
             # 5. SYNTHESIS & CRITIQUE LOOP
             synthesizer_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]

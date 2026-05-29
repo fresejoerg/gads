@@ -59,7 +59,7 @@ class SandboxClient:
     
     def __init__(self, base_url: str = "http://localhost:8000"):
         self.base_url = base_url
-        self.client = httpx.AsyncClient(timeout=300.0) # Extended timeout for massive datasets
+        self.client = httpx.AsyncClient(timeout=720.0) # Must exceed sandbox's 300s execution limit + buffer
 
     def list_workspace_files(self, project_id: uuid.UUID) -> List[str]:
         """Lists files available in the project's host workspace directory."""
@@ -111,7 +111,7 @@ class SandboxClient:
                     "code": code, 
                     "session_id": session_id,
                     "workspace_id": workspace_id,
-                    "timeout": 300.0 # 5 minute execution limit
+                    "timeout": 600.0 # 10 minute execution limit
                 }
             )
             response.raise_for_status()
