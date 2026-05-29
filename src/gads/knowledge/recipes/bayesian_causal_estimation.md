@@ -47,10 +47,10 @@ dag:
       - "idata is not None"
 
   - id: extract_ate_and_uncertainty
-    intent: "Extract the posterior distribution of the treatment coefficient. Compute: mean ATE, standard deviation, and 94% Highest Density Interval (HDI) using arviz. Store the mean ATE in a variable named exactly `ate`. Print the full uncertainty summary."
+    intent: "Extract the posterior distribution of the treatment coefficient. Compute: mean ATE, standard deviation, and 94% Highest Density Interval (HDI) using arviz. Store the mean ATE in a variable named exactly `ate`. Compute convergence as `max_rhat = float(az.rhat(idata).to_array().max())` if multiple chains were run, else set `max_rhat = float('nan')`. Print the full uncertainty summary including P(effect > 0)."
     depends_on: [fit_posterior]
     worker_tier: T2
-    produces: [ate, ate_hdi, ate_posterior]
+    produces: [ate, ate_hdi, ate_posterior, max_rhat]
     postconditions:
       - "isinstance(ate, float)"
     required_metrics: [ate]

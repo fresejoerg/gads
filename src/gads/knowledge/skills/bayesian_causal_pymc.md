@@ -126,6 +126,20 @@ print(f"ATE: {ate_samples.mean():.4f} ± {ate_samples.std():.4f}")
 print(f"94% HDI: {az.hdi(ate_samples, hdi_prob=0.94)}")
 ```
 
+## Convergence Diagnostics (R-hat)
+
+```python
+# R-hat is a Dataset/DataArray — NOT a scalar. Reduce to a single float:
+import numpy as np
+try:
+    rhat_ds = az.rhat(idata)
+    max_rhat = float(rhat_ds.to_array().max())
+except Exception:
+    max_rhat = float("nan")   # single chain — R-hat undefined
+print(f"Max R-hat: {max_rhat:.4f}  (convergence OK if < 1.01)")
+# Never use rhat_ds directly as a metric — it is a Dataset, not a scalar.
+```
+
 ## Posterior Visualisation
 
 ```python
