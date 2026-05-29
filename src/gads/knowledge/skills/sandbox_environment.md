@@ -1,6 +1,6 @@
 ---
 id: sandbox_environment
-description: "Sandbox constraints: pickle BLOCKED (use joblib), lightgbm/xgboost BROKEN (use sklearn HistGradientBoostingClassifier), vectorize all ops on 50K+ rows"
+description: "Sandbox constraints: pickle BLOCKED (use joblib), vectorize all ops on 50K+ rows. Causal stack available: dowhy, econml, causalml, causal-learn, linearmodels, statsmodels."
 triggers: ["available packages", "install", "import error", "sentiment", "textblob", "spacy", "nltk", "what packages", "ModuleNotFoundError", "feature engineering", "nlp", "text features", "text analysis", "classification"]
 ---
 # Sandbox Environment
@@ -12,17 +12,19 @@ The IPython kernel sandbox has a **fixed set of pre-installed packages**. You CA
 | Category | Packages |
 |---|---|
 | Data | pandas, numpy, polars, pyarrow, duckdb |
-| ML/Modeling | scikit-learn, joblib, torch, shap |
+| ML/Modeling | scikit-learn, joblib, torch, lightgbm, xgboost, shap |
+| Causal Inference | dowhy, econml, causalml, causallearn (`causal-learn`), linearmodels, statsmodels |
 | NLP/Embeddings | sentence-transformers (`all-MiniLM-L6-v2` cached), nltk, textblob |
-| Visualization | matplotlib, seaborn, plotly, kaleido |
+| Visualization | matplotlib, seaborn, plotly, kaleido, networkx |
 | HTTP/Async | httpx, fastapi, uvicorn |
 | Notebook | jupyter_client, ipykernel, nbformat |
+
+For causal inference patterns see skills: `causal_inference_dowhy`, `causal_ml_econml`, `causal_discovery`.
 
 ## NOT Available (do NOT import)
 
 - `spacy`, `transformers` (huggingface), `gensim`, `langchain`
 - `catboost` — blocked
-- `lightgbm`, `xgboost` — **BROKEN**: fail with `libgomp.so.1: cannot open shared object file`. Use sklearn instead (see below).
 - `vaderSentiment` standalone — use `nltk.sentiment.vader` instead
 - `pickle` — **BLOCKED by sandbox security policy**. Use `joblib` for model serialization instead.
 
@@ -44,18 +46,28 @@ sia = SentimentIntensityAnalyzer()
 scores = sia.polarity_scores(text)  # {'neg': .., 'neu': .., 'pos': .., 'compound': ..}
 ```
 
-## Gradient Boosting — Use sklearn ONLY
+## Gradient Boosting — All Options Available
 
-`lightgbm` and `xgboost` are broken in this sandbox (missing `libgomp.so.1`). Always use sklearn's built-in GBM:
+`lightgbm` and `xgboost` are **working** (libgomp1 is installed). All three options are available:
 
 ```python
+# Option A: sklearn (always safe, no extra deps)
 from sklearn.ensemble import HistGradientBoostingClassifier
-# Fast, handles large datasets well, no external library deps
 model = HistGradientBoostingClassifier(max_iter=200, random_state=42)
+model.fit(X_train, y_train)
+
+# Option B: LightGBM
+import lightgbm as lgb
+model = lgb.LGBMClassifier(n_estimators=200, random_state=42)
+model.fit(X_train, y_train)
+
+# Option C: XGBoost
+import xgboost as xgb
+model = xgb.XGBClassifier(n_estimators=200, random_state=42, eval_metric='logloss')
 model.fit(X_train, y_train)
 ```
 
-Or for feature importance via a Random Forest:
+For feature importance via a Random Forest:
 ```python
 from sklearn.ensemble import RandomForestClassifier
 model = RandomForestClassifier(n_estimators=100, n_jobs=-1, random_state=42)

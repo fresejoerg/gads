@@ -9,7 +9,7 @@ class RouterInput(BaseModel):
     available_recipes: List[Dict[str, Any]] = []
 
 class RouterOutput(BaseModel):
-    task_type: str = Field(description="One of: binary_classification, regression, time_series, eda, clustering, thematic_analysis, semantic_search, or 'unknown'")
+    task_type: str = Field(description="One of: binary_classification, regression, time_series, eda, clustering, thematic_analysis, semantic_search, causal_inference, or 'unknown'")
     data_modality: str = Field(description="One of: tabular, image, text, unstructured_text, audio, or 'unknown'")
     matched_recipe_id: Optional[str] = Field(None, description="The ID of a recipe that perfectly matches the methodology required for the objective.")
     confidence: float = Field(description="Score between 0.0 and 1.0")

@@ -101,6 +101,7 @@ You also have access to a library of `AVAILABLE RECIPES` (Standard Operating Pro
 4. **EDA**: General exploratory analysis.
 5. **Tabular**: Structured data (CSV, SQL).
 6. **Unstructured Text**: Raw text, reviews, feedback, documents.
+7. **Causal Inference**: Estimating the effect of a treatment or intervention on an outcome, heterogeneous treatment effects, or discovering causal structure from observational data. Signals: 'treatment effect', 'causal effect', 'ATE', 'confounder', 'intervention', 'counterfactual', 'uplift', 'what causes', 'causal discovery', 'DAG', 'instrumental variable', 'propensity score', 'difference-in-differences'.
 
 ### RECIPE MATCHING:
 - Review the `AVAILABLE RECIPES` carefully. 
