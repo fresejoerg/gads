@@ -34,4 +34,5 @@ dependencies = [
     "kaleido>=0.2.1",
     "leather>=0.4.1",
     "pygal>=3.1.0",
+    "markdown>=3.10.2",
 ]
