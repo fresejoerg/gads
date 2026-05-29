@@ -14,11 +14,75 @@ triggers: ["pymc", "bambi", "bayesian", "posterior", "MCMC", "prior", "credible 
 | Want to incorporate domain priors | **PyMC** |
 | Dataset > 50K rows | Use ADVI (see below) or sample 10K rows |
 
+## Schema Analysis and Data Preparation Patterns
+
+```python
+import pandas as pd
+import numpy as np
+
+# 1. Identify confounders automatically
+TEMPORAL_ID_PATTERNS = {"time", "date", "timestamp", "id", "index"}
+confounder_cols = [
+    c for c in df.columns
+    if c not in (treatment_col, outcome_col)
+    and df[c].dtype in [np.float64, np.float32, np.int64, np.int32]
+    and not any(p in c.lower() for p in TEMPORAL_ID_PATTERNS)
+]
+if len(confounder_cols) > 10:
+    corrs = df[confounder_cols].corrwith(df[outcome_col]).abs()
+    confounder_cols = corrs.nlargest(10).index.tolist()
+print(f"Confounders ({len(confounder_cols)}): {confounder_cols}")
+
+# 2. Engineer binary treatment from continuous column
+global_median = df[treatment_col].median()   # compute on FULL dataset before sampling
+binary_treatment_col = f"high_{treatment_col}"
+df[binary_treatment_col] = (df[treatment_col] > global_median).astype(int)
+treatment_col = binary_treatment_col
+
+# 3. Stratified subsample for MCMC (≤5,000 rows)
+TARGET_N = 5000
+minority_frac = df[outcome_col].value_counts(normalize=True).min()
+print(f"Minority class fraction: {minority_frac:.4f}")
+
+if len(df) > TARGET_N:
+    minority_val = df[outcome_col].value_counts().idxmin()
+    minority_df = df[df[outcome_col] == minority_val]
+    majority_df = df[df[outcome_col] != minority_val]
+
+    if minority_frac < 0.10:
+        # Preserve ALL minority rows; fill remaining slots with majority
+        n_majority = max(TARGET_N - len(minority_df), len(minority_df))
+        majority_sample = majority_df.sample(
+            min(n_majority, len(majority_df)), random_state=42
+        )
+        df_model = pd.concat([minority_df, majority_sample]).sample(
+            frac=1, random_state=42
+        ).reset_index(drop=True)
+    else:
+        df_model = df.sample(TARGET_N, random_state=42).reset_index(drop=True)
+else:
+    df_model = df.copy()
+
+print(f"df_model shape: {df_model.shape}")
+print(f"Class balance in df_model: {df_model[outcome_col].value_counts(normalize=True).to_dict()}")
+
+# 4. Standardise continuous confounders
+from sklearn.preprocessing import StandardScaler
+scaler = StandardScaler()
+df_model[confounder_cols] = scaler.fit_transform(df_model[confounder_cols])
+```
+
+## Programmatic Formula Construction (never hardcode column names)
+
+```python
+formula = f"{outcome_col} ~ {treatment_col} + {' + '.join(confounder_cols)}"
+print(f"Formula: {formula}")
+```
+
 ## ⚠️ SANDBOX PERFORMANCE RULES (mandatory)
-- **Bambi MCMC benchmarks in sandbox:** ~7s / 1K rows, ~60s / 8K rows (draws=500, tune=300, chains=1)
-- **Safe rule:** subsample to ≤5K rows for MCMC; ≤20K rows for ADVI
-- Set `draws=500, tune=300, chains=1, cores=1` for sandbox MCMC (not the defaults)
-- Always set `random_seed=42` and `progressbar=False`
+- **MCMC benchmark:** ~7s / 1K rows → safe limit is **5,000 rows** (draws=500, tune=300, chains=1)
+- **Subsampling is the recipe's job** — use the stratified sampling pattern above, not ad-hoc slicing
+- Always: `chains=1, cores=1, progressbar=False, random_seed=42`
 
 ---
 

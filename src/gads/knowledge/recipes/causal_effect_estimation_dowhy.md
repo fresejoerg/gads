@@ -1,6 +1,6 @@
 ---
 id: causal_effect.observational.dowhy
-version: 1.0.0
+version: 1.1.0
 schema_version: 1
 author: gads-core
 
@@ -23,31 +23,62 @@ requires:
 # ——— DAG TEMPLATE ———
 dag:
   - id: define_causal_question
-    intent: "Identify the treatment variable, outcome variable, and candidate observed confounders from the dataset schema. Print a summary of variable roles."
+    intent: >
+      From the dataset schema and objective, identify:
+      (1) TREATMENT: the column representing the intervention (if continuous, note it will
+          be binarised at its median in the next step);
+      (2) OUTCOME: the target column;
+      (3) CONFOUNDERS: ALL numeric columns that are neither treatment, outcome, nor
+          temporal/ID columns (common temporal/ID patterns: 'time', 'date', 'timestamp',
+          'id', 'index'). If more than 10 confounders exist, retain the 10 with the
+          highest absolute correlation with the outcome for tractability;
+      (4) CLASS BALANCE: compute the minority class fraction of the outcome. Print it —
+          this drives estimator selection.
+      Print a variable-role summary table.
     worker_tier: T2
-    produces: [treatment_col, outcome_col, confounder_cols]
+    produces: [treatment_col, outcome_col, confounder_cols, minority_class_frac]
     postconditions:
       - "isinstance(treatment_col, str)"
       - "isinstance(outcome_col, str)"
+      - "len(confounder_cols) <= 10"
 
-  - id: build_causal_graph
-    intent: "Construct the causal DAG as a GML string encoding the assumed causal structure among treatment, outcome, confounders, and any mediators or instruments. Instantiate a DoWhy CausalModel."
+  - id: engineer_and_build_graph
+    intent: >
+      (1) TREATMENT ENGINEERING: if treatment_col is continuous, create a binary column
+          `high_{treatment_col}` = 1 where value > median(treatment_col), else 0.
+          Update treatment_col to the new binary column name.
+      (2) GML CONSTRUCTION: build the GML string programmatically — loop over
+          confounder_cols to generate edges. Do NOT hardcode node IDs.
+          Pattern:
+            nodes = [treatment_col, outcome_col] + confounder_cols
+            edges = [(c, treatment_col) for c in confounder_cols] +
+                    [(c, outcome_col) for c in confounder_cols] +
+                    [(treatment_col, outcome_col)]
+            Then format as GML with directed=1.
+      (3) Instantiate CausalModel(data=df, treatment=treatment_col,
+          outcome=outcome_col, graph=gml_string).
     depends_on: [define_causal_question]
-    worker_tier: T1
-    produces: [causal_model]
+    worker_tier: T2
+    produces: [causal_model, treatment_col]
     postconditions:
       - "causal_model is not None"
 
   - id: identify_estimand
-    intent: "Call causal_model.identify_effect() to obtain the identified estimand. Print the estimand type (backdoor, frontdoor, or IV) and the adjustment set."
-    depends_on: [build_causal_graph]
-    worker_tier: T1
+    intent: "Call causal_model.identify_effect(proceed_when_unidentifiable=True). Print the estimand type and adjustment set."
+    depends_on: [engineer_and_build_graph]
+    worker_tier: T2
     produces: [identified_estimand]
     postconditions:
       - "identified_estimand is not None"
 
   - id: estimate_effect
-    intent: "Estimate the Average Treatment Effect (ATE) using the identified estimand. Use propensity-score weighting (econml.dml.LinearDML or DoWhy's propensity_score_weighting method). Store the numeric ATE in a variable named exactly `ate`."
+    intent: >
+      Select estimator based on minority_class_frac:
+      - If minority_class_frac < 0.05 (rare outcome): use backdoor.propensity_score_matching
+        (propensity_score_weighting produces NaN on severely imbalanced outcomes).
+      - If minority_class_frac >= 0.05: use backdoor.linear_regression (robust default).
+      Call causal_model.estimate_effect(identified_estimand, method_name=chosen_method,
+      target_units="ate"). Store float(causal_estimate.value) as `ate`. Print the ATE.
     depends_on: [identify_estimand]
     worker_tier: T2
     produces: [causal_estimate, ate]
@@ -56,7 +87,14 @@ dag:
     required_metrics: [ate]
 
   - id: refute_estimate
-    intent: "Run at minimum two refutation tests: (1) random_common_cause placebo and (2) data_subset_refuter. Print each refutation result and whether the estimate passes. Save a summary artifact."
+    intent: >
+      Run BOTH refuters using the existing causal_model and causal_estimate — do NOT
+      rebuild the model:
+      (1) placebo_treatment_refuter (placebo_type="permute", random_seed=42) — ATE
+          should collapse to ~0 with a permuted treatment;
+      (2) data_subset_refuter (subset_fraction=0.8, random_seed=42) — estimate should
+          be stable across subsamples.
+      Store results in refutation_results dict. Print both.
     depends_on: [estimate_effect]
     worker_tier: T2
     produces: [refutation_results]
@@ -65,21 +103,24 @@ dag:
 
 # ——— GLOBAL INVARIANTS ———
 invariants:
-  - "The treatment and outcome columns must never appear in the confounder adjustment set simultaneously."
-  - "Random seeds must be fixed for reproducibility (random_state=42)."
-  - "Refutation is mandatory — never report an ATE without running at least one refuter."
-  - "Specify the causal graph as a GML string passed to CausalModel(graph=...). Never use eval()."
+  - "CONFOUNDERS: infer from schema as numeric columns that are not treatment, outcome, or temporal/ID. Never ask the user to list them."
+  - "TREATMENT ENGINEERING: if treatment is continuous, always binarise at its median. Name the new column high_{original_name}."
+  - "GML CONSTRUCTION: always build the GML string programmatically from the confounder list. Never hardcode node IDs in the source code."
+  - "ESTIMATOR SELECTION: check minority_class_frac. Use propensity_score_matching for rare outcomes (<5%), linear_regression otherwise. Never use propensity_score_weighting — it produces NaN on imbalanced data."
+  - "REFUTATION: always reuse the existing causal_model object — never rebuild it. Both refuters are mandatory."
+  - "Random state must be 42 everywhere."
+  - "Store ATE as a plain Python float, not a numpy scalar."
 ---
 
 # Causal Effect Estimation with DoWhy (Observational Data)
 
 ## Rationale
-This recipe implements the industry-standard DoWhy four-step causal inference workflow: **Model → Identify → Estimate → Refute**. It is designed for observational datasets where a treatment and outcome are measured alongside potential confounders, but no randomised experiment was conducted. The mandatory refutation step protects against spurious causal claims.
+This recipe implements the DoWhy four-step workflow: **Model → Identify → Estimate → Refute**. It encodes the methodology decisions that should not need to appear in a spec: confounder identification from the schema, treatment engineering from continuous variables, estimator selection based on outcome class balance, and programmatic GML construction.
 
 ## When to use
-Use when the objective is to estimate *how much* a treatment (binary or continuous) causally affects an outcome, given observational tabular data. Examples: effect of a medication on recovery, impact of a price change on demand, influence of education on earnings.
+Use when the objective is to estimate *how much* a treatment causally affects an outcome in observational tabular data. The spec needs only to identify the treatment column, outcome column, and any columns that are purely temporal or identifiers (to exclude from confounders).
 
 ## Key Constraints
-- A treatment column and outcome column must be identifiable from the schema.
-- The causal graph must encode domain assumptions — instruct the user to review the assumed edges.
-- Always run refutation before reporting the ATE to the Synthesizer.
+- Treatment and outcome must be identifiable from the schema and objective.
+- Temporal/ID columns must be excluded from the confounder set — the recipe infers this automatically.
+- Refutation is mandatory before reporting an ATE.

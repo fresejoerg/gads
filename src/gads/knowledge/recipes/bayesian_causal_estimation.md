@@ -1,6 +1,6 @@
 ---
 id: causal_effect.bayesian.pymc
-version: 1.0.0
+version: 1.1.0
 schema_version: 1
 author: gads-core
 
@@ -23,15 +23,37 @@ requires:
 # ——— DAG TEMPLATE ———
 dag:
   - id: prepare_bayesian_inputs
-    intent: "Identify treatment, outcome, and confounder columns. Subsample to ≤10K rows if dataset exceeds that size (required for sandbox MCMC/ADVI performance). Standardise continuous confounders (zero mean, unit variance). Print final shapes and variable summary."
+    intent: >
+      From the dataset schema and objective:
+      (1) TREATMENT: identify treatment column. If continuous, compute its global
+          median (before any subsampling) and store it. Note that binarisation
+          at that median happens in this same step.
+      (2) OUTCOME: identify outcome column. Check minority class fraction — print it.
+      (3) CONFOUNDERS: numeric columns that are not treatment, outcome, or temporal/ID
+          columns (patterns: 'time', 'date', 'timestamp', 'id', 'index'). Cap at 10
+          by highest absolute correlation with outcome.
+      (4) SUBSAMPLING: if len(df) > 5000:
+            - If minority_frac < 0.10: stratified — take ALL minority rows, then
+              sample majority rows to reach 5000 total.
+            - Else: random sample to 5000 rows.
+          Store as df_model.
+      (5) TREATMENT ENGINEERING: create binary column high_{treatment_col} = 1
+          where value > global_median, else 0, on df_model.
+      (6) STANDARDISE continuous confounders (zero mean, unit variance) on df_model.
+      Print final shapes, class balance, and variable roles.
     worker_tier: T2
-    produces: [df_model, treatment_col, outcome_col, confounder_cols]
+    produces: [df_model, treatment_col, outcome_col, confounder_cols, minority_class_frac]
     postconditions:
-      - "len(df_model) <= 10000"
+      - "len(df_model) <= 5000"
       - "isinstance(treatment_col, str)"
 
   - id: specify_bayesian_model
-    intent: "Using Bambi, specify a Bayesian regression model: outcome ~ treatment + confounders. Use family='bernoulli' for binary outcomes, 'gaussian' for continuous. Define weakly informative priors (Normal(0, 0.5) for treatment, Normal(0, 1) for confounders). Print the model summary."
+    intent: >
+      Build a Bambi model using the prepared df_model:
+        formula = f"{outcome_col} ~ {treatment_col} + {' + '.join(confounder_cols)}"
+        family = "bernoulli" if outcome is binary (0/1), else "gaussian"
+      Do NOT hardcode variable names — build the formula string programmatically.
+      Print the model summary.
     depends_on: [prepare_bayesian_inputs]
     worker_tier: T2
     produces: [bayesian_model]
@@ -39,7 +61,12 @@ dag:
       - "bayesian_model is not None"
 
   - id: fit_posterior
-    intent: "Fit the model. For ≤5K rows: use MCMC with draws=500, tune=300, chains=1, cores=1, progressbar=False. For >5K rows: call model.build() then use PyMC ADVI via `with model.backend.model: approx=pm.fit(n=20000, method='advi', progressbar=False); idata=approx.sample(2000)`. Store the InferenceData in `idata`."
+    intent: >
+      Fit using MCMC (≤5K rows is fast enough — ~7s per 1K rows in the sandbox):
+        idata = bayesian_model.fit(draws=500, tune=300, chains=1, cores=1,
+                                   target_accept=0.9, random_seed=42, progressbar=False)
+      Save idata to disk: joblib.dump(idata, "bayesian_idata.joblib")
+      Print the InferenceData groups to confirm posterior was sampled.
     depends_on: [specify_bayesian_model]
     worker_tier: T2
     produces: [idata]
@@ -47,23 +74,36 @@ dag:
       - "idata is not None"
 
   - id: extract_ate_and_uncertainty
-    intent: "Extract the posterior distribution of the treatment coefficient. Compute: mean ATE, standard deviation, and 94% Highest Density Interval (HDI) using arviz. Store the mean ATE in a variable named exactly `ate`. Compute convergence as `max_rhat = float(az.rhat(idata).to_array().max())` if multiple chains were run, else set `max_rhat = float('nan')`. Print the full uncertainty summary including P(effect > 0)."
+    intent: >
+      Extract from idata.posterior[treatment_col]:
+        ate = float(posterior_samples.mean())
+        ate_hdi = az.hdi(posterior_samples, hdi_prob=0.94)
+        p_positive = float((posterior_samples > 0).mean())
+        try:
+            max_rhat = float(az.rhat(idata).to_array().max())
+        except Exception:
+            max_rhat = float("nan")   # single chain — rhat undefined
+      Print a summary table. Store ate as required metric.
     depends_on: [fit_posterior]
     worker_tier: T2
-    produces: [ate, ate_hdi, ate_posterior, max_rhat]
+    produces: [ate, ate_hdi, p_positive, max_rhat]
     postconditions:
       - "isinstance(ate, float)"
     required_metrics: [ate]
 
   - id: visualize_posterior
-    intent: "Plot the posterior distribution of the treatment effect as a histogram with the mean (red dashed line), zero-effect reference (black dotted), and 94% HDI shaded region. Save as Figure 1. Also save an ArviZ forest plot of all coefficients as Figure 2."
+    intent: >
+      Plot the posterior distribution of the treatment coefficient:
+      histogram with mean (red dashed), zero-effect reference (black dotted),
+      and 94% HDI shaded. Annotate P(effect > 0). Save as Figure 1 (posterior_ate.png).
+      Also compute and print the naive (unadjusted) association for comparison.
     depends_on: [extract_ate_and_uncertainty]
     worker_tier: T2
     postconditions:
       - "ate is not None"
 
   - id: posterior_predictive_check
-    intent: "Run a posterior predictive check: sample from the posterior predictive distribution and compare to the observed outcome distribution. Save the PPC plot as Figure 3. Comment on model fit quality."
+    intent: "Run a posterior predictive check via bayesian_model.predict(idata, kind='pps'). Plot observed vs predicted distribution. Save as Figure 2. Comment on model fit."
     depends_on: [visualize_posterior]
     worker_tier: T2
     postconditions:
@@ -71,22 +111,25 @@ dag:
 
 # ——— GLOBAL INVARIANTS ———
 invariants:
-  - "Always subsample to ≤10K rows before fitting — MCMC/ADVI on larger datasets will timeout in the sandbox."
-  - "Use ADVI (method='advi') not NUTS for sandbox runs. NUTS is reserved for the handover bundle."
-  - "Report the 94% HDI alongside the point estimate — the interval is the primary Bayesian deliverable."
-  - "Random seed must be 42 throughout for reproducibility."
-  - "Use progressbar=False in pm.fit() to keep stdout clean."
+  - "SUBSAMPLING: cap at 5,000 rows for MCMC. For imbalanced outcomes (<10% minority), use stratified sampling — ALL minority rows first, then fill with majority."
+  - "TREATMENT ENGINEERING: binarise continuous treatment at its GLOBAL median (computed before subsampling, so the threshold is representative of the full dataset)."
+  - "CONFOUNDER IDENTIFICATION: infer from schema — numeric columns that are not treatment, outcome, or temporal/ID. Never hardcode column names. Cap at 10."
+  - "FORMULA BUILDING: always build the Bambi formula string programmatically. Never hardcode variable names."
+  - "MCMC PARAMETERS: draws=500, tune=300, chains=1, cores=1, progressbar=False, random_seed=42."
+  - "R-HAT EXTRACTION: max_rhat = float(az.rhat(idata).to_array().max()) — rhat() returns a Dataset, not a scalar. Wrap in try/except for single-chain runs."
+  - "SAVE IDATA: always joblib.dump the InferenceData for downstream use."
+  - "Report 94% HDI and P(effect > 0) alongside the point estimate — these are the primary Bayesian deliverables."
 ---
 
 # Bayesian Causal Effect Estimation (PyMC / Bambi)
 
 ## Rationale
-Unlike frequentist methods that produce a single point estimate, **Bayesian causal inference** yields a full **posterior distribution** over the treatment effect. This enables: (1) principled uncertainty quantification (94% HDI instead of p-values), (2) incorporation of prior domain knowledge, (3) natural handling of small or imbalanced samples, and (4) counterfactual simulation by sampling from the posterior. This recipe uses Bambi (on top of PyMC) for standard regression models and ArviZ for posterior visualisation.
+Bayesian causal inference yields a full posterior distribution over the treatment effect rather than a point estimate, enabling principled uncertainty quantification, natural handling of imbalanced outcomes, and incorporation of domain priors. This recipe encodes all methodology decisions — subsampling strategy, treatment engineering, MCMC parameters, formula construction — so the spec needs only to identify variable roles and the research question.
 
 ## When to use
-Use when uncertainty quantification matters more than raw speed: medical/clinical studies, small-N experiments, hierarchical data (users nested in markets), or when you want to encode prior knowledge about plausible effect sizes. Also use when the outcome is rare (like fraud) and you need the posterior probability that the effect is positive, rather than a NaN-prone IPS weight.
+Use when uncertainty quantification matters: medical/clinical studies, rare-event outcomes, small samples, or when the posterior probability that an effect is positive is more interpretable than a p-value. Particularly robust for severely imbalanced outcomes where propensity weighting fails.
 
 ## Key Constraints
-- Subsample to ≤10K rows for sandbox fits. Full-dataset runs belong in the handover bundle.
-- ADVI is the required fitting method in the sandbox; NUTS is too slow.
-- HDI, not confidence intervals — Bayesian credible intervals have a direct probability interpretation.
+- Spec must identify treatment and outcome columns (or enough description to infer them).
+- Spec should flag any purely temporal or ID columns so they are excluded from confounders.
+- Full-dataset MCMC runs belong in the handover bundle — the recipe enforces the 5K sandbox limit.

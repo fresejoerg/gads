@@ -15,6 +15,62 @@ from dowhy.causal_graph import CausalGraph  # ❌ not the right import path
 import networkx as nx; G = nx.DiGraph()    # ❌ do NOT pass nx graph to CausalModel
 ```
 
+## Schema Analysis Patterns (run before building the model)
+
+```python
+import pandas as pd
+import numpy as np
+
+# 1. Identify confounders automatically from schema
+TEMPORAL_ID_PATTERNS = {"time", "date", "timestamp", "id", "index"}
+confounder_cols = [
+    c for c in df.columns
+    if c not in (treatment_col, outcome_col)
+    and df[c].dtype in [np.float64, np.float32, np.int64, np.int32]
+    and not any(p in c.lower() for p in TEMPORAL_ID_PATTERNS)
+]
+# Cap at 10 by absolute correlation with outcome
+if len(confounder_cols) > 10:
+    corrs = df[confounder_cols].corrwith(df[outcome_col]).abs()
+    confounder_cols = corrs.nlargest(10).index.tolist()
+print(f"Confounders ({len(confounder_cols)}): {confounder_cols}")
+
+# 2. Engineer binary treatment from continuous column
+global_median = df[treatment_col].median()
+binary_treatment_col = f"high_{treatment_col}"
+df[binary_treatment_col] = (df[treatment_col] > global_median).astype(int)
+treatment_col = binary_treatment_col   # update variable
+
+# 3. Check class balance → drives estimator selection
+minority_frac = df[outcome_col].value_counts(normalize=True).min()
+print(f"Minority class fraction: {minority_frac:.4f}")
+estimator = (
+    "backdoor.propensity_score_matching"
+    if minority_frac < 0.05
+    else "backdoor.linear_regression"
+)
+print(f"Selected estimator: {estimator}")
+# NOTE: NEVER use propensity_score_weighting — it produces NaN for rare outcomes.
+```
+
+## Programmatic GML Construction (never hardcode node IDs)
+
+```python
+def build_gml(treatment, outcome, confounders):
+    nodes = [treatment, outcome] + list(confounders)
+    lines = ["graph [", "  directed 1"]
+    for n in nodes:
+        lines.append(f'  node [ id "{n}" label "{n}" ]')
+    for c in confounders:
+        lines.append(f'  edge [ source "{c}" target "{treatment}" ]')
+        lines.append(f'  edge [ source "{c}" target "{outcome}" ]')
+    lines.append(f'  edge [ source "{treatment}" target "{outcome}" ]')
+    lines.append("]")
+    return "\n".join(lines)
+
+gml_string = build_gml(treatment_col, outcome_col, confounder_cols)
+```
+
 ## ✅ The 4-Step Workflow (DoWhy 0.14)
 
 ```python
