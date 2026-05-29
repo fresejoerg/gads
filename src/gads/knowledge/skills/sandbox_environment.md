@@ -14,12 +14,13 @@ The IPython kernel sandbox has a **fixed set of pre-installed packages**. You CA
 | Data | pandas, numpy, polars, pyarrow, duckdb |
 | ML/Modeling | scikit-learn, joblib, torch, lightgbm, xgboost, shap |
 | Causal Inference | dowhy, econml, causalml, causallearn (`causal-learn`), linearmodels, statsmodels |
+| Bayesian Causal | pymc, arviz, bambi, pycausalimpact (`from causalimpact import CausalImpact`), pgmpy, CausalInference |
 | NLP/Embeddings | sentence-transformers (`all-MiniLM-L6-v2` cached), nltk, textblob |
 | Visualization | matplotlib, seaborn, plotly, kaleido, networkx |
 | HTTP/Async | httpx, fastapi, uvicorn |
 | Notebook | jupyter_client, ipykernel, nbformat |
 
-For causal inference patterns see skills: `causal_inference_dowhy`, `causal_ml_econml`, `causal_discovery`.
+For causal inference patterns see skills: `causal_inference_dowhy`, `causal_ml_econml`, `causal_discovery`, `bayesian_causal_pymc`, `causal_impact_timeseries`.
 
 ## NOT Available (do NOT import)
 
