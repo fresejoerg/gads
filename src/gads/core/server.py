@@ -1485,6 +1485,17 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                             session.commit()
                     # Fail-open: fall through to synthesis
 
+            # 4d. FINAL ARTIFACT HARDENING PASS
+            # Re-harden all JSON files in the workspace. A task can overwrite a previously
+            # hardened file (e.g. task 2 re-saves rating_distribution_chart.json), which
+            # re-introduces bdata encoding. This pass runs once per attempt before synthesis.
+            for _jf in _get_recursive_files(workspace_dir):
+                if _jf["name"].endswith(".json") and not _jf["name"].endswith(".meta.json"):
+                    try:
+                        harden_json_artifact(os.path.join(workspace_dir, _jf["name"]))
+                    except Exception:
+                        pass
+
             # 5. SYNTHESIS & CRITIQUE LOOP
             synthesizer_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
             synthesizer_model = hierarchy.get("T2", {}).get("models", synthesizer_fallback)[0]
