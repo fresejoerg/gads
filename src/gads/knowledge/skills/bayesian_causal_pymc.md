@@ -14,6 +14,18 @@ triggers: ["pymc", "bambi", "bayesian", "posterior", "MCMC", "prior", "credible 
 | Want to incorporate domain priors | **PyMC** |
 | Dataset > 50K rows | Use ADVI (see below) or sample 10K rows |
 
+## EDA Scalar Patterns (always store these early)
+
+```python
+# Store these as plain Python scalars immediately after loading — postconditions check them:
+naive_outcome_rate  = float(df[outcome_col].mean())
+minority_class_frac = float(df[outcome_col].value_counts(normalize=True).min())
+n_rows = int(len(df))
+print(f"naive_outcome_rate={naive_outcome_rate:.6f}")
+print(f"minority_class_frac={minority_class_frac:.6f}")
+print(f"n_rows={n_rows}")
+```
+
 ## Schema Analysis and Data Preparation Patterns
 
 ```python

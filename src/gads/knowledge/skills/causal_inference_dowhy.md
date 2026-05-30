@@ -131,6 +131,16 @@ ate = float(causal_estimate.value)
 # )
 ```
 
+## EDA Scalar Patterns (store these for postconditions)
+
+```python
+# Always store these as plain Python scalars after loading the data:
+naive_outcome_rate = float(df[outcome_col].mean())   # e.g. fraud rate
+minority_class_frac = float(df[outcome_col].value_counts(normalize=True).min())
+n_rows = int(len(df))
+print(f"Outcome rate: {naive_outcome_rate:.4f}  Minority frac: {minority_class_frac:.4f}  N: {n_rows}")
+```
+
 ## ✅ Refutation — REUSE causal_model FROM KERNEL, DO NOT REBUILD
 
 The `causal_model`, `identified_estimand`, and `causal_estimate` variables are
@@ -158,10 +168,15 @@ refute_subset = causal_model.refute_estimate(
 print("SUBSET REFUTATION:")
 print(refute_subset)
 
+# Store as plain scalars for postconditions and required_metrics:
+placebo_new_effect = float(refute_placebo.new_effect)
+subset_new_effect  = float(refute_subset.new_effect)
+print(f"placebo_new_effect={placebo_new_effect:.6f}")
+print(f"subset_new_effect={subset_new_effect:.6f}")
+
 refutation_results = {
-    "placebo_new_effect": float(refute_placebo.new_effect),
-    "placebo_p_value": float(refute_placebo.refutation_result.get("p_value", 0.0)),
-    "subset_new_effect": float(refute_subset.new_effect)
+    "placebo_new_effect": placebo_new_effect,
+    "subset_new_effect": subset_new_effect
 }
 print("refutation_results:", refutation_results)
 ```

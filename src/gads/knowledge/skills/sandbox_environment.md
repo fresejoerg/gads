@@ -26,6 +26,7 @@ For causal inference patterns see skills: `causal_inference_dowhy`, `causal_ml_e
 
 - `spacy`, `transformers` (huggingface), `gensim`, `langchain`
 - `catboost` — blocked
+- `imbalanced-learn` / `imblearn` — **NOT installed**. For class imbalance use `class_weight='balanced'` in sklearn models, or stratified subsampling. Never `from imblearn.over_sampling import SMOTE`.
 - `vaderSentiment` standalone — use `nltk.sentiment.vader` instead
 - `pickle` — **BLOCKED by sandbox security policy**. Use `joblib` for model serialization instead.
 

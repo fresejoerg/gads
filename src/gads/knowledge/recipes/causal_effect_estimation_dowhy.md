@@ -90,16 +90,17 @@ dag:
     intent: >
       Run BOTH refuters using the existing causal_model and causal_estimate — do NOT
       rebuild the model:
-      (1) placebo_treatment_refuter (placebo_type="permute", random_seed=42) — ATE
-          should collapse to ~0 with a permuted treatment;
-      (2) data_subset_refuter (subset_fraction=0.8, random_seed=42) — estimate should
-          be stable across subsamples.
-      Store results in refutation_results dict. Print both.
+      (1) placebo_treatment_refuter (placebo_type="permute", random_seed=42);
+      (2) data_subset_refuter (subset_fraction=0.8, random_seed=42).
+      Store float(refute_placebo.new_effect) as `placebo_new_effect` and
+      float(refute_subset.new_effect) as `subset_new_effect`.
+      Print both values and store in refutation_results dict.
     depends_on: [estimate_effect]
     worker_tier: T2
-    produces: [refutation_results]
+    produces: [refutation_results, placebo_new_effect, subset_new_effect]
     postconditions:
       - "refutation_results is not None"
+    required_metrics: [placebo_new_effect, subset_new_effect]
 
 # ——— GLOBAL INVARIANTS ———
 invariants:
@@ -107,9 +108,11 @@ invariants:
   - "TREATMENT ENGINEERING: if treatment is continuous, always binarise at its median. Name the new column high_{original_name}."
   - "GML CONSTRUCTION: always build the GML string programmatically from the confounder list. Never hardcode node IDs in the source code."
   - "ESTIMATOR SELECTION: check minority_class_frac. Use propensity_score_matching for rare outcomes (<5%), linear_regression otherwise. Never use propensity_score_weighting — it produces NaN on imbalanced data."
-  - "REFUTATION: always reuse the existing causal_model object — never rebuild it. Both refuters are mandatory."
+  - "CLASS IMBALANCE: never use imblearn/SMOTE (not installed). Use class_weight='balanced' in sklearn propensity models if needed."
+  - "REFUTATION: always reuse the existing causal_model object — never rebuild it. Both refuters are mandatory. Store placebo_new_effect and subset_new_effect as plain Python floats."
+  - "POSTCONDITION CONTRACTS: required_columns must contain only string column names from the actual dataset schema, never integer indices."
   - "Random state must be 42 everywhere."
-  - "Store ATE as a plain Python float, not a numpy scalar."
+  - "Store all metric values (ate, placebo_new_effect, subset_new_effect) as plain Python floats, not numpy scalars."
 ---
 
 # Causal Effect Estimation with DoWhy (Observational Data)
