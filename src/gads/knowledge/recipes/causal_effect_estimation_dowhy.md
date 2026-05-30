@@ -73,6 +73,9 @@ dag:
 
   - id: estimate_effect
     intent: >
+      PERFORMANCE: if the dataset has more than 20,000 rows, subsample BEFORE fitting
+      any models: df_sample = df.sample(20000, random_state=42). Use df_sample for all
+      CausalModel construction and estimation — do NOT run PSM or DML on the full dataset.
       Select estimator based on minority_class_frac:
       - If minority_class_frac < 0.05 (rare outcome): use backdoor.propensity_score_matching
         (propensity_score_weighting produces NaN on severely imbalanced outcomes).
@@ -88,6 +91,7 @@ dag:
 
   - id: refute_estimate
     intent: >
+      PERFORMANCE: use the same df_sample (20K rows) that was used to build causal_model.
       Run BOTH refuters using the existing causal_model and causal_estimate — do NOT
       rebuild the model:
       (1) placebo_treatment_refuter (placebo_type="permute", random_seed=42);
@@ -105,7 +109,7 @@ dag:
 # ——— GLOBAL INVARIANTS ———
 invariants:
   - "USE DOWHY LIBRARY: always use CausalModel.estimate_effect() — NEVER implement propensity scoring, DR/AIPW, or causal estimation manually from scratch. DoWhy handles all of this internally."
-  - "LARGE DATASET PERFORMANCE: for datasets >50K rows, subsample to 20K rows before fitting any models. Use df_sample = df.sample(20000, random_state=42)."
+  - "LARGE DATASET PERFORMANCE: for datasets >20K rows, ALWAYS subsample to 20K before building CausalModel. Use df_sample = df.sample(20000, random_state=42). Build CausalModel(data=df_sample, ...). NEVER run PSM or DML on the full dataset — it will timeout."
   - "CONFOUNDERS: infer from schema as numeric columns that are not treatment, outcome, or temporal/ID. Never ask the user to list them."
   - "TREATMENT ENGINEERING: if treatment is continuous, always binarise at its median. Name the new column high_{original_name}."
   - "GML CONSTRUCTION: always build the GML string programmatically from the confounder list. Never hardcode node IDs in the source code."
