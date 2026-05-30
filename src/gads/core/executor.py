@@ -50,6 +50,21 @@ def _sanitize_code(code: str) -> str:
     code = re.sub(r'\bpickle\.dump\b', 'joblib.dump', code)
     code = re.sub(r'\bpickle\.load\b', 'joblib.load', code)
 
+    # imblearn/imbalanced-learn not installed — inject a clear ImportError so the
+    # Coder's retry sees a meaningful error message and generates code without it.
+    if re.search(r'from imblearn|import imblearn', code):
+        code = re.sub(
+            r'(from imblearn[^\n]+)',
+            r'raise ImportError("imblearn is NOT installed in the sandbox. Use class_weight=\'balanced\' in sklearn models or stratified subsampling instead of SMOTE. Never use imblearn.") # \1',
+            code
+        )
+        code = re.sub(
+            r'(import imblearn[^\n]+)',
+            r'raise ImportError("imblearn is NOT installed in the sandbox. Use class_weight=\'balanced\' in sklearn models or stratified subsampling instead of SMOTE. Never use imblearn.") # \1',
+            code
+        )
+        print("  [Sanitizer] Blocked imblearn import (not installed in sandbox)", flush=True)
+
     # HistGradientBoosting auto-numeric patch: fit/predict/predict_proba silently drop
     # non-numeric (string/object) columns from DataFrames. Prevents the common failure
     # where model_a/model_b/prompt/response columns are left in X after a naive .drop().
