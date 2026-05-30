@@ -127,6 +127,21 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
         )
         print("  [Sanitizer] Removed binary predict_proba slice (multiclass context detected)", flush=True)
 
+    # PyMC/Bambi multiprocessing fix: chains>1 forks processes in Docker which hang
+    # indefinitely after sampling. Force single-chain execution regardless of LLM output.
+    if re.search(r'\bchains\s*=\s*[2-9]\d*', code):
+        code = re.sub(r'\bchains\s*=\s*[2-9]\d*', 'chains=1', code)
+        print("  [Sanitizer] Forced chains=1 (multiprocessing unsafe in Docker sandbox)", flush=True)
+    if re.search(r'\bcores\s*=\s*[2-9]\d*', code):
+        code = re.sub(r'\bcores\s*=\s*[2-9]\d*', 'cores=1', code)
+        print("  [Sanitizer] Forced cores=1 (multiprocessing unsafe in Docker sandbox)", flush=True)
+
+    # Unregularized LR performance fix: penalty=None on large datasets diverges slowly.
+    # Replace with C=1.0 (L2) for stable, fast convergence.
+    if re.search(r'LogisticRegression\s*\([^)]*penalty\s*=\s*None', code):
+        code = re.sub(r'\bpenalty\s*=\s*None', 'C=1.0', code)
+        print("  [Sanitizer] Replaced penalty=None with C=1.0 in LogisticRegression (performance)", flush=True)
+
     return code
 
 
