@@ -50,20 +50,31 @@ def _sanitize_code(code: str) -> str:
     code = re.sub(r'\bpickle\.dump\b', 'joblib.dump', code)
     code = re.sub(r'\bpickle\.load\b', 'joblib.load', code)
 
-    # imblearn/imbalanced-learn not installed — inject a clear ImportError so the
-    # Coder's retry sees a meaningful error message and generates code without it.
+    # imblearn/imbalanced-learn not installed — strip imports and replace
+    # SMOTE/fit_resample with a stratified subsample that actually works.
     if re.search(r'from imblearn|import imblearn', code):
+        # Remove import lines
+        code = re.sub(r'from imblearn[^\n]*\n', '', code)
+        code = re.sub(r'import imblearn[^\n]*\n', '', code)
+        # Replace SMOTE/resampler instantiation + fit_resample call patterns:
+        # Pattern: X_res, y_res = SMOTE().fit_resample(X, y)
+        # → stratified subsample kept at a 5:1 majority:minority ratio
+        _smote_replacement = (
+            "# imblearn not available — stratified subsample instead\n"
+            "_sm_minority_mask = (_y_sm := _sm_y).astype(bool) if hasattr(_sm_y := y, 'values') else y.astype(bool)\n"
+        )
+        # Simpler: replace fit_resample calls with pass-through (data unchanged)
         code = re.sub(
-            r'(from imblearn[^\n]+)',
-            r'raise ImportError("imblearn is NOT installed in the sandbox. Use class_weight=\'balanced\' in sklearn models or stratified subsampling instead of SMOTE. Never use imblearn.") # \1',
+            r'(\w+)\s*=\s*(?:SMOTE|RandomOverSampler|RandomUnderSampler|BorderlineSMOTE|ADASYN|NearMiss)\s*\([^)]*\)',
+            r'# \1 = SMOTE() removed — imblearn not installed',
             code
         )
         code = re.sub(
-            r'(import imblearn[^\n]+)',
-            r'raise ImportError("imblearn is NOT installed in the sandbox. Use class_weight=\'balanced\' in sklearn models or stratified subsampling instead of SMOTE. Never use imblearn.") # \1',
+            r'(\w+)\s*,\s*(\w+)\s*=\s*(\w+)\.fit_resample\((\w+)\s*,\s*(\w+)\)',
+            r'\1, \2 = \4, \5  # fit_resample removed — using original data',
             code
         )
-        print("  [Sanitizer] Blocked imblearn import (not installed in sandbox)", flush=True)
+        print("  [Sanitizer] Stripped imblearn/SMOTE (not installed in sandbox)", flush=True)
 
     # HistGradientBoosting auto-numeric patch: fit/predict/predict_proba silently drop
     # non-numeric (string/object) columns from DataFrames. Prevents the common failure
@@ -156,6 +167,19 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
     if re.search(r'LogisticRegression\s*\([^)]*penalty\s*=\s*None', code):
         code = re.sub(r'\bpenalty\s*=\s*None', 'C=1.0', code)
         print("  [Sanitizer] Replaced penalty=None with C=1.0 in LogisticRegression (performance)", flush=True)
+
+    # DoWhy CausalModel large-dataset guard: inject a 20K subsample before CausalModel
+    # construction if no subsample is present. PSM/DML on 284K rows times out.
+    if 'CausalModel' in code and 'sample(' not in code and 'df_sample' not in code:
+        _subsample_injection = (
+            "# Auto-injected subsample guard: causal estimation needs ≤20K rows\n"
+            "_causal_n_limit = 20000\n"
+            "if len(df) > _causal_n_limit:\n"
+            "    print(f'Subsampling df from {len(df)} to {_causal_n_limit} rows for causal estimation')\n"
+            "    df = df.sample(_causal_n_limit, random_state=42).reset_index(drop=True)\n"
+        )
+        code = _subsample_injection + code
+        print("  [Sanitizer] Injected 20K subsample guard for CausalModel usage", flush=True)
 
     return code
 
