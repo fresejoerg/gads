@@ -46,6 +46,7 @@ dag:
     postconditions:
       - "len(df_model) <= 5000"
       - "isinstance(treatment_col, str)"
+    required_metrics: [naive_outcome_rate, minority_class_frac, n_rows]
 
   - id: specify_bayesian_model
     intent: >
