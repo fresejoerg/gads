@@ -92,6 +92,14 @@ print(f"Formula: {formula}")
 ```
 
 ## ⚠️ SANDBOX PERFORMANCE RULES (mandatory)
+
+**NEVER use `chains=2` or `cores=2`** — multiprocessing forks in the Docker sandbox can hang indefinitely after sampling completes. Always use:
+```python
+# ✅ ONLY correct sandbox parameters:
+idata = model.fit(draws=500, tune=300, chains=1, cores=1, progressbar=False, random_seed=42)
+# OR for raw PyMC:
+idata = pm.sample(draws=500, tune=300, chains=1, cores=1, progressbar=False, random_seed=42)
+```
 - **MCMC benchmark:** ~7s / 1K rows → safe limit is **5,000 rows** (draws=500, tune=300, chains=1)
 - **Subsampling is the recipe's job** — use the stratified sampling pattern above, not ad-hoc slicing
 - Always: `chains=1, cores=1, progressbar=False, random_seed=42`

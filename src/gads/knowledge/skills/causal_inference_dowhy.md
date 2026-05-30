@@ -5,6 +5,34 @@ triggers: ["causal", "dowhy", "treatment effect", "ATE", "average treatment effe
 ---
 # Causal Inference with DoWhy (version 0.14)
 
+## ❌ DO NOT IMPLEMENT FROM SCRATCH
+
+**Never implement propensity score matching, doubly-robust estimation, AIPW, or any causal estimator manually.** DoWhy implements all of these internally. Use `causal_model.estimate_effect()` — it handles propensity scores, outcome models, and weighting automatically.
+
+```python
+# ❌ NEVER DO THIS — do not build a manual DR/PSM estimator:
+# ps_model = LogisticRegression(...); ps_model.fit(X, T); ...
+# outcome_model = ...; DR_score = ...
+
+# ✅ ALWAYS DO THIS — use DoWhy's built-in estimators:
+causal_estimate = causal_model.estimate_effect(
+    identified_estimand,
+    method_name="backdoor.linear_regression",  # or propensity_score_matching
+    target_units="ate"
+)
+```
+
+If you must use sklearn for propensity scores (e.g., for cross-fitting), use **regularized** LR:
+```python
+# ✅ Fast, regularized propensity score model (never penalty=None on large datasets):
+ps_model = LogisticRegression(C=1.0, max_iter=200, solver='lbfgs', class_weight='balanced')
+```
+
+**For datasets >50K rows**: subsample to 20K before any propensity/outcome model fitting:
+```python
+df_sample = df.sample(20000, random_state=42) if len(df) > 20000 else df
+```
+
 ## ❌ WRONG IMPORTS — DO NOT USE THESE (they do not exist in DoWhy 0.14)
 
 ```python

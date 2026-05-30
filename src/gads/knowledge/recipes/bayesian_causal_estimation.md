@@ -115,7 +115,7 @@ invariants:
   - "TREATMENT ENGINEERING: binarise continuous treatment at its GLOBAL median (computed before subsampling, so the threshold is representative of the full dataset)."
   - "CONFOUNDER IDENTIFICATION: infer from schema — numeric columns that are not treatment, outcome, or temporal/ID. Never hardcode column names. Cap at 10."
   - "FORMULA BUILDING: always build the Bambi formula string programmatically. Never hardcode variable names."
-  - "MCMC PARAMETERS: draws=500, tune=300, chains=1, cores=1, progressbar=False, random_seed=42."
+  - "MCMC PARAMETERS: ALWAYS chains=1, cores=1. NEVER chains=2 or cores=2 — multiprocessing forks hang in Docker. draws=500, tune=300, progressbar=False, random_seed=42."
   - "R-HAT EXTRACTION: max_rhat = float(az.rhat(idata).to_array().max()) — rhat() returns a Dataset, not a scalar. Wrap in try/except for single-chain runs."
   - "SAVE IDATA: always joblib.dump the InferenceData for downstream use."
   - "Report 94% HDI and P(effect > 0) alongside the point estimate — these are the primary Bayesian deliverables."

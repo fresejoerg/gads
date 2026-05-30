@@ -104,6 +104,8 @@ dag:
 
 # ——— GLOBAL INVARIANTS ———
 invariants:
+  - "USE DOWHY LIBRARY: always use CausalModel.estimate_effect() — NEVER implement propensity scoring, DR/AIPW, or causal estimation manually from scratch. DoWhy handles all of this internally."
+  - "LARGE DATASET PERFORMANCE: for datasets >50K rows, subsample to 20K rows before fitting any models. Use df_sample = df.sample(20000, random_state=42)."
   - "CONFOUNDERS: infer from schema as numeric columns that are not treatment, outcome, or temporal/ID. Never ask the user to list them."
   - "TREATMENT ENGINEERING: if treatment is continuous, always binarise at its median. Name the new column high_{original_name}."
   - "GML CONSTRUCTION: always build the GML string programmatically from the confounder list. Never hardcode node IDs in the source code."
