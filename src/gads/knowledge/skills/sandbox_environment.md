@@ -1,6 +1,6 @@
 ---
 id: sandbox_environment
-description: "Sandbox constraints: pickle BLOCKED (use joblib), vectorize all ops on 50K+ rows. Causal stack available: dowhy, econml, causalml, causal-learn, linearmodels, statsmodels."
+description: "Sandbox constraints: pickle BLOCKED (use joblib), imblearn NOT installed. AutoML: autogluon.tabular + autogluon.timeseries available. Causal stack: dowhy, econml, causalml, pymc, bambi."
 triggers: ["available packages", "install", "import error", "sentiment", "textblob", "spacy", "nltk", "what packages", "ModuleNotFoundError", "feature engineering", "nlp", "text features", "text analysis", "classification"]
 ---
 # Sandbox Environment
@@ -13,6 +13,7 @@ The IPython kernel sandbox has a **fixed set of pre-installed packages**. You CA
 |---|---|
 | Data | pandas, numpy, polars, pyarrow, duckdb |
 | ML/Modeling | scikit-learn, joblib, torch, lightgbm, xgboost, shap |
+| **AutoML** | **autogluon.tabular** (`TabularPredictor`), **autogluon.timeseries** (`TimeSeriesPredictor`) |
 | Causal Inference | dowhy, econml, causalml, causallearn (`causal-learn`), linearmodels, statsmodels |
 | Bayesian Causal | pymc, arviz, bambi, pycausalimpact (`from causalimpact import CausalImpact`), pgmpy, CausalInference |
 | NLP/Embeddings | sentence-transformers (`all-MiniLM-L6-v2` cached), nltk, textblob |
@@ -20,6 +21,7 @@ The IPython kernel sandbox has a **fixed set of pre-installed packages**. You CA
 | HTTP/Async | httpx, fastapi, uvicorn |
 | Notebook | jupyter_client, ipykernel, nbformat |
 
+For AutoML (classification/regression/forecasting): see skill `autogluon_tabular`.
 For causal inference patterns see skills: `causal_inference_dowhy`, `causal_ml_econml`, `causal_discovery`, `bayesian_causal_pymc`, `causal_impact_timeseries`.
 
 ## NOT Available (do NOT import)
