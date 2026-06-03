@@ -69,7 +69,9 @@ dag:
     intent: >
       Extract and visualise model insights:
       (1) Compute feature importance:
-            fi = predictor.feature_importance(df_test, silent=True)
+            fi = predictor.feature_importance(df_test, subsample_size=1000, num_shuffle_sets=1, silent=True)
+          subsample_size=1000 and num_shuffle_sets=1 are MANDATORY — without them the permutation
+          importance runs over the full test set and will exceed the 600s sandbox timeout.
           fi is a DataFrame where the INDEX contains feature names and the column 'importance'
           contains the permutation importance scores. Access with fi.index and fi['importance'].
           Do NOT use fi.columns for feature names — they are in the index.

@@ -195,6 +195,19 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
             code = _ml_subsample_injection + code
         print("  [Sanitizer] Injected 50K ML training subsample guard", flush=True)
 
+    # AutoGluon feature_importance timeout guard: permutation importance over the full
+    # test set (10K+ rows, 5 shuffle sets) easily exceeds the 600s sandbox limit.
+    # Force subsample_size=1000, num_shuffle_sets=1 if not already specified.
+    if 'feature_importance(' in code and 'subsample_size' not in code:
+        code = re.sub(
+            r'\.feature_importance\(([^)]*?)\)',
+            lambda m: '.feature_importance(' + m.group(1).rstrip(', ') +
+                      (', ' if m.group(1).strip() else '') +
+                      'subsample_size=1000, num_shuffle_sets=1)',
+            code
+        )
+        print("  [Sanitizer] Injected subsample_size=1000, num_shuffle_sets=1 into feature_importance() call", flush=True)
+
     # DoWhy CausalModel large-dataset guard: inject a 20K subsample before CausalModel
     # construction if no subsample is present. PSM/DML on 284K rows times out.
     if 'CausalModel' in code and 'sample(' not in code and 'df_sample' not in code:
