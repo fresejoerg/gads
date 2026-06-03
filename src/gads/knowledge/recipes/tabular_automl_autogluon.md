@@ -54,9 +54,12 @@ dag:
                           .fit(df_train, presets='good_quality', time_limit=120,
                                excluded_model_types=['NN_TORCH', 'FASTAI'])
           eval_metric: 'roc_auc' for binary, 'accuracy' for multiclass, 'rmse' for regression.
-      (4) Evaluate on the test set. Store the primary metric score as `test_score`:
-            test_score = predictor.evaluate(df_test)[predictor.eval_metric]
-      (5) Print the leaderboard (top 8 models): predictor.leaderboard(df_test, silent=True).head(8)
+      (4) Evaluate on the test set using the leaderboard (more reliable than evaluate()):
+            leaderboard = predictor.leaderboard(df_test, silent=True)
+            test_score = float(leaderboard.iloc[0]['score_test'])
+          Do NOT use predictor.evaluate(df_test)[predictor.eval_metric] — the key name
+          may differ from eval_metric and will raise a KeyError.
+      (5) Print leaderboard.head(8) to show model rankings.
       (6) Save predictor: joblib.dump(predictor, 'model.joblib')
       (7) Emit the score immediately so it is captured in metrics.json:
             gads_emit_insight('model_score', f'{predictor.eval_metric}={test_score:.4f}, naive_baseline={naive_baseline:.4f}')
