@@ -168,6 +168,33 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
         code = re.sub(r'\bpenalty\s*=\s*None', 'C=1.0', code)
         print("  [Sanitizer] Replaced penalty=None with C=1.0 in LogisticRegression (performance)", flush=True)
 
+    # General ML training large-dataset guard: if code loads a CSV/parquet AND trains a
+    # classifier or regressor but has no .sample() call, inject a 50K row cap.
+    # AutoGluon, sklearn, xgboost, lightgbm all benefit; prevents Coder generation timeouts
+    # on 100K+ row datasets when the Planner forgot the sample_rows constraint.
+    _TRAINING_MARKERS = ['TabularPredictor', 'fit(', 'XGBClassifier', 'LGBMClassifier',
+                         'RandomForestClassifier', 'GradientBoosting', 'HistGradientBoosting']
+    _HAS_FILE_LOAD = re.search(r'read_csv|read_parquet|read_excel', code)
+    _HAS_TRAINING = any(m in code for m in _TRAINING_MARKERS)
+    _HAS_SAMPLE = 'sample(' in code or '.sample(' in code
+    if _HAS_FILE_LOAD and _HAS_TRAINING and not _HAS_SAMPLE:
+        _ml_subsample_injection = (
+            "# Auto-injected ML training guard: cap dataset at 50K rows to prevent timeout\n"
+            "_ml_row_limit = 50_000\n"
+            "if 'df' in dir() and hasattr(df, '__len__') and len(df) > _ml_row_limit:\n"
+            "    print(f'[SampleGuard] Subsampling from {len(df):,} to {_ml_row_limit:,} rows')\n"
+            "    df = df.sample(_ml_row_limit, random_state=42).reset_index(drop=True)\n"
+        )
+        # Inject after the last read_csv/read_parquet line
+        _load_match = list(re.finditer(r'(df\s*=\s*pd\.read_(?:csv|parquet|excel)\([^\n]+\))', code))
+        if _load_match:
+            last = _load_match[-1]
+            insert_pos = last.end()
+            code = code[:insert_pos] + "\n" + _ml_subsample_injection + code[insert_pos:]
+        else:
+            code = _ml_subsample_injection + code
+        print("  [Sanitizer] Injected 50K ML training subsample guard", flush=True)
+
     # DoWhy CausalModel large-dataset guard: inject a 20K subsample before CausalModel
     # construction if no subsample is present. PSM/DML on 284K rows times out.
     if 'CausalModel' in code and 'sample(' not in code and 'df_sample' not in code:

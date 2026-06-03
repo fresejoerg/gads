@@ -592,7 +592,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         if fo:
                             formalized_objective = fo
                 # Pull hints from YAML frontmatter
-                for key in ("target_column", "feature_columns", "filters", "domain", "recipe_id", "save_model"):
+                for key in ("target_column", "feature_columns", "filters", "domain", "recipe_id", "save_model", "sample_rows"):
                     if key in yaml_data:
                         spec_hints[key] = yaml_data[key]
             except Exception as e:
@@ -775,6 +775,37 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         print(f"  [Router] Intent: {intent.task_type} (Recipe: {intent.matched_recipe_id})", flush=True)
 
         if await is_cancelled(): return
+
+        # --- SAMPLE BUDGET ADVISOR (deterministic, no LLM) ---
+        # Checks dataset row count against task type and injects a sampling hint into
+        # spec_hints so the Planner includes subsampling in its first task description.
+        # Threshold: 50K rows for ML training recipes; 200K for lighter analysis.
+        # Override: spec frontmatter `sample_rows: N` always takes precedence.
+        _TRAINING_TASK_TYPES = {
+            "binary_classification", "multiclass_classification", "regression",
+            "classification", "automl", "tabular_modeling", "time_series_forecasting",
+            "forecasting", "time_series", "causal_inference",
+        }
+        _SAMPLE_THRESHOLD_TRAINING = 50_000
+        _SAMPLE_THRESHOLD_ANALYSIS = 200_000
+
+        if "sample_rows" not in spec_hints:
+            max_rows = 0
+            for f in planner_files:
+                rc = (f.columns_and_dtypes or {}).get("row_count", 0) or 0
+                max_rows = max(max_rows, rc)
+
+            if max_rows > 0:
+                is_training = intent.task_type in _TRAINING_TASK_TYPES
+                threshold = _SAMPLE_THRESHOLD_TRAINING if is_training else _SAMPLE_THRESHOLD_ANALYSIS
+                if max_rows > threshold:
+                    spec_hints["sample_rows"] = threshold
+                    print(
+                        f"  [SampleBudget] Dataset has {max_rows:,} rows "
+                        f"(task_type={intent.task_type}, threshold={threshold:,}). "
+                        f"Injecting sample_rows={threshold} hint for Planner.",
+                        flush=True
+                    )
 
         # --- MAIN WORKFLOW LOOP (Planning -> Execution -> Synthesis -> Critique) ---
         MAX_WORKFLOW_ATTEMPTS = 3
