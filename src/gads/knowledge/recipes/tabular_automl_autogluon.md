@@ -68,9 +68,15 @@ dag:
   - id: feature_importance_and_insights
     intent: >
       Extract and visualise model insights:
-      (1) Compute feature importance: `fi = predictor.feature_importance(df_test, silent=True)`.
-      (2) Plot a horizontal bar chart of the top 15 features by importance. Save as
-          `figure_1_feature_importance.json` (Plotly) or `figure_1_feature_importance.png`.
+      (1) Compute feature importance:
+            fi = predictor.feature_importance(df_test, silent=True)
+          fi is a DataFrame where the INDEX contains feature names and the column 'importance'
+          contains the permutation importance scores. Access with fi.index and fi['importance'].
+          Do NOT use fi.columns for feature names — they are in the index.
+      (2) Plot a horizontal bar chart of the top 15 features by importance:
+            fi_top = fi.head(15)
+            fig = px.bar(x=fi_top['importance'], y=fi_top.index, orientation='h')
+          Save as `figure_1_feature_importance.json`.
       (3) For classification: plot ROC curve (binary) or confusion matrix heatmap (multiclass).
           Save as `figure_2_model_performance.json`.
       (4) For regression: plot predicted vs actual scatter. Save as `figure_2_predicted_vs_actual.json`.
