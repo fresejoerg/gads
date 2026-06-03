@@ -54,9 +54,12 @@ dag:
                           .fit(df_train, presets='good_quality', time_limit=120,
                                excluded_model_types=['NN_TORCH', 'FASTAI'])
           eval_metric: 'roc_auc' for binary, 'accuracy' for multiclass, 'rmse' for regression.
-      (4) Evaluate on the test set. Store the primary metric score as `test_score`.
-      (5) Print the leaderboard (top 8 models).
+      (4) Evaluate on the test set. Store the primary metric score as `test_score`:
+            test_score = predictor.evaluate(df_test)[predictor.eval_metric]
+      (5) Print the leaderboard (top 8 models): predictor.leaderboard(df_test, silent=True).head(8)
       (6) Save predictor: joblib.dump(predictor, 'model.joblib')
+      (7) Emit the score immediately so it is captured in metrics.json:
+            gads_emit_insight('model_score', f'{predictor.eval_metric}={test_score:.4f}, naive_baseline={naive_baseline:.4f}')
     depends_on: [eda_and_target_profile]
     worker_tier: T2
     produces: [predictor, df_train, df_test, test_score, eval_metric]
