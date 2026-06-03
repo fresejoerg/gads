@@ -18,7 +18,7 @@ from gads.core.bus import bus, dispatcher_loop
 from gads.core.execution_hub import watchdog_loop, ExecutionHub
 from gads.core.database import init_db, engine
 from gads.core.models import Project, Task, Artifact, Instruction
-from gads.agents.planner import DataSciencePlanner, PlannerInput, ReconciliationReport, FileMetadata
+from gads.agents.planner import DataSciencePlanner, PlannerInput, PlannerTask, ReconciliationReport, FileMetadata
 from gads.agents.router import DataScienceRouter, RouterInput
 from gads.agents.plan_critique import PlanCritiqueAgent, PlanCritiqueInput
 from gads.agents.spec_drafter import SpecDrafterAgent, SpecDraftInput
@@ -867,6 +867,62 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                             user_hints={k: v for k, v in spec_hints.items() if k != "save_model"} or None
                         ), stream_callback=stream_planner_callback)
                         span.end(output=planner_res.content.model_dump())
+
+                        # --- RECIPE ENFORCER (deterministic post-Planner override) ---
+                        # The local model reliably ignores the MANDATORY recipe instruction
+                        # in the prompt. When a recipe is matched, replace the LLM's tasks
+                        # verbatim with tasks constructed from the recipe DAG nodes.
+                        # The node `intent` field is already a full Coder-ready description.
+                        if knowledge_report and knowledge_report.recommended_dag_nodes:
+                            enforced_steps = []
+                            for idx, node in enumerate(knowledge_report.recommended_dag_nodes):
+                                tier = node.get("worker_tier", "T2")
+                                model_id = (
+                                    hierarchy.get(tier, hierarchy.get("T2", {}))
+                                    .get("models", ["local_model"])[0]
+                                )
+
+                                postcondition: Dict[str, Any] = {"output_type": "value"}
+                                if node.get("required_metrics"):
+                                    postcondition["required_metrics"] = node["required_metrics"]
+                                if node.get("produces"):
+                                    postcondition["required_variables"] = node["produces"]
+
+                                description = node.get("intent", node.get("id", "")).strip()
+                                if idx == 0:
+                                    hint_lines = []
+                                    if spec_hints.get("target_column"):
+                                        hint_lines.append(f"Target column: `{spec_hints['target_column']}`.")
+                                    if spec_hints.get("sample_rows"):
+                                        n = spec_hints["sample_rows"]
+                                        hint_lines.append(
+                                            f"SAMPLING CONSTRAINT: immediately after loading, apply "
+                                            f"`df = df.sample({n}, random_state=42).reset_index(drop=True)` "
+                                            f"to cap the dataset at {n:,} rows."
+                                        )
+                                    if hint_lines:
+                                        description += "\n\n[SPEC HINTS: " + " ".join(hint_lines) + "]"
+
+                                skill_matches = registry.find_skills_scored(description)
+                                attached = [s.id for s, _ in skill_matches]
+                                if "sandbox_environment" not in attached:
+                                    attached.append("sandbox_environment")
+
+                                enforced_steps.append(PlannerTask(
+                                    description=description,
+                                    assigned_to=model_id,
+                                    postcondition=postcondition,
+                                    attached_skills=attached
+                                ))
+
+                            original_count = len(planner_res.content.steps)
+                            planner_res.content.steps = enforced_steps
+                            print(
+                                f"  [RecipeEnforcer] Replaced {original_count} Planner tasks with "
+                                f"{len(enforced_steps)} recipe DAG nodes "
+                                f"(recipe: {knowledge_report.recipe_id})",
+                                flush=True
+                            )
 
                         plan_task.status = "completed"
                         plan_task.result_json = {
