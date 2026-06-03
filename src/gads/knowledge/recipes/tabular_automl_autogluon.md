@@ -77,7 +77,9 @@ dag:
             fi_top = fi.head(15)
             fig = px.bar(x=fi_top['importance'], y=fi_top.index, orientation='h')
           Save as `figure_1_feature_importance.json`.
-      (3) For classification: plot ROC curve (binary) or confusion matrix heatmap (multiclass).
+      (3) For classification: plot ROC curve (binary) or confusion matrix (multiclass).
+          For confusion matrix use px.imshow(cm, text_auto=True) where cm = confusion_matrix(y_test, y_pred).
+          Do NOT use px.heatmap() — it does not exist; use px.imshow() instead.
           Save as `figure_2_model_performance.json`.
       (4) For regression: plot predicted vs actual scatter. Save as `figure_2_predicted_vs_actual.json`.
       (5) Emit a `gads_emit_insight()` call summarising the top 3 features and the test score
