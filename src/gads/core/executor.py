@@ -195,6 +195,12 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
             code = _ml_subsample_injection + code
         print("  [Sanitizer] Injected 50K ML training subsample guard", flush=True)
 
+    # Remove hallucinated AutoGluon imports (these packages don't exist)
+    if 'AutogluonModels' in code or 'from gads_emit_insight import' in code:
+        code = re.sub(r'from AutogluonModels import [^\n]+\n?', '', code)
+        code = re.sub(r'from gads_emit_insight import [^\n]+\n?', '', code)
+        print("  [Sanitizer] Removed hallucinated AutogluonModels/gads_emit_insight imports", flush=True)
+
     # Fix common local-model typo: target_mol (OCR-like confusion) → target_col
     if 'target_mol' in code:
         code = code.replace('target_mol', 'target_col')
