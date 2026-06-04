@@ -43,6 +43,8 @@ dag:
             print("naive_baseline:", naive_baseline)
       Do NOT use pd.api.types.is_datetime64_ns — it does not exist.
       Do NOT use f-strings for printing naive_baseline — use plain print() as shown above.
+      Do NOT wrap code in def main() or any function — all variables must be at global scope
+      so the next task can read them from the kernel.
     worker_tier: T2
     produces: [target_col, problem_type, drop_cols, naive_baseline]
     postconditions:
@@ -52,24 +54,25 @@ dag:
 
   - id: train_automl_model
     intent: >
-      Train an AutoGluon TabularPredictor on the dataset:
-      (1) Drop ID-like columns identified in eda_and_target_profile.
-      (2) Split into train/test using stratified split for classification (test_size=0.2,
-          random_state=42), or random split for regression.
-      (3) Fit the predictor:
-            predictor = TabularPredictor(label=target_col, eval_metric=eval_metric, verbosity=0)
-                          .fit(df_train, presets='good_quality', time_limit=120,
-                               excluded_model_types=['NN_TORCH', 'FASTAI'])
-          eval_metric: 'roc_auc' for binary, 'accuracy' for multiclass, 'rmse' for regression.
-      (4) Evaluate on the test set using the leaderboard (more reliable than evaluate()):
+      Train an AutoGluon TabularPredictor. Use EXACTLY the code below — do not vary the structure.
+      DO NOT call pd.read_csv() — the DataFrame `df` is already in the kernel from the previous task.
+      (1) Drop ID-like columns and set eval_metric:
+            df_clean = df.drop(columns=drop_cols, errors='ignore')
+            eval_metric = 'roc_auc' if problem_type == 'binary' else ('accuracy' if problem_type == 'multiclass' else 'rmse')
+      (2) Split — always use try/except to handle both classification and regression:
+            try:
+                df_train, df_test = train_test_split(df_clean, test_size=0.2, random_state=42, stratify=df_clean[target_col])
+            except ValueError:
+                df_train, df_test = train_test_split(df_clean, test_size=0.2, random_state=42)
+      (3) Fit — put ALL arguments on ONE logical line inside the parentheses (no backslash continuation):
+            predictor = TabularPredictor(label=target_col, eval_metric=eval_metric, verbosity=0).fit(df_train, presets='good_quality', time_limit=120, excluded_model_types=['NN_TORCH', 'FASTAI'])
+      (4) Evaluate:
             leaderboard = predictor.leaderboard(df_test, silent=True)
             test_score = float(leaderboard.iloc[0]['score_test'])
-          Do NOT use predictor.evaluate(df_test)[predictor.eval_metric] — the key name
-          may differ from eval_metric and will raise a KeyError.
-      (5) Print leaderboard.head(8) to show model rankings.
-      (6) Save predictor: joblib.dump(predictor, 'model.joblib')
-      (7) Emit the score immediately so it is captured in metrics.json:
-            gads_emit_insight('model_score', f'{predictor.eval_metric}={test_score:.4f}, naive_baseline={naive_baseline:.4f}')
+            print(leaderboard.head(8))
+      (5) Save and emit:
+            joblib.dump(predictor, 'model.joblib')
+            gads_emit_insight('model_score', f'{eval_metric}={test_score:.4f}, naive_baseline={naive_baseline:.4f}')
     depends_on: [eda_and_target_profile]
     worker_tier: T2
     produces: [predictor, df_train, df_test, test_score, eval_metric]

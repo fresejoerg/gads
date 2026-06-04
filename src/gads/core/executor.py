@@ -196,10 +196,62 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
         print("  [Sanitizer] Injected 50K ML training subsample guard", flush=True)
 
     # Remove hallucinated AutoGluon imports (these packages don't exist)
-    if 'AutogluonModels' in code or 'from gads_emit_insight import' in code:
+    if 'AutogluonModels' in code or 'from gads_emit_insight import' in code or 'autogluon.models' in code:
         code = re.sub(r'from AutogluonModels import [^\n]+\n?', '', code)
         code = re.sub(r'from gads_emit_insight import [^\n]+\n?', '', code)
-        print("  [Sanitizer] Removed hallucinated AutogluonModels/gads_emit_insight imports", flush=True)
+        code = re.sub(r'from autogluon\.models import [^\n]+\n?', '', code)
+        code = re.sub(r'import autogluon\.models[^\n]*\n?', '', code)
+        print("  [Sanitizer] Removed hallucinated AutogluonModels/autogluon.models/gads_emit_insight imports", flush=True)
+
+    # Unwrap def main(): — variables inside a function are local and invisible to other tasks
+    if re.search(r'^def main\(\):', code, re.MULTILINE):
+        lines = code.split('\n')
+        new_lines, in_body, skip_rest = [], False, False
+        for line in lines:
+            if skip_rest:
+                continue
+            if line.rstrip() == 'def main():':
+                in_body = True
+                continue
+            if in_body:
+                if line.startswith('    '):
+                    stripped = line[4:]
+                    if stripped.strip() in ('return None', 'return'):
+                        continue
+                    new_lines.append(stripped)
+                elif line.strip() == '':
+                    if not new_lines or new_lines[-1] != '':
+                        new_lines.append('')
+                else:
+                    in_body = False
+                    if line.strip().startswith('if __name__'):
+                        skip_rest = True
+                    else:
+                        new_lines.append(line)
+            else:
+                new_lines.append(line)
+        code = '\n'.join(new_lines)
+        print("  [Sanitizer] Unwrapped def main(): → global scope", flush=True)
+
+    # Fix capitalized CSV filename: Creditcard.csv / CreditCard.csv → creditcard.csv
+    code = re.sub(r"pd\.read_csv\(['\"]([Cc]redit[Cc]ard\.csv)['\"]\)", "pd.read_csv('creditcard.csv')", code)
+
+    # Fix AutoGluon .fit() argument: Presets= → presets= (case-sensitive keyword)
+    code = re.sub(r"\bPresets\s*=", "presets=", code)
+    if 'presets=' in code.lower() and 'Presets=' not in code:
+        pass  # already fixed or was correct
+    elif re.search(r'\bPresets\s*=', code):
+        print("  [Sanitizer] Fixed Presets= → presets= in .fit() call", flush=True)
+
+    # Fix "unexpected character after line continuation" — trailing space after backslash
+    if '\\ \n' in code or '\\\t\n' in code:
+        code = re.sub(r'\\[ \t]+\n', '\n', code)
+        print("  [Sanitizer] Removed trailing space after backslash line continuation", flush=True)
+
+    # Fix stratify=target_col (string) → stratify=df[target_col] (Series) in train_test_split
+    if 'stratify=target_col' in code:
+        code = code.replace('stratify=target_col', 'stratify=df_clean[target_col] if "df_clean" in dir() else df[target_col]')
+        print("  [Sanitizer] Fixed stratify=target_col → stratify=df[target_col]", flush=True)
 
     # Fix common local-model typo: target_mol (OCR-like confusion) → target_col
     if 'target_mol' in code:
