@@ -362,9 +362,9 @@ def render_archive_panel():
             created = p.get("created_at", "N/A")[5:16].replace("T", " ")
             
             status_indicators = []
-            if p.get("has_failed_tasks"): status_indicators.append("❌")
-            elif p.get("is_running"): status_indicators.append("🔵")
+            if p.get("is_running"): status_indicators.append("🔵")
             elif p.get("has_report") and p.get("has_dashboard"): status_indicators.append("✅")
+            elif p.get("has_failed_tasks"): status_indicators.append("❌")
             else: status_indicators.append("⏳")
 
             cols = st.columns([0.1, 0.55, 0.35])
@@ -652,7 +652,7 @@ def render_orchestrator_panel():
                     header = f"{st_icon} {header_text}"
 
                 with st.expander(header, expanded=expanded):
-                    if is_coder_task and len(desc) > len(first_line) + 5:
+                    if is_coder_task:
                         st.caption(desc)
                     res = t.get("result_json") or {}
                     model_name = res.get("model_used")
