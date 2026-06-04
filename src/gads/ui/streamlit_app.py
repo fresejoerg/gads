@@ -616,6 +616,10 @@ def render_orchestrator_panel():
             instr_map = {i['id']: i for i in details.get("instructions", [])}
             last_instr_id = None
 
+            ORCHESTRATOR_ROLES = {"System", "DataAnalyzer", "Router", "Planner", "PlanCritique",
+                                      "Synthesizer", "Critique", "CompletenessVerifier"}
+            coder_task_num = 0
+
             for t in sorted(tasks, key=lambda x: x.get("created_at", "")):
                 # Display instruction block when it changes
                 curr_instr_id = t.get("instruction_id")
@@ -625,16 +629,31 @@ def render_orchestrator_panel():
                         st.chat_message("user").markdown(f"**Instruction:** {instr['content']}")
                     last_instr_id = curr_instr_id
 
+                is_coder_task = t.get("assigned_to") not in ORCHESTRATOR_ROLES
+                if is_coder_task:
+                    coder_task_num += 1
+
                 st_icon = "⚪"
                 if t['assigned_to'] == "Router": st_icon = "📐"
                 elif t['assigned_to'] == "Planner": st_icon = "📋"
                 elif t['status'] == "completed": st_icon = "🟢"
                 elif t['status'] == "failed": st_icon = "🔴"
                 elif t['status'] == "running": st_icon = "🔵"
-                
+
                 expanded = (t['status'] == "running") or (t['assigned_to'] in ["Router", "Planner"] and t['status'] == "completed")
-                
-                with st.expander(f"{st_icon} {t['description'][:85]}...", expanded=expanded):
+
+                desc = t['description']
+                header_text = desc[:80].rstrip()
+                if len(desc) > 80:
+                    header_text += "..."
+                if is_coder_task:
+                    header = f"{st_icon} #{coder_task_num} {header_text}"
+                else:
+                    header = f"{st_icon} {header_text}"
+
+                with st.expander(header, expanded=expanded):
+                    if is_coder_task and len(desc) > len(first_line) + 5:
+                        st.caption(desc)
                     res = t.get("result_json") or {}
                     model_name = res.get("model_used")
                     

@@ -26,16 +26,23 @@ requires:
 dag:
   - id: eda_and_target_profile
     intent: >
-      Profile the dataset and target column:
-      (1) Print shape, dtypes, and null counts.
-      (2) Compute target distribution — for classification: class counts and minority fraction;
-          for regression: min/max/mean/std.
-      (3) Identify and print: any high-cardinality text columns (>50 unique values, dtype object),
-          datetime columns, ID-like columns (name contains 'id', 'index', 'key' — drop these before
-          training).
-      (4) Store naive_baseline metric: for classification, `majority_class_rate = target.value_counts(normalize=True).max()`;
-          for regression, `mean_absolute_deviation = float((target - target.mean()).abs().mean())`.
-      Print a summary table of variable roles (feature / target / drop).
+      Profile the dataset. Use EXACTLY the code patterns below — do not vary the variable names.
+      (1) Print shape, dtypes, null counts:
+            print(df.shape); print(df.dtypes); print(df.isnull().sum())
+      (2) Print target value counts:
+            print(df[target_col].value_counts())
+      (3) Determine problem type and store in `problem_type`:
+            problem_type = 'binary' if df[target_col].nunique() == 2 else ('multiclass' if df[target_col].dtype == object else 'regression')
+            print("problem_type:", problem_type)
+      (4) Find and print ID-like columns to drop; store in `drop_cols`:
+            drop_cols = [c for c in df.columns if any(x in c.lower() for x in ['id', 'index', 'key'])]
+            print("drop_cols:", drop_cols)
+      (5) Compute naive_baseline — store in a variable named EXACTLY `naive_baseline`:
+            vc = df[target_col].value_counts(normalize=True)
+            naive_baseline = float(vc.max())
+            print("naive_baseline:", naive_baseline)
+      Do NOT use pd.api.types.is_datetime64_ns — it does not exist.
+      Do NOT use f-strings for printing naive_baseline — use plain print() as shown above.
     worker_tier: T2
     produces: [target_col, problem_type, drop_cols, naive_baseline]
     postconditions:
@@ -85,13 +92,19 @@ dag:
             fi_top = fi.head(15)
             fig = px.bar(x=fi_top['importance'], y=fi_top.index, orientation='h')
           Save as `figure_1_feature_importance.json`.
-      (3) For classification: plot ROC curve (binary) or confusion matrix (multiclass).
-          For confusion matrix use px.imshow(cm, text_auto=True) where cm = confusion_matrix(y_test, y_pred).
+      (3) For classification: plot confusion matrix.
+          y_pred = predictor.predict(df_test)
+          y_test = df_test[target_col]
+          cm = confusion_matrix(y_test, y_pred)
+          fig2 = px.imshow(cm, text_auto=True)
+          fig2.write_json('figure_2_model_performance.json')
           Do NOT use px.heatmap() — it does not exist; use px.imshow() instead.
-          Save as `figure_2_model_performance.json`.
+          If computing ROC-AUC: predict_proba returns a DataFrame in AutoGluon.
+          Use y_prob.iloc[:, 1] NOT y_prob[:, 1] (numpy-style indexing fails on DataFrames).
       (4) For regression: plot predicted vs actual scatter. Save as `figure_2_predicted_vs_actual.json`.
-      (5) Emit a `gads_emit_insight()` call summarising the top 3 features and the test score
-          relative to the naive baseline.
+      (5) Emit insights — use simple variable references, NOT complex expressions inside f-strings:
+            top3 = ', '.join(fi.sort_values('importance', ascending=False).head(3).index.tolist())
+            gads_emit_insight('feature_summary', f'Top 3 features: {top3}. Test score: {test_score}')
     depends_on: [train_automl_model]
     worker_tier: T2
     produces: [feature_importance_df]

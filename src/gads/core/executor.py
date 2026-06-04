@@ -195,6 +195,24 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
             code = _ml_subsample_injection + code
         print("  [Sanitizer] Injected 50K ML training subsample guard", flush=True)
 
+    # Fix common local-model typo: target_mol (OCR-like confusion) → target_col
+    if 'target_mol' in code:
+        code = code.replace('target_mol', 'target_col')
+        print("  [Sanitizer] Fixed target_mol → target_col typo", flush=True)
+
+    # AutoGluon predict_proba returns a DataFrame, not ndarray; fix numpy-style [:, n] indexing
+    if 'predict_proba' in code or ('y_prob' in code and '[:,' in code):
+        code = re.sub(r'predict_proba\(([^)]*)\)\[:,\s*(\d+)\]', r'predict_proba(\1).iloc[:, \2]', code)
+        code = re.sub(r'\by_prob\[:,\s*(\d+)\]', r'y_prob.iloc[:, \1]', code)
+        if 'predict_proba' in code:
+            print("  [Sanitizer] Fixed predict_proba numpy-style indexing → .iloc", flush=True)
+
+    # Fix non-existent pandas API: is_datetime64_ns → is_datetime64_any_dtype
+    if 'is_datetime64_ns' in code:
+        code = code.replace('pd.api.types.is_datetime64_ns(', 'pd.api.types.is_datetime64_any_dtype(')
+        code = code.replace('.is_datetime64_ns(', '.is_datetime64_any_dtype(')
+        print("  [Sanitizer] Replaced is_datetime64_ns with is_datetime64_any_dtype", flush=True)
+
     # AutoGluon feature_importance timeout guard: permutation importance over the full
     # test set (10K+ rows, 5 shuffle sets) easily exceeds the 600s sandbox limit.
     # Force subsample_size=1000, num_shuffle_sets=1 if not already specified.
