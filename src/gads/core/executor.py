@@ -236,6 +236,11 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
     # Fix capitalized CSV filename: Creditcard.csv / CreditCard.csv → creditcard.csv
     code = re.sub(r"pd\.read_csv\(['\"]([Cc]redit[Cc]ard\.csv)['\"]\)", "pd.read_csv('creditcard.csv')", code)
 
+    # Ensure df_clean is defined before use — guard against model defining it inside a branch
+    if 'df_clean' in code and 'df_clean = ' not in code and 'df_clean=' not in code:
+        code = "df_clean = df.drop(columns=drop_cols if 'drop_cols' in dir() else [], errors='ignore')\n" + code
+        print("  [Sanitizer] Injected df_clean = df.drop(...) guard at top", flush=True)
+
     # Fix AutoGluon .fit() argument: Presets= → presets= (case-sensitive keyword)
     code = re.sub(r"\bPresets\s*=", "presets=", code)
     if 'presets=' in code.lower() and 'Presets=' not in code:
