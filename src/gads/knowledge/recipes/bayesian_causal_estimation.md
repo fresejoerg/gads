@@ -40,6 +40,11 @@ dag:
       (5) TREATMENT ENGINEERING: create binary column high_{treatment_col} = 1
           where value > global_median, else 0, on df_model.
       (6) STANDARDISE continuous confounders (zero mean, unit variance) on df_model.
+      (7) BIND SCALARS — use EXACTLY these variable names:
+            n_rows = len(df_model)
+            minority_class_frac = float(df_model[outcome_col].value_counts(normalize=True).min()) if df_model[outcome_col].nunique() <= 20 else 0.5
+            naive_outcome_rate = float(df_model[outcome_col].mean())
+          Print all three values.
       Print final shapes, class balance, and variable roles.
     worker_tier: T2
     produces: [df_model, treatment_col, outcome_col, confounder_cols, minority_class_frac]

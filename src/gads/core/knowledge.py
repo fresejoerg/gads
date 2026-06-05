@@ -11,6 +11,7 @@ class RecipeTask(BaseModel):
     depends_on: List[str] = []
     produces: List[str] = []
     postconditions: List[str] = []
+    required_metrics: List[str] = []
     skippable_if: Optional[str] = None
     rationale_required: bool = False
 
