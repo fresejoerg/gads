@@ -1,32 +1,38 @@
 ---
 id: causal_inference_dowhy
-description: "DoWhy 0.14 API: CausalModel (GML string), identify_effect, estimate_effect, refute_estimate. Correct patterns for DoWhy 0.14 — includes blocked old APIs."
+description: "DoWhy 0.14 API: use gads_causal_estimate_ate() native node (preferred) or manual 4-step. Correct GML format (integer id + string label). Includes refutation and blocked old APIs."
 triggers: ["causal", "dowhy", "treatment effect", "ATE", "average treatment effect", "confounder", "backdoor", "frontdoor", "counterfactual", "refute", "propensity score", "causal model", "causal effect", "identify effect", "estimate effect"]
 ---
 # Causal Inference with DoWhy (version 0.14)
 
+## ✅ PREFERRED: Use the Native Node (one function call)
+
+`gads_causal_estimate_ate` is pre-defined in the kernel. It handles subsampling,
+treatment binarization, GML construction, CausalModel, identification, estimation,
+and both refutation tests — all in one call. **Prefer this over writing DoWhy manually.**
+
+```python
+# PREFERRED PATTERN — call the native node:
+result = gads_causal_estimate_ate(df, treatment_col, outcome_col, confounder_cols)
+
+# Unpack required_metrics as top-level scalars (exact names required):
+ate = result["ate"]
+placebo_new_effect = result["placebo_new_effect"]
+subset_new_effect = result["subset_new_effect"]
+
+# Other return values available if needed:
+# result["treatment_col"]       — actual col used (may be 'high_X' if binarized)
+# result["identified_estimand"] — DoWhy estimand object
+# result["causal_estimate"]     — DoWhy estimate object
+# result["df_sample"]           — dataframe used for estimation
+
+print(f"ATE={ate:.4f}  placebo={placebo_new_effect:.4f}  subset={subset_new_effect:.4f}")
+gads_emit_insight("causal_effect", f"ATE={ate:.4f}, placebo_new_effect={placebo_new_effect:.4f}, subset_new_effect={subset_new_effect:.4f}")
+```
+
 ## ❌ DO NOT IMPLEMENT FROM SCRATCH
 
 **Never implement propensity score matching, doubly-robust estimation, AIPW, or any causal estimator manually.** DoWhy implements all of these internally. Use `causal_model.estimate_effect()` — it handles propensity scores, outcome models, and weighting automatically.
-
-```python
-# ❌ NEVER DO THIS — do not build a manual DR/PSM estimator:
-# ps_model = LogisticRegression(...); ps_model.fit(X, T); ...
-# outcome_model = ...; DR_score = ...
-
-# ✅ ALWAYS DO THIS — use DoWhy's built-in estimators:
-causal_estimate = causal_model.estimate_effect(
-    identified_estimand,
-    method_name="backdoor.linear_regression",  # or propensity_score_matching
-    target_units="ate"
-)
-```
-
-If you must use sklearn for propensity scores (e.g., for cross-fitting), use **regularized** LR:
-```python
-# ✅ Fast, regularized propensity score model (never penalty=None on large datasets):
-ps_model = LogisticRegression(C=1.0, max_iter=200, solver='lbfgs', class_weight='balanced')
-```
 
 **For datasets >50K rows**: subsample to 20K before any propensity/outcome model fitting:
 ```python
@@ -81,22 +87,21 @@ print(f"Selected estimator: {estimator}")
 # NOTE: NEVER use propensity_score_weighting — it produces NaN for rare outcomes.
 ```
 
-## Programmatic GML Construction (never hardcode node IDs)
+## Programmatic GML Construction (fallback — prefer gads_causal_estimate_ate above)
+
+GML CRITICAL: nodes need **integer id** and **string label**. Edges use integer source/target.
+String ids fail with NetworkXError — always use integers.
 
 ```python
-def build_gml(treatment, outcome, confounders):
-    nodes = [treatment, outcome] + list(confounders)
-    lines = ["graph [", "  directed 1"]
-    for n in nodes:
-        lines.append(f'  node [ id "{n}" label "{n}" ]')
-    for c in confounders:
-        lines.append(f'  edge [ source "{c}" target "{treatment}" ]')
-        lines.append(f'  edge [ source "{c}" target "{outcome}" ]')
-    lines.append(f'  edge [ source "{treatment}" target "{outcome}" ]')
-    lines.append("]")
-    return "\n".join(lines)
-
-gml_string = build_gml(treatment_col, outcome_col, confounder_cols)
+# CORRECT GML: integer id + string label, edges by index
+nodes = [treatment_col, outcome_col] + list(confounder_cols)
+node_idx = {n: i for i, n in enumerate(nodes)}
+node_str = "\n".join(f'  node [ id {i} label "{n}" ]' for i, n in enumerate(nodes))
+edges = ([(c, treatment_col) for c in confounder_cols]
+         + [(c, outcome_col) for c in confounder_cols]
+         + [(treatment_col, outcome_col)])
+edge_str = "\n".join(f'  edge [ source {node_idx[s]} target {node_idx[t]} ]' for s, t in edges)
+gml_string = f"graph [ directed 1\n{node_str}\n{edge_str}\n]"
 ```
 
 ## ✅ The 4-Step Workflow (DoWhy 0.14)

@@ -16,6 +16,7 @@ from typing import Callable, Dict
 
 # Import all native modules — functions are registered at module level
 from .ml import gads_automl_fit, gads_automl_predict, gads_timeseries_fit, gads_timeseries_predict, gads_calibrate_threshold
+from .causal import gads_causal_estimate_ate, gads_causal_bayesian_ate
 
 NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_automl_fit": gads_automl_fit,
@@ -23,6 +24,8 @@ NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_timeseries_fit": gads_timeseries_fit,
     "gads_timeseries_predict": gads_timeseries_predict,
     "gads_calibrate_threshold": gads_calibrate_threshold,
+    "gads_causal_estimate_ate": gads_causal_estimate_ate,
+    "gads_causal_bayesian_ate": gads_causal_bayesian_ate,
 }
 
 # Preamble injected into every sandbox execution when AutoGluon recipes are active.
@@ -244,4 +247,141 @@ def gads_timeseries_predict(predictor_ts, ts_df):
     forecasts = predictor_ts.predict(ts_df)
     print(f"[gads_timeseries_predict] Forecasts shape: {forecasts.shape}")
     return forecasts
+'''
+
+# Preamble injected when causal keywords are detected in task code.
+# Defines gads_causal_estimate_ate and gads_causal_bayesian_ate in the kernel.
+CAUSAL_PREAMBLE = '''
+import warnings as _warnings_causal
+_warnings_causal.filterwarnings("ignore")
+
+def gads_causal_estimate_ate(df, treatment_col, outcome_col, confounder_cols,
+                              method="auto", max_rows=20000):
+    """Full DoWhy ATE estimation + placebo/subset refutation in one call.
+
+    Returns dict: {ate, placebo_new_effect, subset_new_effect, treatment_col,
+                   identified_estimand, causal_estimate, df_sample}
+    """
+    import warnings; warnings.filterwarnings("ignore")
+    from dowhy import CausalModel
+
+    if len(df) > max_rows:
+        df_sample = df.sample(max_rows, random_state=42).reset_index(drop=True)
+        print(f"[gads_causal_estimate_ate] Subsampled {len(df):,} → {max_rows:,} rows")
+    else:
+        df_sample = df.copy()
+
+    actual_treatment_col = treatment_col
+    if df_sample[treatment_col].nunique() > 2:
+        global_median = float(df[treatment_col].median())
+        bin_col = f"high_{treatment_col}"
+        df_sample[bin_col] = (df_sample[treatment_col] > global_median).astype(int)
+        actual_treatment_col = bin_col
+        print(f"[gads_causal_estimate_ate] Binarized \'{treatment_col}\' at median={global_median:.4f} → \'{bin_col}\'")
+
+    nodes = [actual_treatment_col, outcome_col] + list(confounder_cols)
+    node_idx = {n: i for i, n in enumerate(nodes)}
+    node_str = "\\n".join(f\'  node [ id {i} label "{n}" ]\' for i, n in enumerate(nodes))
+    edges = ([(c, actual_treatment_col) for c in confounder_cols]
+             + [(c, outcome_col) for c in confounder_cols]
+             + [(actual_treatment_col, outcome_col)])
+    edge_str = "\\n".join(f\'  edge [ source {node_idx[s]} target {node_idx[t]} ]\' for s, t in edges)
+    gml_string = f"graph [ directed 1\\n{node_str}\\n{edge_str}\\n]"
+
+    model = CausalModel(data=df_sample, treatment=actual_treatment_col,
+                        outcome=outcome_col, graph=gml_string)
+    identified_estimand = model.identify_effect(proceed_when_unidentifiable=True)
+    print(f"[gads_causal_estimate_ate] Backdoor vars: {identified_estimand.get_backdoor_variables()}")
+
+    if method == "auto":
+        n_unique = df_sample[outcome_col].nunique()
+        minority_frac = float(df_sample[outcome_col].value_counts(normalize=True).min()) if n_unique <= 10 else 0.5
+        chosen_method = "backdoor.propensity_score_matching" if minority_frac < 0.05 else "backdoor.linear_regression"
+    else:
+        chosen_method = method
+    print(f"[gads_causal_estimate_ate] Method: {chosen_method}")
+
+    causal_estimate = model.estimate_effect(identified_estimand, method_name=chosen_method, target_units="ate")
+    ate = float(causal_estimate.value)
+    print(f"[gads_causal_estimate_ate] ATE={ate:.4f}")
+
+    ref_placebo = model.refute_estimate(identified_estimand, causal_estimate,
+                                         method_name="placebo_treatment_refuter",
+                                         placebo_type="permute", random_seed=42)
+    placebo_new_effect = float(ref_placebo.new_effect)
+    print(f"[gads_causal_estimate_ate] placebo_new_effect={placebo_new_effect:.4f}")
+
+    ref_subset = model.refute_estimate(identified_estimand, causal_estimate,
+                                        method_name="data_subset_refuter",
+                                        subset_fraction=0.8, random_seed=42)
+    subset_new_effect = float(ref_subset.new_effect)
+    print(f"[gads_causal_estimate_ate] subset_new_effect={subset_new_effect:.4f}")
+
+    return {"ate": ate, "placebo_new_effect": placebo_new_effect,
+            "subset_new_effect": subset_new_effect, "treatment_col": actual_treatment_col,
+            "identified_estimand": identified_estimand, "causal_estimate": causal_estimate,
+            "df_sample": df_sample}
+
+
+def gads_causal_bayesian_ate(df, treatment_col, outcome_col, confounder_cols, max_rows=5000):
+    """Bambi MCMC causal effect estimation.
+
+    Returns dict: {ate, hdi_lower, hdi_upper, p_positive, idata, treatment_col}
+    Note: ate is the log-odds coefficient for binary outcomes, linear coeff for continuous.
+    """
+    import warnings; warnings.filterwarnings("ignore")
+    import numpy as np
+    import pandas as pd
+    import bambi as bmb
+    import arviz as az
+    import joblib
+    from sklearn.preprocessing import StandardScaler
+
+    df = df.copy()
+    actual_treatment_col = treatment_col
+    if df[treatment_col].nunique() > 2:
+        global_median = float(df[treatment_col].median())
+        bin_col = f"high_{treatment_col}"
+        df[bin_col] = (df[treatment_col] > global_median).astype(int)
+        actual_treatment_col = bin_col
+
+    if len(df) > max_rows:
+        if df[outcome_col].nunique() <= 2:
+            minority_frac = float(df[outcome_col].value_counts(normalize=True).min())
+            if minority_frac < 0.10:
+                minority_val = df[outcome_col].value_counts().idxmin()
+                df_min = df[df[outcome_col] == minority_val]
+                df_maj = df[df[outcome_col] != minority_val].sample(max_rows - len(df_min), random_state=42)
+                df = pd.concat([df_min, df_maj]).sample(frac=1, random_state=42).reset_index(drop=True)
+            else:
+                df = df.sample(max_rows, random_state=42).reset_index(drop=True)
+        else:
+            df = df.sample(max_rows, random_state=42).reset_index(drop=True)
+        print(f"[gads_causal_bayesian_ate] Using {len(df):,} rows after subsampling")
+
+    df_model = df.copy()
+    for col in confounder_cols:
+        if col in df_model.columns and df_model[col].dtype.kind in "fiu":
+            from sklearn.preprocessing import StandardScaler as _SS
+            df_model[col] = _SS().fit_transform(df_model[[col]]).flatten()
+
+    family = "bernoulli" if df_model[outcome_col].nunique() <= 2 else "gaussian"
+    formula = f"{outcome_col} ~ {actual_treatment_col} + " + " + ".join(confounder_cols)
+    print(f"[gads_causal_bayesian_ate] Formula: {formula}  Family: {family}")
+
+    model = bmb.Model(formula, df_model, family=family)
+    idata = model.fit(draws=500, tune=300, chains=1, cores=1,
+                      target_accept=0.9, random_seed=42, progressbar=False)
+    joblib.dump(idata, "bayesian_idata.joblib")
+
+    coef = idata.posterior[actual_treatment_col].values.flatten()
+    ate = float(coef.mean())
+    hdi_vals = az.hdi(coef, hdi_prob=0.94)
+    hdi_lower = float(hdi_vals[0])
+    hdi_upper = float(hdi_vals[1])
+    p_positive = float((coef > 0).mean())
+    print(f"[gads_causal_bayesian_ate] ATE={ate:.4f}  HDI=[{hdi_lower:.4f}, {hdi_upper:.4f}]  P(>0)={p_positive:.4f}")
+
+    return {"ate": ate, "hdi_lower": hdi_lower, "hdi_upper": hdi_upper,
+            "p_positive": p_positive, "idata": idata, "treatment_col": actual_treatment_col}
 '''
