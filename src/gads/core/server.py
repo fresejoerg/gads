@@ -33,6 +33,7 @@ from gads.core.reporting import create_master_reports
 from gads.core.notebook_exporter import export_python_script, export_notebook, copy_applied_recipe
 from gads.core.introspection import summarize_artifact
 from gads.core.distiller import distill_dashboard_to_markdown
+from gads.core.history_renderer import HistoryRenderer
 from gads.core.prompts import prompt_registry
 from langfuse import Langfuse
 from sqlmodel import select, Session
@@ -1143,28 +1144,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
 
                     # 4.1 CONTEXT HARDENING: SLIDING WINDOW & INTROSPECTION
                     all_tasks = session.exec(select(Task).where(Task.project_id == project_id).order_by(Task.created_at.asc())).all()
-                    
-                    # Sliding Window (2+1 Model: First Task + Last 2 Tasks)
-                    # All others are reduced to their metadata summary
-                    hardened_context_parts = []
-                    for i, t in enumerate(all_tasks):
-                        # Determine if this task should be in full detail
-                        is_first = (i == 0)
-                        is_recent = (i >= len(all_tasks) - 2)
-                        
-                        status_str = t.status.upper()
-                        stdout_str = (t.result_json or {}).get("stdout", "")
-                        code_str = (t.result_json or {}).get("code", "")
-                        
-                        if is_first or is_recent:
-                            # Full detail
-                            task_ctx = f"### TASK: {t.description}\nStatus: {status_str}\nCode Used:\n```python\n{code_str}\n```\nStdout Output:\n{stdout_str[:2000]}"
-                        else:
-                            # Distilled metadata only
-                            summary = (t.result_json or {}).get("orchestrator_summary", f"{status_str}: {t.description}")
-                            task_ctx = f"### TASK (HISTORICAL): {t.description}\nStatus: {status_str}\nSummary: {summary}"
-                        
-                        hardened_context_parts.append(task_ctx)
+                    current_task_idx = next((idx for idx, t in enumerate(all_tasks) if t.id == task_id), -1)
+                    context = HistoryRenderer.build_coder_context(all_tasks, current_task_idx)
 
                     # 4.2 KERNEL NAMESPACE SNAPSHOT (Preventing Amnesia)
                     # Before each task, we probe the kernel for live variables and dtypes
@@ -1196,8 +1177,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                     except Exception as e:
                         print(f"    [Workflow] Warning: Namespace snapshot failed: {e}")
 
-                    # Authoritative prompt building
-                    context = "\n\n---\n\n".join(hardened_context_parts)
+                    state_summary_str = json.dumps(namespace_summary, indent=2)
                     state_summary_str = json.dumps(namespace_summary, indent=2)
 
                     tid_str = str(task_id)
