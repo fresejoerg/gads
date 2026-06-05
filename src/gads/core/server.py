@@ -1163,6 +1163,8 @@ for _v in _vars:
             _summary[_v] = f"DataFrame ({_obj.shape[0]}x{_obj.shape[1]}) - Columns: {list(_obj.columns)}"
         elif isinstance(_obj, (list, dict, np.ndarray)):
             _summary[_v] = f"{type(_obj).__name__} (len: {len(_obj)})"
+        elif isinstance(_obj, (str, int, float, bool)):
+            _summary[_v] = _obj
         elif hasattr(_obj, 'predict') and hasattr(_obj, 'fit'):
             _summary[_v] = f"Model ({type(_obj).__name__})"
     except: pass
@@ -1177,7 +1179,6 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                     except Exception as e:
                         print(f"    [Workflow] Warning: Namespace snapshot failed: {e}")
 
-                    state_summary_str = json.dumps(namespace_summary, indent=2)
                     state_summary_str = json.dumps(namespace_summary, indent=2)
 
                     tid_str = str(task_id)
@@ -2099,11 +2100,23 @@ try:
                    for k, v in df.isnull().mean().items() if v > 0}}
 
     cardinality = {{}}
+    imbalance_stats = {{}}
     for col in df.columns:
         n_uniq = df[col].nunique()
         if n_uniq <= 20 or (row_count > 0 and n_uniq / row_count < 0.005):
             vc = df[col].value_counts(normalize=True).head(8)
             cardinality[col] = {{str(k): round(float(v), 4) for k, v in vc.items()}}
+            
+            vc_counts = df[col].value_counts()
+            if len(vc_counts) >= 2:
+                min_count = float(vc_counts.min())
+                max_count = float(vc_counts.max())
+                ratio = round(max_count / min_count, 4) if min_count > 0 else 1.0
+                minority_frac = round(min_count / max(row_count, 1), 4)
+                imbalance_stats[col] = {{
+                    "imbalance_ratio": ratio,
+                    "minority_class_frac": minority_frac
+                }}
 
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
     numeric_stats = {{}}
@@ -2125,6 +2138,7 @@ try:
     print("PROFILE_JSON:" + json.dumps({{
         "schema": schema, "row_count": row_count,
         "null_rates": null_rates, "cardinality": cardinality,
+        "imbalance_stats": imbalance_stats,
         "numeric_stats": numeric_stats, "sample": sample
     }}))
 except Exception as e:

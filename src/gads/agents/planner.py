@@ -34,6 +34,16 @@ def _format_file_profile(f: "FileMetadata") -> str:
             )
             lines.append(f"  {col} ({len(counts)} values): {top}")
 
+    if d.get("imbalance_stats"):
+        imbalance_alerts = []
+        for col, stats in d["imbalance_stats"].items():
+            ratio = stats.get("imbalance_ratio", 1.0)
+            frac = stats.get("minority_class_frac", 1.0)
+            if ratio > 10:
+                imbalance_alerts.append(f"{col} (ratio={ratio:.1f}:1, minority={frac*100:.2f}%)")
+        if imbalance_alerts:
+            lines.append(f"  Class Imbalance Alerts (ratio > 10:1): " + ", ".join(imbalance_alerts))
+
     if d.get("numeric_stats"):
         for col, s in list(d["numeric_stats"].items())[:4]:
             lines.append(

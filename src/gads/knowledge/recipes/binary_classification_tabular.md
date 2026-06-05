@@ -48,15 +48,15 @@ dag:
       - "abs(y_train.mean() - y_test.mean()) < 0.05"
 
   - id: train_baseline_model
-    intent: "Train a Logistic Regression baseline and evaluate using ROC-AUC."
+    intent: "Train a Logistic Regression baseline (using class_weight='balanced') on X_train. Evaluate on X_test using ROC-AUC. Optimize the decision threshold on validation probabilities using gads_calibrate_threshold(y_test, y_prob) and save the optimal threshold."
     depends_on: [stratified_split]
     worker_tier: T2
-    produces: [baseline_model, baseline_auc]
+    produces: [baseline_model, baseline_auc, best_threshold]
     postconditions:
       - "baseline_auc > 0.5"
 
   - id: confusion_matrix_plot
-    intent: "Generate and save a confusion matrix visualization."
+    intent: "Apply the optimal threshold to get calibrated predictions on X_test, then generate and save a confusion matrix visualization."
     depends_on: [train_baseline_model]
     worker_tier: T2
     postconditions:
@@ -66,6 +66,8 @@ dag:
 invariants:
   - "The target column must remain excluded from features (X)."
   - "Random seeds must be fixed for reproducibility (random_state=42)."
+  - "CLASS WEIGHTS: always set class_weight='balanced' in standard scikit-learn classification code patterns (e.g. LogisticRegression, RandomForestClassifier, HistGradientBoostingClassifier) to safeguard against class imbalance."
+  - "THRESHOLD CALIBRATION: always calibrate the decision threshold using gads_calibrate_threshold(y_true, y_prob, metric='f1') for binary classification before generating predictions, confusion matrices, or computing F1/accuracy metrics."
 ---
 
 # Standard Binary Classification for Tabular Data

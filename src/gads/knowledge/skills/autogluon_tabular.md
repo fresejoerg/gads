@@ -47,9 +47,17 @@ print(lb[['model', 'score_test', 'fit_time']].head(8).to_string(index=False))
 y_pred = predictor.predict(df_test)
 y_prob = predictor.predict_proba(df_test)  # for classification
 
-# Feature importance
-fi = predictor.feature_importance(df_test, silent=True)
+# Feature importance (always use subsample_size=1000 in sandbox to avoid timeout)
+fi = predictor.feature_importance(df_test, subsample_size=1000, num_shuffle_sets=1, silent=True)
 print(fi.head(10).to_string())
+
+# Safeguard for highly imbalanced binary classification (e.g. fraud detection):
+# Random subsampling (subsample_size=1000) can result in 0 minority class samples.
+# Instead, stratify manually before computing feature importance:
+if (df_test[target_col] == 1).sum() < 100:
+    fi_df = df_test.groupby(target_col, group_keys=False).apply(lambda x: x.sample(min(len(x), 500), random_state=42))
+    fi = predictor.feature_importance(fi_df, num_shuffle_sets=1, silent=True)
+    print(fi.head(10).to_string())
 
 # Save
 joblib.dump(predictor, 'model.joblib')

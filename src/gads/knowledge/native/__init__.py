@@ -15,13 +15,14 @@ Each function prints progress lines that appear in task stdout.
 from typing import Callable, Dict
 
 # Import all native modules — functions are registered at module level
-from .ml import gads_automl_fit, gads_automl_predict, gads_timeseries_fit, gads_timeseries_predict
+from .ml import gads_automl_fit, gads_automl_predict, gads_timeseries_fit, gads_timeseries_predict, gads_calibrate_threshold
 
 NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_automl_fit": gads_automl_fit,
     "gads_automl_predict": gads_automl_predict,
     "gads_timeseries_fit": gads_timeseries_fit,
     "gads_timeseries_predict": gads_timeseries_predict,
+    "gads_calibrate_threshold": gads_calibrate_threshold,
 }
 
 # Preamble injected into every sandbox execution when AutoGluon recipes are active.
@@ -29,6 +30,54 @@ NATIVE_REGISTRY: Dict[str, Callable] = {
 AUTOGLUON_PREAMBLE = '''
 import warnings
 warnings.filterwarnings("ignore")
+
+def gads_calibrate_threshold(y_true, y_prob, metric="f1"):
+    """
+    Finds the optimal decision threshold for binary classification.
+    """
+    import numpy as np
+    import pandas as pd
+    from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
+    
+    # Extract positive class probabilities if y_prob is a DataFrame or 2D array
+    if hasattr(y_prob, "ndim") and y_prob.ndim == 2:
+        if hasattr(y_prob, "iloc"):
+            y_prob = y_prob.iloc[:, 1]
+        else:
+            y_prob = y_prob[:, 1]
+    elif isinstance(y_prob, pd.DataFrame):
+        y_prob = y_prob.iloc[:, 1]
+    elif isinstance(y_prob, list):
+        y_prob = np.array(y_prob)
+        if y_prob.ndim == 2:
+            y_prob = y_prob[:, 1]
+            
+    y_true = np.array(y_true)
+    y_prob = np.array(y_prob)
+    
+    thresholds = np.linspace(0.01, 0.99, 99)
+    best_threshold = 0.5
+    best_score = -1.0
+    
+    for t in thresholds:
+        preds = (y_prob >= t).astype(int)
+        if metric == "f1":
+            score = float(f1_score(y_true, preds, zero_division=0))
+        elif metric == "precision":
+            score = float(precision_score(y_true, preds, zero_division=0))
+        elif metric == "recall":
+            score = float(recall_score(y_true, preds, zero_division=0))
+        elif metric == "accuracy":
+            score = float(accuracy_score(y_true, preds))
+        else:
+            score = float(f1_score(y_true, preds, zero_division=0))
+            
+        if score > best_score:
+            best_score = score
+            best_threshold = float(t)
+            
+    print(f"[gads_calibrate_threshold] Best threshold: {best_threshold:.4f} with {metric} score: {best_score:.4f}")
+    return {"best_threshold": best_threshold, "best_score": best_score}
 
 def gads_automl_fit(df, target_col, time_limit=120, presets="good_quality", eval_metric=None, problem_type=None):
     """

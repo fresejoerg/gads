@@ -183,7 +183,24 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
             "_ml_row_limit = 50_000\n"
             "if 'df' in dir() and hasattr(df, '__len__') and len(df) > _ml_row_limit:\n"
             "    print(f'[SampleGuard] Subsampling from {len(df):,} to {_ml_row_limit:,} rows')\n"
-            "    df = df.sample(_ml_row_limit, random_state=42).reset_index(drop=True)\n"
+            "    _target = locals().get('target_col', globals().get('target_col', None))\n"
+            "    if _target is None and 'target' in locals(): _target = locals()['target']\n"
+            "    if _target is None and 'target' in globals(): _target = globals()['target']\n"
+            "    _stratify_col = None\n"
+            "    if _target is not None and _target in df.columns:\n"
+            "        _vc = df[_target].value_counts()\n"
+            "        if len(_vc) >= 2 and len(_vc) <= 20:\n"
+            "            _stratify_col = _target\n"
+            "    try:\n"
+            "        if _stratify_col is not None:\n"
+            "            _frac = _ml_row_limit / len(df)\n"
+            "            df = df.groupby(_stratify_col, group_keys=False).apply(lambda x: x.sample(max(1, int(len(x) * _frac)), random_state=42, replace=False) if len(x) > 0 else x).reset_index(drop=True)\n"
+            "            print('[SampleGuard] Stratified sampling applied successfully')\n"
+            "        else:\n"
+            "            df = df.sample(_ml_row_limit, random_state=42).reset_index(drop=True)\n"
+            "    except Exception as e:\n"
+            "        print(f'[SampleGuard] Stratified sampling failed: {e}. Falling back to random sampling.')\n"
+            "        df = df.sample(_ml_row_limit, random_state=42).reset_index(drop=True)\n"
         )
         # Inject after the last read_csv/read_parquet line
         _load_match = list(re.finditer(r'(df\s*=\s*pd\.read_(?:csv|parquet|excel)\([^\n]+\))', code))
@@ -484,7 +501,7 @@ class ExecutionManager:
                 # Inject AutoGluon native node preamble when the code references AutoGluon APIs
                 _autogluon_preamble = ""
                 if any(kw in current_code for kw in ["autogluon", "TabularPredictor", "TimeSeriesPredictor",
-                                                       "gads_automl_fit", "gads_timeseries_fit"]):
+                                                       "gads_automl_fit", "gads_timeseries_fit", "gads_calibrate_threshold"]):
                     try:
                         from gads.knowledge.native import AUTOGLUON_PREAMBLE
                         _autogluon_preamble = AUTOGLUON_PREAMBLE + "\n"

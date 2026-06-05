@@ -58,7 +58,7 @@ dag:
       DO NOT call pd.read_csv() — the DataFrame `df` is already in the kernel from the previous task.
       (1) Drop ID-like columns and set eval_metric:
             df_clean = df.drop(columns=drop_cols, errors='ignore')
-            eval_metric = 'roc_auc' if problem_type == 'binary' else ('accuracy' if problem_type == 'multiclass' else 'rmse')
+            eval_metric = 'roc_auc' if problem_type == 'binary' else ('f1_macro' if problem_type == 'multiclass' else 'rmse')
       (2) Split — always use try/except to handle both classification and regression:
             try:
                 df_train, df_test = train_test_split(df_clean, test_size=0.2, random_state=42, stratify=df_clean[target_col])
@@ -73,6 +73,11 @@ dag:
       (5) Save and emit:
             joblib.dump(predictor, 'model.joblib')
             gads_emit_insight('model_score', f'{eval_metric}={test_score:.4f}, naive_baseline={naive_baseline:.4f}')
+            if problem_type == 'binary' and naive_baseline > 0.9:
+                from sklearn.metrics import average_precision_score
+                y_prob = predictor.predict_proba(df_test)
+                pr_auc = float(average_precision_score(df_test[target_col], y_prob.iloc[:, 1]))
+                gads_emit_insight('secondary_metric', f'Average Precision (PR AUC)={pr_auc:.4f}')
     depends_on: [eda_and_target_profile]
     worker_tier: T2
     produces: [predictor, df_train, df_test, test_score, eval_metric]
@@ -85,8 +90,13 @@ dag:
     intent: >
       Extract and visualise model insights:
       (1) Compute feature importance:
-            fi = predictor.feature_importance(df_test, subsample_size=1000, num_shuffle_sets=1, silent=True)
-          subsample_size=1000 and num_shuffle_sets=1 are MANDATORY — without them the permutation
+            # For imbalanced datasets, use a stratified sample to ensure the minority class is represented:
+            if problem_type == 'binary' and df_test[target_col].value_counts().min() < 100:
+                fi_df = df_test.groupby(target_col, group_keys=False).apply(lambda x: x.sample(min(len(x), 500), random_state=42))
+                fi = predictor.feature_importance(fi_df, num_shuffle_sets=1, silent=True)
+            else:
+                fi = predictor.feature_importance(df_test, subsample_size=1000, num_shuffle_sets=1, silent=True)
+          subsample_size=1000 (or equivalent custom sample size) and num_shuffle_sets=1 are MANDATORY — without them the permutation
           importance runs over the full test set and will exceed the 600s sandbox timeout.
           fi is a DataFrame where the INDEX contains feature names and the column 'importance'
           contains the permutation importance scores. Access with fi.index and fi['importance'].
@@ -95,13 +105,20 @@ dag:
             fi_top = fi.head(15)
             fig = px.bar(x=fi_top['importance'], y=fi_top.index, orientation='h')
           Save as `figure_1_feature_importance.json`.
-      (3) For classification: plot confusion matrix.
-          y_pred = predictor.predict(df_test)
-          y_test = df_test[target_col]
-          cm = confusion_matrix(y_test, y_pred)
-          fig2 = px.imshow(cm, text_auto=True)
-          fig2.write_json('figure_2_model_performance.json')
-          Do NOT use px.heatmap() — it does not exist; use px.imshow() instead.
+      (3) For classification: calibrate decision threshold and plot confusion matrix.
+           y_prob = predictor.predict_proba(df_test)
+           y_test = df_test[target_col]
+           if problem_type == 'binary':
+               cal = gads_calibrate_threshold(y_test, y_prob)
+               best_t = cal['best_threshold']
+               y_pred = (y_prob.iloc[:, 1] >= best_t).astype(int)
+               gads_emit_insight('calibrated_threshold', f"Optimal threshold: {best_t:.4f}")
+           else:
+               y_pred = predictor.predict(df_test)
+           cm = confusion_matrix(y_test, y_pred)
+           fig2 = px.imshow(cm, text_auto=True)
+           fig2.write_json('figure_2_model_performance.json')
+           Do NOT use px.heatmap() — it does not exist; use px.imshow() instead.
           If computing ROC-AUC: predict_proba returns a DataFrame in AutoGluon.
           Use y_prob.iloc[:, 1] NOT y_prob[:, 1] (numpy-style indexing fails on DataFrames).
       (4) For regression: plot predicted vs actual scatter. Save as `figure_2_predicted_vs_actual.json`.
@@ -122,8 +139,9 @@ invariants:
   - "EXCLUDE NEURAL NETS IN CPU SANDBOX: always pass excluded_model_types=['NN_TORCH', 'FASTAI'] unless the user explicitly requests neural network models."
   - "DROP ID COLUMNS: remove columns whose names contain 'id', 'index', 'key', or 'name' (case-insensitive) before fitting — they cause leakage."
   - "SAVE WITH JOBLIB: joblib.dump(predictor, 'model.joblib') — never use pickle (sandbox-blocked)."
-  - "EVAL METRIC: roc_auc for binary, accuracy for multiclass, rmse for regression."
+  - "EVAL METRIC: roc_auc for binary, f1_macro for multiclass, rmse for regression."
   - "Random state must be 42 everywhere."
+  - "THRESHOLD CALIBRATION: For binary classification, always calibrate the decision threshold on validation/test data using gads_calibrate_threshold() before evaluating predictions or confusion matrices."
 ---
 
 # AutoML Classification & Regression with AutoGluon

@@ -43,3 +43,8 @@ def gads_timeseries_fit(
 def gads_timeseries_predict(predictor_ts: Any, ts_df: Any) -> Any:
     """Generate forecasts from a fitted TimeSeriesPredictor."""
     raise NotImplementedError("Call this via the sandbox preamble injection, not directly.")
+
+
+def gads_calibrate_threshold(y_true: Any, y_prob: Any, metric: str = "f1") -> Dict[str, Any]:
+    """Finds the optimal decision threshold for binary classification. See AUTOGLUON_PREAMBLE for full implementation."""
+    raise NotImplementedError("Call this via the sandbox preamble injection, not directly.")
