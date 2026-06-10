@@ -422,8 +422,26 @@ def render_orchestrator_panel():
         "random_routing": st.session_state.random_routing_mode
     })
 
+    proj = None
+    last_state = {}
+    proj_details = None
     if st.session_state.current_project_id:
-        st.markdown(f"<div class='active-badge'>ACTIVE PROJECT: {st.session_state.current_project_id}</div>", unsafe_allow_html=True)
+        proj_details = api_get(f"/projects/{st.session_state.current_project_id}")
+        if proj_details:
+            proj = proj_details.get("project", {})
+            last_state = proj.get("last_state_json") or {}
+
+    if st.session_state.current_project_id:
+        badge_text = f"ACTIVE PROJECT: {st.session_state.current_project_id}"
+        if proj:
+            flags = []
+            if last_state.get("fast_mode"):
+                flags.append("FAST MODE")
+            if last_state.get("disable_recipes"):
+                flags.append("NO RECIPES")
+            if flags:
+                badge_text += f" ({' | '.join(flags)})"
+        st.markdown(f"<div class='active-badge'>{badge_text}</div>", unsafe_allow_html=True)
     else:
         st.markdown("<div class='active-badge'>NO PROJECT LOADED</div>", unsafe_allow_html=True)
 
@@ -435,13 +453,14 @@ def render_orchestrator_panel():
             selected_spec = spec_cols[0].selectbox("Select Spec Document", options=specs, label_visibility="collapsed")
             
             fast_mode = st.checkbox("Fast Mode (Cap training at 50,000 rows)", value=False, key="spec_fast_mode", help="Subsample large datasets to 50K rows to prevent execution timeouts.")
+            disable_recipes = st.checkbox("Disable Recipes (Run only with spec and sandbox)", value=False, key="spec_disable_recipes", help="Bypass Standard Operating Procedures (recipes) to run raw objective. Useful for side-by-side comparison.")
             
             if spec_cols[1].button("VIEW SPEC", key="btn_view_spec", use_container_width=True):
                 st.session_state.view_spec = selected_spec
                 
             if spec_cols[2].button("LOAD SPEC", key="btn_load_spec", use_container_width=True):
                 with st.spinner("Loading..."):
-                    res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": False, "fast_mode": fast_mode})
+                    res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": False, "fast_mode": fast_mode, "disable_recipes": disable_recipes})
                     if res and "project" in res:
                         st.toast("Spec loaded successfully!")
                         st.session_state.current_project_id = res["project"]["id"]
@@ -451,7 +470,7 @@ def render_orchestrator_panel():
                         
             if spec_cols[3].button("LAUNCH", key="btn_launch_spec", type="primary", use_container_width=True):
                 with st.spinner("Launching..."):
-                    res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": True, "fast_mode": fast_mode})
+                    res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": True, "fast_mode": fast_mode, "disable_recipes": disable_recipes})
                     if res and "project" in res:
                         st.toast("Spec launched successfully!")
                         st.session_state.current_project_id = res["project"]["id"]
@@ -538,21 +557,18 @@ def render_orchestrator_panel():
     # Check if active project has >50K rows scanned by DataAnalyzer
     show_advisory = False
     max_rows = 0
-    if st.session_state.current_project_id:
-        proj_details = api_get(f"/projects/{st.session_state.current_project_id}")
-        if proj_details:
-            proj = proj_details.get("project", {})
-            last_state = proj.get("last_state_json") or {}
-            schemas = last_state.get("__schemas__", {})
-            for f_name, s_info in schemas.items():
-                rc = s_info.get("row_count", 0)
-                if rc > max_rows:
-                    max_rows = rc
-            sample_rows_hint = last_state.get("sample_rows")
-            if max_rows > 50000 and not sample_rows_hint:
-                show_advisory = True
+    if proj_details:
+        schemas = last_state.get("__schemas__", {})
+        for f_name, s_info in schemas.items():
+            rc = s_info.get("row_count", 0)
+            if rc > max_rows:
+                max_rows = rc
+        sample_rows_hint = last_state.get("sample_rows")
+        if max_rows > 50000 and not sample_rows_hint:
+            show_advisory = True
 
     fast_mode_manual = st.checkbox("Fast Mode (Cap training at 50,000 rows)", value=False, key="manual_fast_mode", help="Subsample large datasets to 50K rows to prevent execution timeouts.")
+    disable_recipes_manual = st.checkbox("Disable Recipes (Run only with spec and sandbox)", value=False, key="manual_disable_recipes", help="Bypass Standard Operating Procedures (recipes) to run raw objective. Useful for side-by-side comparison.")
     
     if show_advisory and not fast_mode_manual:
         st.warning(
@@ -581,7 +597,8 @@ def render_orchestrator_panel():
                         "name": f"Project {datetime.now().strftime('%m-%d %H:%M')}", 
                         "objective": objective, 
                         "existing_project_id": st.session_state.current_project_id,
-                        "fast_mode": fast_mode_manual
+                        "fast_mode": fast_mode_manual,
+                        "disable_recipes": disable_recipes_manual
                     }
                     res = api_post("/projects", payload)
                     if res:

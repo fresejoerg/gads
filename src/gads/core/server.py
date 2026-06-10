@@ -127,6 +127,7 @@ class ProjectCreateRequest(BaseModel):
     files: List[FileUpload] = []
     existing_project_id: Optional[str] = None
     fast_mode: bool = False
+    disable_recipes: bool = False
 
 class FilesUploadRequest(BaseModel):
     files: List[FileUpload]
@@ -707,6 +708,13 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
 
         print(f"  [SpecDrafter] Formalized objective: {formalized_objective[:80]}...", flush=True)
 
+        # Get disable_recipes from project state
+        disable_recipes = False
+        with Session(engine) as session:
+            p_state = session.get(Project, project_id)
+            if p_state and p_state.last_state_json:
+                disable_recipes = p_state.last_state_json.get("disable_recipes", False)
+
         # 1. ROUTING (Resilient & Resourced)
         router_fallback = ["local_model"] if get_local_only() else ["gemini-3.1-flash-lite-preview"]
         router_model = hierarchy.get("T3", {}).get("models", router_fallback)[0]
@@ -751,14 +759,22 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     span.end(output=intent.model_dump())
 
                     # Inline Knowledge Retrieval — prefer Router match, fall back to SpecDrafter hint
-                    recipe_id = intent.matched_recipe_id
-                    recipe = registry.get_recipe(recipe_id) if recipe_id else None
-                    if not recipe and spec_hints.get("recipe_id"):
-                        recipe_id = spec_hints.get("recipe_id")
+                    if disable_recipes:
+                        recipe_id = None
+                        recipe = None
+                        if intent:
+                            intent.matched_recipe_id = None
+                    else:
+                        recipe_id = intent.matched_recipe_id
                         recipe = registry.get_recipe(recipe_id) if recipe_id else None
+                        if not recipe and spec_hints.get("recipe_id"):
+                            recipe_id = spec_hints.get("recipe_id")
+                            recipe = registry.get_recipe(recipe_id) if recipe_id else None
 
-                    
                     recipe_info = "No specific recipe found. Proceeding with general data science reasoning."
+                    if disable_recipes:
+                        recipe_info = "Recipe search disabled by user configuration. Proceeding with general data science reasoning."
+
                     if recipe:
                         knowledge_report = ReconciliationReport(
                             recipe_id=recipe.id,
@@ -1896,6 +1912,7 @@ class SpecLaunchRequest(BaseModel):
     filename: str
     launch_workflow: bool = True
     fast_mode: bool = False
+    disable_recipes: bool = False
 
 @app.post("/projects/from-spec", response_model=ProjectResponse)
 async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundTasks):
@@ -1947,7 +1964,7 @@ async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundT
     # Transactional Execution
     with Session(engine) as session:
         project_name = meta.name or f"Project {datetime.now().strftime('%m-%d %H:%M')} (from spec)"
-        project = Project(name=project_name, objective=objective, last_state_json={"fast_mode": req.fast_mode})
+        project = Project(name=project_name, objective=objective, last_state_json={"fast_mode": req.fast_mode, "disable_recipes": req.disable_recipes})
         session.add(project)
         session.flush() # Get ID without fully committing yet
         
@@ -2082,6 +2099,7 @@ async def create_project(req: ProjectCreateRequest, background_tasks: Background
             # Save fast_mode state
             state = project.last_state_json or {}
             state["fast_mode"] = req.fast_mode
+            state["disable_recipes"] = req.disable_recipes
             project.last_state_json = state
             
             # Update objective if provided (for shell projects)
@@ -2091,7 +2109,7 @@ async def create_project(req: ProjectCreateRequest, background_tasks: Background
             session.commit()
             session.refresh(project)
         else:
-            project = Project(name=req.name, objective=req.objective, last_state_json={"fast_mode": req.fast_mode})
+            project = Project(name=req.name, objective=req.objective, last_state_json={"fast_mode": req.fast_mode, "disable_recipes": req.disable_recipes})
             session.add(project)
             session.commit()
             session.refresh(project)

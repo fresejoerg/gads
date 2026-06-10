@@ -1,16 +1,18 @@
 # GADS Next Steps Plan
-**Status: Phase 1 COMPLETE — SPRINT-2 + SPRINT-3 implemented by Deepfrese (2026-06-05)**
+**Status: Phase 1 COMPLETE — SPRINT-2 + SPRINT-3 implemented by Deepfrese; Systemd Services & UI Recipe-Disable Toggle configured by Antigravity (2026-06-10)**
 **Authors: Deepfrese + Antigravity**
 
 ---
 
 ## Context: What Was Completed This Session
 
-| Ticket | What Was Done |
-|--------|---------------|
+| Ticket / Task | What Was Done |
+|---------------|---------------|
 | SPRINT-1 · History Renderer | `src/gads/core/history_renderer.py` — failed tasks now always render full error + stdout tail regardless of sliding-window position. Committed `c071da5`. |
 | SPRINT-7 · Class Imbalance Hardening | DataAnalyzer computes `imbalance_ratio`/`minority_class_frac`; stratified SampleGuard; `gads_calibrate_threshold()` native function; PR AUC secondary metric; `class_weight='balanced'` in binary recipe; `f1_macro` for multiclass. Committed `aac7eb8`. |
 | AutoGluon recipe hardening | Sanitizers for 10+ local-model failure modes (def main wrapper, df_clean undefined, hallucinated imports, predict_proba indexing, etc.). Namespace snapshot now captures scalars (`problem_type`, `target_col`, `naive_baseline`). |
+| Systemd Services Configuration | Configured `gads-backend.service`, `gads-ui.service`, and `gads-monitor.service` as user-level systemd units to ensure robustness, persistence, and auto-restart capability. |
+| UI Disable-Recipes Toggle | Added a toggle flag `disable_recipes` inside Streamlit and FastAPI to allow runs with only the spec and sandbox environment setup, facilitating side-by-side comparison. |
 
 ---
 
