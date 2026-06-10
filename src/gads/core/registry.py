@@ -29,8 +29,8 @@ def get_random_routing() -> bool:
 # Hardcoded rules for mapping model names to Tiers
 # Gemini/Local are always index 0 to ensure they are the primary choice.
 TIER_MAPPING = {
-    "T1": ["gemini-3.1-pro-preview", "claude-opus-4.7", "gpt-5.5", "kimi-k2.6", "kimi-k2-thinking", "kimi-k2-thinking-turbo"],
-    "T2": ["gemini-3-flash-preview", "claude-sonnet-4.6", "gpt-5.4", "kimi-k2-0905-preview", "kimi-k2-turbo-preview"],
+    "T1": ["gemini-3.1-pro-preview", "claude-opus-4.8", "claude-fable-5", "gpt-5.5", "kimi-k2.6", "kimi-k2-thinking", "kimi-k2-thinking-turbo"],
+    "T2": ["gemini-3.5-flash", "claude-sonnet-4.6", "gpt-5.4", "kimi-k2-0905-preview", "kimi-k2-turbo-preview"],
     "T3": ["gemini-3.1-flash-lite-preview", "claude-haiku-4.5", "gpt-5.4-mini", "kimi-k2-0711-preview"],
     "T4": ["local_model"]
 }

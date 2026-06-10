@@ -880,7 +880,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             if await is_cancelled(): return
 
             # 3. PLANNING (Resilient Decomposition)
-            planner_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
+            planner_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash"]
             planner_model = hierarchy.get("T2", {}).get("models", planner_fallback)[0]
             # planner_files and spec_hints are pre-computed above (outside this retry loop)
 
@@ -1008,7 +1008,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
 
             
             # 3.1 PLAN CRITIQUE
-            plan_critique_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
+            plan_critique_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash"]
             plan_critique_model = hierarchy.get("T2", {}).get("models", plan_critique_fallback)[0]
             
             plan_critique = None
@@ -1501,7 +1501,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
             # (2) bypassed/handover tasks never executed but don't fail the workflow
             # Only fires when execution succeeded and a replan is still possible.
             if not (failed_tasks or pending_tasks) and workflow_attempt < MAX_WORKFLOW_ATTEMPTS:
-                cv_model_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
+                cv_model_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash"]
                 cv_model = hierarchy.get("T2", {}).get("models", cv_model_fallback)[0]
 
                 with Session(engine) as session:
@@ -1623,10 +1623,10 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                         pass
 
             # 5. SYNTHESIS & CRITIQUE LOOP
-            synthesizer_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
+            synthesizer_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash"]
             synthesizer_model = hierarchy.get("T2", {}).get("models", synthesizer_fallback)[0]
             
-            critique_fallback = ["local_model"] if get_local_only() else ["gemini-3-flash-preview"]
+            critique_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash"]
             critique_model = hierarchy.get("T2", {}).get("models", hierarchy.get("T3", {}).get("models", critique_fallback))[0]
 
             while True:
