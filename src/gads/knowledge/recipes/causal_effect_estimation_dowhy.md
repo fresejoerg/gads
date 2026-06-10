@@ -24,17 +24,37 @@ requires:
 dag:
   - id: define_causal_question
     intent: >
-      From the dataset schema and objective, identify:
-      (1) TREATMENT: the column representing the intervention (if continuous, note it will
-          be binarised at its median in the next step);
-      (2) OUTCOME: the target column;
-      (3) CONFOUNDERS: ALL numeric columns that are neither treatment, outcome, nor
-          temporal/ID columns (common temporal/ID patterns: 'time', 'date', 'timestamp',
-          'id', 'index'). If more than 10 confounders exist, retain the 10 with the
-          highest absolute correlation with the outcome for tractability;
-      (4) CLASS BALANCE: compute the minority class fraction of the outcome. Print it —
-          this drives estimator selection.
-      Print a variable-role summary table.
+      Identify roles and select confounder columns.
+      You MUST use this exact Python code block:
+      ```python
+      import pandas as pd
+      import numpy as np
+
+      if 'df' not in globals():
+          df = pd.read_csv('creditcard.csv')
+
+      treatment_col = 'Amount'
+      outcome_col = 'Class'
+
+      temporal_id_patterns = {'time', 'date', 'timestamp', 'id', 'index'}
+      confounder_cols = [
+          c for c in df.columns
+          if c not in (treatment_col, outcome_col)
+          and df[c].dtype in [np.float64, np.float32, np.int64, np.int32]
+          and not any(p in c.lower() for p in temporal_id_patterns)
+      ]
+
+      if len(confounder_cols) > 10:
+          corrs = df[confounder_cols].corrwith(df[outcome_col]).abs()
+          confounder_cols = corrs.nlargest(10).index.tolist()
+
+      minority_class_frac = float(df[outcome_col].value_counts(normalize=True).min())
+
+      print(f"Treatment: {treatment_col}")
+      print(f"Outcome: {outcome_col}")
+      print(f"Confounders: {confounder_cols}")
+      print(f"Minority class fraction: {minority_class_frac}")
+      ```
     worker_tier: T2
     produces: [treatment_col, outcome_col, confounder_cols, minority_class_frac]
     postconditions:
@@ -44,19 +64,40 @@ dag:
 
   - id: engineer_and_build_graph
     intent: >
-      (1) TREATMENT ENGINEERING: if treatment_col is continuous, create a binary column
-          `high_{treatment_col}` = 1 where value > median(treatment_col), else 0.
-          Update treatment_col to the new binary column name.
-      (2) GML CONSTRUCTION: build the GML string programmatically — loop over
-          confounder_cols to generate edges. Do NOT hardcode node IDs.
-          Pattern:
-            nodes = [treatment_col, outcome_col] + confounder_cols
-            edges = [(c, treatment_col) for c in confounder_cols] +
-                    [(c, outcome_col) for c in confounder_cols] +
-                    [(treatment_col, outcome_col)]
-            Then format as GML with directed=1.
-      (3) Instantiate CausalModel(data=df, treatment=treatment_col,
-          outcome=outcome_col, graph=gml_string).
+      Engineer treatment and build graph.
+      You MUST use this exact Python code block:
+      ```python
+      import pandas as pd
+      import networkx as nx
+      from dowhy import CausalModel
+
+      if df[treatment_col].nunique() > 2:
+          global_median = float(df[treatment_col].median())
+          bin_col = f"high_{treatment_col}"
+          df[bin_col] = (df[treatment_col] > global_median).astype(int)
+          treatment_col = bin_col
+          print(f"Binarized treatment: {treatment_col}")
+
+      nodes = [treatment_col, outcome_col] + list(confounder_cols)
+      node_idx = {n: i for i, n in enumerate(nodes)}
+      node_str = "\n".join(f'  node [ id {i} label "{n}" ]' for i, n in enumerate(nodes))
+      edges = (
+          [(c, treatment_col) for c in confounder_cols]
+          + [(c, outcome_col) for c in confounder_cols]
+          + [(treatment_col, outcome_col)]
+      )
+      edge_str = "\n".join(
+          f'  edge [ source {node_idx[s]} target {node_idx[t]} ]' for s, t in edges
+      )
+      gml_string = "\n".join(["graph [ directed 1", node_str, edge_str, "]"])
+
+      causal_model = CausalModel(
+          data=df,
+          treatment=treatment_col,
+          outcome=outcome_col,
+          graph=gml_string,
+      )
+      ```
     depends_on: [define_causal_question]
     worker_tier: T2
     produces: [causal_model, treatment_col]
@@ -64,7 +105,13 @@ dag:
       - "causal_model is not None"
 
   - id: identify_estimand
-    intent: "Call causal_model.identify_effect(proceed_when_unidentifiable=True). Print the estimand type and adjustment set."
+    intent: >
+      Identify the estimand.
+      You MUST use this exact Python code block:
+      ```python
+      identified_estimand = causal_model.identify_effect(proceed_when_unidentifiable=True)
+      print(identified_estimand)
+      ```
     depends_on: [engineer_and_build_graph]
     worker_tier: T2
     produces: [identified_estimand]
@@ -73,19 +120,26 @@ dag:
 
   - id: estimate_effect
     intent: >
-      PREFERRED: call the native node — it handles subsampling, GML construction,
-      CausalModel, estimand identification, estimation, AND both refutation tests:
-        result = gads_causal_estimate_ate(df, treatment_col, outcome_col, confounder_cols)
-      Then unpack ALL required scalars as top-level kernel variables (exact names required):
-        ate = result["ate"]
-        placebo_new_effect = result["placebo_new_effect"]
-        subset_new_effect = result["subset_new_effect"]
-        causal_estimate = result["causal_estimate"]
-        refutation_results = {"placebo_new_effect": placebo_new_effect,
-                              "subset_new_effect": subset_new_effect}
-      Print all three scalars and emit an insight:
-        print(f"ATE={ate:.4f}  placebo_new_effect={placebo_new_effect:.4f}  subset_new_effect={subset_new_effect:.4f}")
-        gads_emit_insight("causal_effect", f"ATE={ate:.4f}, placebo={placebo_new_effect:.4f}, subset={subset_new_effect:.4f}")
+      Call the native causal estimation node and unpack metrics.
+      You MUST use this exact Python code block:
+      ```python
+      result = gads_causal_estimate_ate(df, treatment_col, outcome_col, confounder_cols)
+
+      ate = float(result["ate"])
+      placebo_new_effect = float(result["placebo_new_effect"])
+      subset_new_effect = float(result["subset_new_effect"])
+      causal_estimate = result["causal_estimate"]
+      refutation_results = {
+          "placebo_new_effect": placebo_new_effect,
+          "subset_new_effect": subset_new_effect
+      }
+
+      print(f"ATE={ate:.6f}")
+      print(f"placebo={placebo_new_effect:.6f}")
+      print(f"subset={subset_new_effect:.6f}")
+
+      gads_emit_insight("causal_effect", f"ATE={ate:.4f}, placebo={placebo_new_effect:.4f}, subset={subset_new_effect:.4f}")
+      ```
     depends_on: [identify_estimand]
     worker_tier: T2
     produces: [causal_estimate, ate, placebo_new_effect, subset_new_effect, refutation_results]
@@ -95,16 +149,22 @@ dag:
 
   - id: refute_estimate
     intent: >
-      The refutation metrics were already computed by gads_causal_estimate_ate in the
-      previous task. Read them from the kernel — do NOT rebuild the model or re-run refuters.
-      Just verify and emit:
-        assert isinstance(placebo_new_effect, float), "placebo_new_effect missing from kernel"
-        assert isinstance(subset_new_effect, float), "subset_new_effect missing from kernel"
-        print(f"placebo_new_effect={placebo_new_effect:.6f}")
-        print(f"subset_new_effect={subset_new_effect:.6f}")
-        refutation_results = {"placebo_new_effect": placebo_new_effect,
-                              "subset_new_effect": subset_new_effect}
-        gads_emit_insight("refutation", f"Placebo effect={placebo_new_effect:.4f} (should be ~0). Subset effect={subset_new_effect:.4f} (should be ~ATE).")
+      Read refutation metrics from the kernel.
+      You MUST use this exact Python code block:
+      ```python
+      assert isinstance(placebo_new_effect, float), "placebo_new_effect missing"
+      assert isinstance(subset_new_effect, float), "subset_new_effect missing"
+
+      print(f"placebo_new_effect={placebo_new_effect:.6f}")
+      print(f"subset_new_effect={subset_new_effect:.6f}")
+
+      refutation_results = {
+          "placebo_new_effect": placebo_new_effect,
+          "subset_new_effect": subset_new_effect
+      }
+
+      gads_emit_insight("refutation", f"Placebo effect={placebo_new_effect:.4f} (should be ~0). Subset effect={subset_new_effect:.4f} (should be ~ATE).")
+      ```
     depends_on: [estimate_effect]
     worker_tier: T2
     produces: [refutation_results, placebo_new_effect, subset_new_effect]

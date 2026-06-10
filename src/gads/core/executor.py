@@ -220,6 +220,64 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
         code = re.sub(r'import autogluon\.models[^\n]*\n?', '', code)
         print("  [Sanitizer] Removed hallucinated AutogluonModels/autogluon.models/gads_emit_insight imports", flush=True)
 
+    # Remove hallucinated causal library imports (causal_models, causalinference do not exist)
+    _causal_hallucinations = ['causal_models', 'causalinference', 'causal_inference_lib']
+    if any(h in code for h in _causal_hallucinations):
+        code = re.sub(r'(?:from causal_models|import causal_models)[^\n]*\n?', '', code)
+        code = re.sub(r'(?:from causalinference|import causalinference)[^\n]*\n?', '', code)
+        code = re.sub(r'(?:from causal_inference_lib|import causal_inference_lib)[^\n]*\n?', '', code)
+        print("  [Sanitizer] Removed hallucinated causal library imports (causal_models/causalinference)", flush=True)
+
+    # Strip causal_learn imports when used for DoWhy estimation tasks (wrong library).
+    # causal-learn is for causal structure discovery (PC/FCI/GES), not effect estimation.
+    # Local model confuses it with dowhy. Strip the import; the skill/recipe provides correct API.
+    if 'causal_learn' in code or 'from cdt' in code:
+        code = re.sub(r'(?:from causal_learn|import causal_learn)[^\n]*\n?', '', code)
+        code = re.sub(r'(?:from cdt|import cdt)[^\n]*\n?', '', code)
+        print("  [Sanitizer] Removed causal_learn/cdt imports (wrong library for DoWhy estimation)", flush=True)
+
+    # Strip mock CausalModel class definitions — local model sometimes fakes the DoWhy class.
+    # Pattern: class CausalModel: or class CausalModel(object): followed by indented body.
+    # Removing the entire class definition prevents the fake object from shadowing the real one.
+    if re.search(r'^class CausalModel[\s:(]', code, re.MULTILINE):
+        code = re.sub(r'^class CausalModel[\s\S]*?(?=\n\S|\Z)', '', code, flags=re.MULTILINE)
+        print("  [Sanitizer] Removed mock CausalModel class definition", flush=True)
+
+    # Strip invalid backslash line-continuations inside parentheses and \) escape sequences.
+    # Local model sometimes writes: func(arg1, \   or  method\) — both are syntax errors.
+    # Safe to remove: inside open parens Python does implicit line continuation; \) is never valid.
+    if '\\)' in code or re.search(r'\\ *\n', code):
+        code = re.sub(r'\\\)', ')', code)               # \) → )
+        code = re.sub(r'\\ *\n', '\n', code)            # trailing \ at end of line → bare newline
+        print("  [Sanitizer] Stripped invalid backslash continuations (\\) and trailing \\)", flush=True)
+
+    # Replace literal \n (backslash-n as two chars) before closing delimiters with a real newline.
+    # Local model sometimes writes: CausalModel(graph=gml_string,\n) — syntax error outside strings.
+    if '\\n' in code and re.search(r'\\n[)\],}]', code):
+        code = re.sub(r'\\n([)\],}])', r'\n\1', code)
+        print("  [Sanitizer] Replaced literal \\n-before-delimiter with real newline", flush=True)
+
+    # Fix gml_string split across lines: model breaks a string literal at \n by inserting an actual newline.
+    # Pattern: a gml_string assignment line ends with + " (opening an unclosed string literal),
+    # and the next line contains the closing ".  Join them back into one line.
+    if 'gml_string' in code:
+        lines = code.split('\n')
+        fixed_lines = []
+        i = 0
+        while i < len(lines):
+            line = lines[i]
+            if 'gml_string' in line:
+                stripped = line.rstrip()
+                if stripped.endswith('+ "') or stripped.endswith("+ '"):
+                    if i + 1 < len(lines):
+                        fixed_lines.append(stripped + lines[i + 1].lstrip())
+                        i += 2
+                        print("  [Sanitizer] Joined split gml_string concatenation across lines", flush=True)
+                        continue
+            fixed_lines.append(line)
+            i += 1
+        code = '\n'.join(fixed_lines)
+
     # Unwrap def main(): — variables inside a function are local and invisible to other tasks
     if re.search(r'^def main\(\):', code, re.MULTILINE):
         lines = code.split('\n')
@@ -279,6 +337,25 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
     if 'target_mol' in code:
         code = code.replace('target_mol', 'target_col')
         print("  [Sanitizer] Fixed target_mol → target_col typo", flush=True)
+
+    # Fix common local-model typo: minority_class_fract → minority_class_frac
+    if 'minority_class_fract' in code:
+        code = code.replace('minority_class_fract', 'minority_class_frac')
+        print("  [Sanitizer] Fixed minority_class_fract → minority_class_frac typo", flush=True)
+
+    # Fix duplicate closing square brackets on df access: df[col]] → df[col]
+    if 'df[' in code:
+        code = re.sub(r'df\[([^\]\n]+)\]\]', r'df[\1]', code)
+        print("  [Sanitizer] Fixed duplicate closing brackets on df", flush=True)
+
+    # Fix dictionary keys from gads_causal_estimate_ate return
+    if 'gads_causal_estimate_ate' in code:
+        code = code.replace('result["subset_new_effectiveness"]', 'result["subset_new_effect"]')
+        code = code.replace('result["placebo_new_effectiveness"]', 'result["placebo_new_effect"]')
+        code = code.replace('result["causal_"]', 'result["causal_estimate"]')
+        code = code.replace('result["causal_estimate_"]', 'result["causal_estimate"]')
+        code = code.replace('treatment=treatment_lane', 'treatment=treatment_col')
+        print("  [Sanitizer] Standardized gads_causal_estimate_ate return keys", flush=True)
 
     # AutoGluon predict_proba returns a DataFrame, not ndarray; fix numpy-style [:, n] indexing
     if 'predict_proba' in code or ('y_prob' in code and '[:,' in code):

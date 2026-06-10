@@ -434,12 +434,14 @@ def render_orchestrator_panel():
             spec_cols = st.columns([0.4, 0.2, 0.2, 0.2])
             selected_spec = spec_cols[0].selectbox("Select Spec Document", options=specs, label_visibility="collapsed")
             
+            fast_mode = st.checkbox("Fast Mode (Cap training at 50,000 rows)", value=False, key="spec_fast_mode", help="Subsample large datasets to 50K rows to prevent execution timeouts.")
+            
             if spec_cols[1].button("VIEW SPEC", key="btn_view_spec", use_container_width=True):
                 st.session_state.view_spec = selected_spec
                 
             if spec_cols[2].button("LOAD SPEC", key="btn_load_spec", use_container_width=True):
                 with st.spinner("Loading..."):
-                    res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": False})
+                    res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": False, "fast_mode": fast_mode})
                     if res and "project" in res:
                         st.toast("Spec loaded successfully!")
                         st.session_state.current_project_id = res["project"]["id"]
@@ -449,7 +451,7 @@ def render_orchestrator_panel():
                         
             if spec_cols[3].button("LAUNCH", key="btn_launch_spec", type="primary", use_container_width=True):
                 with st.spinner("Launching..."):
-                    res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": True})
+                    res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": True, "fast_mode": fast_mode})
                     if res and "project" in res:
                         st.toast("Spec launched successfully!")
                         st.session_state.current_project_id = res["project"]["id"]
@@ -533,6 +535,31 @@ def render_orchestrator_panel():
                             height=100, 
                             label_visibility="collapsed")
     
+    # Check if active project has >50K rows scanned by DataAnalyzer
+    show_advisory = False
+    max_rows = 0
+    if st.session_state.current_project_id:
+        proj_details = api_get(f"/projects/{st.session_state.current_project_id}")
+        if proj_details:
+            proj = proj_details.get("project", {})
+            last_state = proj.get("last_state_json") or {}
+            schemas = last_state.get("__schemas__", {})
+            for f_name, s_info in schemas.items():
+                rc = s_info.get("row_count", 0)
+                if rc > max_rows:
+                    max_rows = rc
+            sample_rows_hint = last_state.get("sample_rows")
+            if max_rows > 50000 and not sample_rows_hint:
+                show_advisory = True
+
+    fast_mode_manual = st.checkbox("Fast Mode (Cap training at 50,000 rows)", value=False, key="manual_fast_mode", help="Subsample large datasets to 50K rows to prevent execution timeouts.")
+    
+    if show_advisory and not fast_mode_manual:
+        st.warning(
+            f"⚠️ **Advisory**: Dataset has {max_rows:,} rows. "
+            "It is highly recommended to enable **Fast Mode** to speed up training and prevent sandbox timeouts."
+        )
+    
     # 3. Control Bar
     ctrl_cols = st.columns(4)
     
@@ -553,7 +580,8 @@ def render_orchestrator_panel():
                     payload = {
                         "name": f"Project {datetime.now().strftime('%m-%d %H:%M')}", 
                         "objective": objective, 
-                        "existing_project_id": st.session_state.current_project_id
+                        "existing_project_id": st.session_state.current_project_id,
+                        "fast_mode": fast_mode_manual
                     }
                     res = api_post("/projects", payload)
                     if res:
@@ -617,7 +645,7 @@ def render_orchestrator_panel():
             last_instr_id = None
 
             ORCHESTRATOR_ROLES = {"System", "DataAnalyzer", "Router", "Planner", "PlanCritique",
-                                      "Synthesizer", "Critique", "CompletenessVerifier"}
+                                      "Synthesizer", "Critique", "CompletenessVerifier", "DataSampler"}
             coder_task_num = 0
 
             for t in sorted(tasks, key=lambda x: x.get("created_at", "")):
@@ -636,6 +664,7 @@ def render_orchestrator_panel():
                 st_icon = "⚪"
                 if t['assigned_to'] == "Router": st_icon = "📐"
                 elif t['assigned_to'] == "Planner": st_icon = "📋"
+                elif t['assigned_to'] == "DataSampler": st_icon = "✂️"
                 elif t['status'] == "completed": st_icon = "🟢"
                 elif t['status'] == "failed": st_icon = "🔴"
                 elif t['status'] == "running": st_icon = "🔵"

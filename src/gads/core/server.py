@@ -126,6 +126,7 @@ class ProjectCreateRequest(BaseModel):
     objective: str
     files: List[FileUpload] = []
     existing_project_id: Optional[str] = None
+    fast_mode: bool = False
 
 class FilesUploadRequest(BaseModel):
     files: List[FileUpload]
@@ -470,7 +471,13 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             init_task_id = init_task.id
 
         executor = ExecutionManager()
+        with Session(engine) as session:
+            p_obj = session.get(Project, project_id)
+            if p_obj and p_obj.last_state_json and "__schemas__" in p_obj.last_state_json:
+                executor.file_schemas = p_obj.last_state_json["__schemas__"]
+                print(f"  [Workflow] Loaded {len(executor.file_schemas)} cached file schemas from Project state.")
         hierarchy = await get_model_hierarchy()
+
 
         # Check cancellation before start
         if await is_cancelled(): return
@@ -645,8 +652,18 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     if val:
                         spec_hints[key] = val
 
+                # Check if fast_mode is enabled for the project
+                fast_mode = False
+                with Session(engine) as session:
+                    proj = session.get(Project, project_id)
+                    if proj and proj.last_state_json:
+                        fast_mode = proj.last_state_json.get("fast_mode", False)
+
                 # Write workflow_spec.md to workspace
                 frontmatter: Dict[str, Any] = {"name": spec_draft.name, "datasets": spec_draft.datasets}
+                if fast_mode:
+                    frontmatter["sample_rows"] = 50000
+                    spec_hints["sample_rows"] = 50000
                 if spec_draft.recipe_id:
                     frontmatter["recipe_id"] = spec_draft.recipe_id
                 if spec_draft.target_column:
@@ -734,8 +751,12 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     span.end(output=intent.model_dump())
 
                     # Inline Knowledge Retrieval — prefer Router match, fall back to SpecDrafter hint
-                    recipe_id = intent.matched_recipe_id or spec_hints.get("recipe_id")
+                    recipe_id = intent.matched_recipe_id
                     recipe = registry.get_recipe(recipe_id) if recipe_id else None
+                    if not recipe and spec_hints.get("recipe_id"):
+                        recipe_id = spec_hints.get("recipe_id")
+                        recipe = registry.get_recipe(recipe_id) if recipe_id else None
+
                     
                     recipe_info = "No specific recipe found. Proceeding with general data science reasoning."
                     if recipe:
@@ -807,6 +828,41 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         f"Injecting sample_rows={threshold} hint for Planner.",
                         flush=True
                     )
+                    
+                    # Create DataSampler task in DB
+                    with Session(engine) as session:
+                        sampler_task = Task(
+                            project_id=project_id,
+                            instruction_id=instruction_id,
+                            description=f"DataSampler: Auto-sampling large dataset to prevent timeout ({threshold:,} rows cap)",
+                            assigned_to="DataSampler",
+                            status="completed",
+                            result_json={
+                                "stdout": f"[SampleBudget] Dataset has {max_rows:,} rows, exceeding the threshold of {threshold:,} rows for {intent.task_type}.\nAuto-injected sample_rows={threshold} constraint to prevent sandbox timeouts."
+                            },
+                            heartbeat=datetime.now()
+                        )
+                        session.add(sampler_task)
+                        session.commit()
+        else:
+            # sample_rows is already present (e.g. set via fast_mode or explicitly in spec)
+            with Session(engine) as session:
+                existing_sampler = session.exec(select(Task).where(Task.project_id == project_id, Task.assigned_to == "DataSampler")).first()
+                if not existing_sampler:
+                    val = spec_hints["sample_rows"]
+                    sampler_task = Task(
+                        project_id=project_id,
+                        instruction_id=instruction_id,
+                        description=f"DataSampler: Applying row limit ({val:,} rows cap)",
+                        assigned_to="DataSampler",
+                        status="completed",
+                        result_json={
+                            "stdout": f"[SampleBudget] Applying sample_rows={val} constraint from spec frontmatter / Fast Mode."
+                        },
+                        heartbeat=datetime.now()
+                    )
+                    session.add(sampler_task)
+                    session.commit()
 
         # --- MAIN WORKFLOW LOOP (Planning -> Execution -> Synthesis -> Critique) ---
         MAX_WORKFLOW_ATTEMPTS = 3
@@ -1167,6 +1223,8 @@ for _v in _vars:
             _summary[_v] = _obj
         elif hasattr(_obj, 'predict') and hasattr(_obj, 'fit'):
             _summary[_v] = f"Model ({type(_obj).__name__})"
+        else:
+            _summary[_v] = f"{type(_obj).__module__}.{type(_obj).__name__}"
     except: pass
 print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
 """
@@ -1837,6 +1895,7 @@ def save_spec_content(filename: str, req: SpecContent):
 class SpecLaunchRequest(BaseModel):
     filename: str
     launch_workflow: bool = True
+    fast_mode: bool = False
 
 @app.post("/projects/from-spec", response_model=ProjectResponse)
 async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundTasks):
@@ -1888,7 +1947,7 @@ async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundT
     # Transactional Execution
     with Session(engine) as session:
         project_name = meta.name or f"Project {datetime.now().strftime('%m-%d %H:%M')} (from spec)"
-        project = Project(name=project_name, objective=objective)
+        project = Project(name=project_name, objective=objective, last_state_json={"fast_mode": req.fast_mode})
         session.add(project)
         session.flush() # Get ID without fully committing yet
         
@@ -1906,9 +1965,26 @@ async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundT
             for ds in meta.datasets:
                 ds_path = (datasets_root / ds).resolve()
                 _mount_external_dataset(workspace_dir, str(ds_path))
+            
+            # If fast_mode is enabled, inject sample_rows: 50000 into frontmatter
+            spec_content_to_write = content
+            if req.fast_mode:
+                if content.startswith("---"):
+                    parts = content.split("---", 2)
+                    if len(parts) >= 3:
+                        try:
+                            frontmatter_data = yaml.safe_load(parts[1]) or {}
+                            frontmatter_data["sample_rows"] = 50000
+                            new_yaml_str = yaml.dump(frontmatter_data, default_flow_style=False).strip()
+                            spec_content_to_write = f"---\n{new_yaml_str}\n---\n{parts[2]}"
+                        except Exception as e:
+                            print(f"Error updating frontmatter for fast_mode: {e}")
+                else:
+                    spec_content_to_write = f"---\nsample_rows: 50000\n---\n{content}"
+
             # Write spec to workspace so the workflow's SpecDrafter stage can skip drafting
             spec_dest = Path(workspace_dir) / "workflow_spec.md"
-            spec_dest.write_text(content, encoding="utf-8")
+            spec_dest.write_text(spec_content_to_write, encoding="utf-8")
         except Exception as e:
             # Rollback DB and filesystem
             session.rollback()
@@ -2002,14 +2078,20 @@ async def create_project(req: ProjectCreateRequest, background_tasks: Background
             # Reset cancelled status if resuming
             if project.narrative and "[CANCELLED]" in project.narrative:
                 project.narrative = None
+            
+            # Save fast_mode state
+            state = project.last_state_json or {}
+            state["fast_mode"] = req.fast_mode
+            project.last_state_json = state
+            
             # Update objective if provided (for shell projects)
             if req.objective:
                 project.objective = req.objective
-                session.add(project)
-                session.commit()
-                session.refresh(project)
+            session.add(project)
+            session.commit()
+            session.refresh(project)
         else:
-            project = Project(name=req.name, objective=req.objective)
+            project = Project(name=req.name, objective=req.objective, last_state_json={"fast_mode": req.fast_mode})
             session.add(project)
             session.commit()
             session.refresh(project)

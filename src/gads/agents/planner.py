@@ -114,11 +114,54 @@ class DataSciencePlanner(BaseAgent[PlannerInput, PlannerOutput]):
         )
 
     async def run(self, input_data: PlannerInput, stream_callback=None, **kwargs) -> Any:
+        import re
+        from gads.core.registry import get_local_only
+        
         # Refresh prompt from registry in case of hot-reload
         base_prompt = prompt_registry.get_prompt(self.name)
         
-        hierarchy_str = json.dumps(input_data.available_models_hierarchy, indent=2)
-        skills_str = json.dumps(input_data.available_skills, indent=2)
+        if get_local_only():
+            # Strip model hierarchy json
+            hierarchy_str = (
+                "local_only mode is active. All tiers (T1, T2, T3, T4) are collapsed. "
+                "You MUST assign all tasks to the model ID: 'local_model'."
+            )
+            
+            # Filter skills list to only those relevant to the objective or matched recipe
+            objective_lower = input_data.objective.lower()
+            relevant_skills = []
+            
+            recipe_keywords = set()
+            if input_data.knowledge_report:
+                recipe_id = input_data.knowledge_report.recipe_id.lower()
+                recipe_keywords.update(re.findall(r"\b\w{3,}\b", recipe_id))
+            
+            for skill in input_data.available_skills:
+                skill_id = skill.get("id", "").lower()
+                triggers = skill.get("triggers", [])
+                
+                # Check match against objective or recipe
+                match = False
+                if any(t.lower() in objective_lower for t in triggers):
+                    match = True
+                elif skill_id in objective_lower:
+                    match = True
+                elif recipe_keywords and any(t.lower() in recipe_keywords for t in triggers):
+                    match = True
+                
+                if match:
+                    relevant_skills.append(skill)
+            
+            # If nothing matched, default to a minimal set
+            if not relevant_skills:
+                fallback_ids = {"visualization_best_practices", "sandbox_environment", "tabular_visualization"}
+                relevant_skills = [s for s in input_data.available_skills if s.get("id") in fallback_ids]
+                
+            skills_str = json.dumps(relevant_skills, indent=2)
+            print(f"  [Planner] ✂️ Trimmed system prompt: model hierarchy stripped, skills pruned from {len(input_data.available_skills)} to {len(relevant_skills)}.", flush=True)
+        else:
+            hierarchy_str = json.dumps(input_data.available_models_hierarchy, indent=2)
+            skills_str = json.dumps(input_data.available_skills, indent=2)
         
         # Format files with rich profiles (schema, null rates, cardinality, numeric stats)
         files_str = (
@@ -139,6 +182,7 @@ class DataSciencePlanner(BaseAgent[PlannerInput, PlannerOutput]):
         
         # Set the prompt for the Pydantic AI agent
         self.agent._system_prompts = (formatted_prompt,)
+
 
         user_content = f"USER OBJECTIVE: {input_data.objective}"
         if input_data.critique_feedback:

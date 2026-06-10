@@ -37,7 +37,17 @@ class DataScienceRouter(BaseAgent[RouterInput, RouterOutput]):
         # Router output is compact JSON (~200 tokens) — cap to fail fast on repetition loops
         kwargs.setdefault("max_tokens", 1024)
         # Use super().run to get streaming support
-        return await super().run(
+        res = await super().run(
             f"OBJECTIVE: {input_data.objective}",
             **kwargs
         )
+        
+        # Validate matched_recipe_id against available recipes to prevent hallucination
+        if res and res.content:
+            valid_ids = {r.get("id") for r in input_data.available_recipes if r.get("id")}
+            if res.content.matched_recipe_id and res.content.matched_recipe_id not in valid_ids:
+                print(f"  [Router] Hallucinated matched_recipe_id '{res.content.matched_recipe_id}' reset to None.", flush=True)
+                res.content.matched_recipe_id = None
+                
+        return res
+

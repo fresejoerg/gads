@@ -98,6 +98,7 @@ Tasks declare `postcondition_json` with `output_type`, `required_columns`, and o
 | `filters` | str | Forwarded to Planner as a hint |
 | `domain` | str | Forwarded to Planner as a hint |
 | `recipe_id` | str | Forwarded to Planner as a hint |
+| `sample_rows` | int | Hard sandbox budget constraint — caps the maximum number of rows processed in ML training/analysis tasks to prevent execution timeouts |
 | `save_model` | bool | If `true`, a deterministic post-execution hook saves the first fitted sklearn-style classifier found in the kernel (`hasattr(fit) + hasattr(predict) + hasattr(classes_)`) to `model.joblib` via joblib. Runs after all tasks complete successfully, independent of what the Planner generates. NOT forwarded to the Planner. |
 
 Path-traversal is blocked via `Path.is_relative_to` checks; recipes are validated against the registry. The endpoint is fully transactional — failure rolls back DB and rm's the workspace.
@@ -110,3 +111,6 @@ Path-traversal is blocked via `Path.is_relative_to` checks; recipes are validate
 - **The sliding-window context** (server.py:run_agent_workflow, "2+1 model") gives the Coder full detail for the first + last 2 tasks and only `orchestrator_summary` for the middle. When something is invisible to the Coder, suspect that distillation.
 - **Cascade deletes are manual** — `DELETE /projects/{id}` walks Task/Artifact/Instruction and deletes each before deleting the Project (no FK cascade configured).
 - **`core/state.Blackboard` is dead code** — only `main.py` uses it. Real state lives in the DB + `ExecutionManager.authoritative_state` + the IPython kernel.
+- **Inbox Collaboration & GOD Tasks**: At the start of every session, ALWAYS check if the background monitor task (`scripts/monitor_inbox.py`) is running. If not, immediately start it. When a task message arrives in `agent_inbox.jsonl` from `"from": "GOD"`, do not simply write an acknowledgment and stop. You must immediately parse the task, take ownership of it, and proactively execute/implement the required work, communicating updates and coordinating with the other agent (`Deepfrese`) via the inbox as needed to advance the work.
+
+
