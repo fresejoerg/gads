@@ -1,6 +1,6 @@
 ---
 id: causal_impact_timeseries
-description: "pycausalimpact: Bayesian structural time-series causal analysis for intervention effects. For pre/post event studies on time-series data."
+description: "causalimpact: Bayesian structural time-series causal analysis for intervention effects. For pre/post event studies on time-series data. (pip: pycausalimpact, import: causalimpact)"
 triggers: ["causal impact", "intervention effect", "time series causal", "pre-post", "event study", "pycausalimpact", "causalimpact", "campaign effect", "policy effect", "interrupted time series", "before after"]
 ---
 # Time-Series Causal Impact Analysis with pycausalimpact
@@ -87,7 +87,7 @@ print(f"cum_effect={cum_effect}")
 ```
 
 ## Sandbox Rules
-- `pycausalimpact` (import as `from causalimpact import CausalImpact`) is available.
+- Package is `pycausalimpact` but **import as `from causalimpact import CausalImpact`** — never `import pycausalimpact`.
 - Data must have a DatetimeIndex or integer index in chronological order.
 - If no control series is available, still works but counterfactual is less precise.
 - `matplotlib.use("Agg")` before plotting to avoid display errors in headless sandbox.
