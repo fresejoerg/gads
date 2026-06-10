@@ -229,8 +229,10 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
         print("  [Sanitizer] Removed hallucinated causal library imports (causal_models/causalinference)", flush=True)
 
     # Strip causal_learn imports when used for DoWhy estimation tasks (wrong library).
-    # causal-learn is for causal structure discovery (PC/FCI/GES), not effect estimation.
-    # Local model confuses it with dowhy. Strip the import; the skill/recipe provides correct API.
+    # The package is pip install causal-learn; correct import name is `causallearn` (no underscore).
+    # Models sometimes write `from causal_learn import ...` (wrong name) or use it for effect
+    # estimation (wrong purpose — causallearn is for structure discovery: PC/FCI/GES).
+    # Strip the bad import; the skill/recipe provides the correct dowhy API instead.
     if 'causal_learn' in code or 'from cdt' in code:
         code = re.sub(r'(?:from causal_learn|import causal_learn)[^\n]*\n?', '', code)
         code = re.sub(r'(?:from cdt|import cdt)[^\n]*\n?', '', code)
