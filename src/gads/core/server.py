@@ -1877,8 +1877,28 @@ def list_specs():
     specs_dir = Path("specs").resolve()
     if not specs_dir.exists():
         return []
-    files = [f.name for f in specs_dir.iterdir() if f.is_file() and f.suffix == ".md"]
-    return sorted(files)
+    files = sorted([f for f in specs_dir.iterdir() if f.is_file() and f.suffix == ".md"], key=lambda f: f.name)
+
+    # Build last_used_at map from DB: max project.created_at per spec_filename
+    last_used_map: Dict[str, str] = {}
+    with Session(engine) as session:
+        projects = session.exec(select(Project)).all()
+        for p in projects:
+            fname = (p.last_state_json or {}).get("spec_filename")
+            if fname:
+                ts = p.created_at.isoformat()
+                if fname not in last_used_map or ts > last_used_map[fname]:
+                    last_used_map[fname] = ts
+
+    result = []
+    for f in files:
+        stat = f.stat()
+        result.append({
+            "filename": f.name,
+            "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            "last_used_at": last_used_map.get(f.name),
+        })
+    return result
 
 @app.get("/specs/{filename}")
 def get_spec_content(filename: str):
@@ -1964,7 +1984,7 @@ async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundT
     # Transactional Execution
     with Session(engine) as session:
         project_name = meta.name or f"Project {datetime.now().strftime('%m-%d %H:%M')} (from spec)"
-        project = Project(name=project_name, objective=objective, last_state_json={"fast_mode": req.fast_mode, "disable_recipes": req.disable_recipes})
+        project = Project(name=project_name, objective=objective, last_state_json={"fast_mode": req.fast_mode, "disable_recipes": req.disable_recipes, "spec_filename": req.filename})
         session.add(project)
         session.flush() # Get ID without fully committing yet
         
