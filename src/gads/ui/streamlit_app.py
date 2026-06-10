@@ -393,9 +393,7 @@ def render_archive_panel():
             st.markdown("---")
 
 def render_orchestrator_panel():
-    # Header with Toggles
-    head_col1, head_col2, head_col3 = st.columns([2.0, 1.2, 1.0])
-    head_col1.markdown("### ORCHESTRATOR")
+    st.markdown("### ORCHESTRATOR")
     
     if "initial_config_synced" not in st.session_state:
         config = api_get("/config")
@@ -407,21 +405,6 @@ def render_orchestrator_panel():
             st.session_state.local_only_mode = False
             st.session_state.random_routing_mode = False
 
-    st.session_state.local_only_mode = head_col2.toggle(
-        "LOCAL ONLY", 
-        value=st.session_state.local_only_mode,
-        help="Force the system to use local LLM models (e.g. Ollama) instead of cloud APIs."
-    )
-    st.session_state.random_routing_mode = head_col3.toggle(
-        "RANDOM ROUTING", 
-        value=st.session_state.random_routing_mode,
-        help="Bypass the Planner and randomly route the objective to a worker agent (for testing)."
-    )
-    api_post("/config", {
-        "local_only": st.session_state.local_only_mode,
-        "random_routing": st.session_state.random_routing_mode
-    })
-
     proj = None
     last_state = {}
     proj_details = None
@@ -430,6 +413,50 @@ def render_orchestrator_panel():
         if proj_details:
             proj = proj_details.get("project", {})
             last_state = proj.get("last_state_json") or {}
+            
+            # Sync session configuration with loaded project
+            if st.session_state.get("last_synced_project_id") != st.session_state.current_project_id:
+                st.session_state.fast_mode = last_state.get("fast_mode", False)
+                st.session_state.disable_recipes = last_state.get("disable_recipes", False)
+                st.session_state.last_synced_project_id = st.session_state.current_project_id
+
+    # Initialize fast_mode and disable_recipes in session_state if not present
+    if "fast_mode" not in st.session_state:
+        st.session_state.fast_mode = False
+    if "disable_recipes" not in st.session_state:
+        st.session_state.disable_recipes = False
+
+    # SYSTEM CONFIGURATION SECTION (4 Checkboxes in a border container)
+    with st.container(border=True):
+        st.markdown("**SYSTEM CONFIGURATION**")
+        cfg_col1, cfg_col2, cfg_col3, cfg_col4 = st.columns(4)
+        
+        st.session_state.local_only_mode = cfg_col1.checkbox(
+            "Local Only",
+            value=st.session_state.local_only_mode,
+            help="Force the system to use local LLM models (e.g. Ollama) instead of cloud APIs."
+        )
+        st.session_state.random_routing_mode = cfg_col2.checkbox(
+            "Random Routing",
+            value=st.session_state.random_routing_mode,
+            help="Bypass the Planner and randomly route the objective to a worker agent (for testing)."
+        )
+        st.session_state.fast_mode = cfg_col3.checkbox(
+            "Fast Mode",
+            value=st.session_state.fast_mode,
+            help="Subsample large datasets to 50K rows to prevent execution timeouts."
+        )
+        st.session_state.disable_recipes = cfg_col4.checkbox(
+            "Disable Recipes",
+            value=st.session_state.disable_recipes,
+            help="Bypass Standard Operating Procedures (recipes) to run raw objective. Useful for side-by-side comparison."
+        )
+
+    # Sync backend settings for local_only and random_routing
+    api_post("/config", {
+        "local_only": st.session_state.local_only_mode,
+        "random_routing": st.session_state.random_routing_mode
+    })
 
     if st.session_state.current_project_id:
         badge_text = f"ACTIVE PROJECT: {st.session_state.current_project_id}"
@@ -452,15 +479,12 @@ def render_orchestrator_panel():
             spec_cols = st.columns([0.4, 0.2, 0.2, 0.2])
             selected_spec = spec_cols[0].selectbox("Select Spec Document", options=specs, label_visibility="collapsed")
             
-            fast_mode = st.checkbox("Fast Mode (Cap training at 50,000 rows)", value=False, key="spec_fast_mode", help="Subsample large datasets to 50K rows to prevent execution timeouts.")
-            disable_recipes = st.checkbox("Disable Recipes (Run only with spec and sandbox)", value=False, key="spec_disable_recipes", help="Bypass Standard Operating Procedures (recipes) to run raw objective. Useful for side-by-side comparison.")
-            
             if spec_cols[1].button("VIEW SPEC", key="btn_view_spec", use_container_width=True):
                 st.session_state.view_spec = selected_spec
                 
             if spec_cols[2].button("LOAD SPEC", key="btn_load_spec", use_container_width=True):
                 with st.spinner("Loading..."):
-                    res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": False, "fast_mode": fast_mode, "disable_recipes": disable_recipes})
+                    res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": False, "fast_mode": st.session_state.fast_mode, "disable_recipes": st.session_state.disable_recipes})
                     if res and "project" in res:
                         st.toast("Spec loaded successfully!")
                         st.session_state.current_project_id = res["project"]["id"]
@@ -470,7 +494,7 @@ def render_orchestrator_panel():
                         
             if spec_cols[3].button("LAUNCH", key="btn_launch_spec", type="primary", use_container_width=True):
                 with st.spinner("Launching..."):
-                    res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": True, "fast_mode": fast_mode, "disable_recipes": disable_recipes})
+                    res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": True, "fast_mode": st.session_state.fast_mode, "disable_recipes": st.session_state.disable_recipes})
                     if res and "project" in res:
                         st.toast("Spec launched successfully!")
                         st.session_state.current_project_id = res["project"]["id"]
@@ -567,10 +591,7 @@ def render_orchestrator_panel():
         if max_rows > 50000 and not sample_rows_hint:
             show_advisory = True
 
-    fast_mode_manual = st.checkbox("Fast Mode (Cap training at 50,000 rows)", value=False, key="manual_fast_mode", help="Subsample large datasets to 50K rows to prevent execution timeouts.")
-    disable_recipes_manual = st.checkbox("Disable Recipes (Run only with spec and sandbox)", value=False, key="manual_disable_recipes", help="Bypass Standard Operating Procedures (recipes) to run raw objective. Useful for side-by-side comparison.")
-    
-    if show_advisory and not fast_mode_manual:
+    if show_advisory and not st.session_state.fast_mode:
         st.warning(
             f"⚠️ **Advisory**: Dataset has {max_rows:,} rows. "
             "It is highly recommended to enable **Fast Mode** to speed up training and prevent sandbox timeouts."
@@ -597,8 +618,8 @@ def render_orchestrator_panel():
                         "name": f"Project {datetime.now().strftime('%m-%d %H:%M')}", 
                         "objective": objective, 
                         "existing_project_id": st.session_state.current_project_id,
-                        "fast_mode": fast_mode_manual,
-                        "disable_recipes": disable_recipes_manual
+                        "fast_mode": st.session_state.fast_mode,
+                        "disable_recipes": st.session_state.disable_recipes
                     }
                     res = api_post("/projects", payload)
                     if res:
@@ -628,6 +649,9 @@ def render_orchestrator_panel():
     with ctrl_cols[2]:
         if st.button("NEW", key="btn_new", help="Clear the workspace to start a new project from scratch.", use_container_width=True):
             st.session_state.current_project_id = None
+            st.session_state.fast_mode = False
+            st.session_state.disable_recipes = False
+            st.session_state.last_synced_project_id = None
             st.rerun()
         
     with ctrl_cols[3]:
