@@ -484,42 +484,52 @@ def render_orchestrator_panel():
                 except Exception:
                     return iso
 
-            def _spec_label(s):
-                used = _fmt_ts(s.get("last_used_at"))
-                created = _fmt_ts(s.get("created_at"))
-                return f"{s['filename']}  ·  last used: {used}  ·  created: {created}"
+            import pandas as pd
+            spec_df = pd.DataFrame([{
+                "Spec": s["filename"],
+                "Created": _fmt_ts(s.get("created_at")),
+                "Last Used": _fmt_ts(s.get("last_used_at")),
+            } for s in specs])
 
-            spec_cols = st.columns([0.4, 0.2, 0.2, 0.2])
-            selected_spec_obj = spec_cols[0].selectbox(
-                "Select Spec Document",
-                options=specs,
-                format_func=_spec_label,
-                label_visibility="collapsed"
+            sel = st.dataframe(
+                spec_df,
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                height=min(38 + len(specs) * 35, 250),
             )
-            selected_spec = selected_spec_obj["filename"] if selected_spec_obj else None
 
-            if spec_cols[1].button("VIEW SPEC", key="btn_view_spec", use_container_width=True):
-                st.session_state.view_spec = selected_spec
+            selected_rows = sel.selection.rows if sel and sel.selection else []
+            selected_spec = specs[selected_rows[0]]["filename"] if selected_rows else None
 
-            if spec_cols[2].button("LOAD SPEC", key="btn_load_spec", use_container_width=True):
-                with st.spinner("Loading..."):
-                    res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": False, "fast_mode": st.session_state.fast_mode, "disable_recipes": st.session_state.disable_recipes})
-                    if res and "project" in res:
-                        st.toast("Spec loaded successfully!")
-                        st.session_state.current_project_id = res["project"]["id"]
-                        st.rerun()
-                    else:
-                        st.error(res.get("detail", "Failed to load spec.")) if res else st.error("Failed to connect to backend.")
+            if selected_spec:
+                st.caption(f"Selected: **{selected_spec}**")
+                btn_cols = st.columns(3)
+                if btn_cols[0].button("VIEW SPEC", key="btn_view_spec", use_container_width=True):
+                    st.session_state.view_spec = selected_spec
 
-            if spec_cols[3].button("LAUNCH", key="btn_launch_spec", type="primary", use_container_width=True):
-                with st.spinner("Launching..."):
-                    res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": True, "fast_mode": st.session_state.fast_mode, "disable_recipes": st.session_state.disable_recipes})
-                    if res and "project" in res:
-                        st.toast("Spec launched successfully!")
-                        st.session_state.current_project_id = res["project"]["id"]
-                        st.rerun()
-                    else:
-                        st.error(res.get("detail", "Failed to launch spec.")) if res else st.error("Failed to connect to backend.")
+                if btn_cols[1].button("LOAD SPEC", key="btn_load_spec", use_container_width=True):
+                    with st.spinner("Loading..."):
+                        res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": False, "fast_mode": st.session_state.fast_mode, "disable_recipes": st.session_state.disable_recipes})
+                        if res and "project" in res:
+                            st.toast("Spec loaded successfully!")
+                            st.session_state.current_project_id = res["project"]["id"]
+                            st.rerun()
+                        else:
+                            st.error(res.get("detail", "Failed to load spec.")) if res else st.error("Failed to connect to backend.")
+
+                if btn_cols[2].button("LAUNCH", key="btn_launch_spec", type="primary", use_container_width=True):
+                    with st.spinner("Launching..."):
+                        res = api_post("/projects/from-spec", {"filename": selected_spec, "launch_workflow": True, "fast_mode": st.session_state.fast_mode, "disable_recipes": st.session_state.disable_recipes})
+                        if res and "project" in res:
+                            st.toast("Spec launched successfully!")
+                            st.session_state.current_project_id = res["project"]["id"]
+                            st.rerun()
+                        else:
+                            st.error(res.get("detail", "Failed to launch spec.")) if res else st.error("Failed to connect to backend.")
+            else:
+                st.caption("Click a row to select a spec.")
         else:
             st.info("No `.md` spec documents found in the `specs/` directory.")
 
