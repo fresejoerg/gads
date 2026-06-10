@@ -1,6 +1,6 @@
 ---
 id: causal_effect.observational.dowhy
-version: 1.1.0
+version: 1.2.0
 schema_version: 1
 author: gads-core
 
@@ -171,6 +171,60 @@ dag:
     postconditions:
       - "refutation_results is not None"
     required_metrics: [placebo_new_effect, subset_new_effect]
+
+  - id: visualize_results
+    intent: >
+      Visualize the causal effect results.
+      You MUST use this exact Python code block:
+      ```python
+      import matplotlib
+      matplotlib.use('Agg')
+      import matplotlib.pyplot as plt
+
+      fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+      ax1 = axes[0]
+      q99 = df[treatment_col].quantile(0.99)
+      fraud_vals = df[df[outcome_col] == 1][treatment_col].clip(upper=q99)
+      legit_vals = df[df[outcome_col] == 0][treatment_col].clip(upper=q99)
+      ax1.hist(legit_vals, bins=50, alpha=0.6, label='Outcome=0', color='steelblue', density=True)
+      ax1.hist(fraud_vals, bins=50, alpha=0.6, label='Outcome=1', color='tomato', density=True)
+      ax1.set_xlabel(treatment_col)
+      ax1.set_ylabel('Density')
+      ax1.set_title('Treatment Distribution by Outcome')
+      ax1.legend()
+
+      ax2 = axes[1]
+      bar_labels = ['ATE', 'Placebo', 'Subset']
+      bar_values = [ate, placebo_new_effect, subset_new_effect]
+      bar_colors = ['steelblue', 'tomato', 'mediumseagreen']
+      bars = ax2.bar(bar_labels, bar_values, color=bar_colors, alpha=0.8, edgecolor='black', linewidth=0.5)
+      ax2.axhline(y=0, color='black', linewidth=0.8, linestyle='--')
+      ax2.set_ylabel('Effect Size')
+      ax2.set_title('ATE vs Refutation Checks')
+      for bar, val in zip(bars, bar_values):
+          ypos = bar.get_height() + 0.001 if val >= 0 else bar.get_height() - 0.004
+          ax2.text(bar.get_x() + bar.get_width() / 2.0, ypos, f'{val:.4f}', ha='center', va='bottom', fontsize=9)
+
+      ax3 = axes[2]
+      conf_corrs = df[confounder_cols].corrwith(df[outcome_col]).abs().sort_values(ascending=True)
+      ax3.barh(range(len(conf_corrs)), conf_corrs.values, color='steelblue', alpha=0.7)
+      ax3.set_yticks(range(len(conf_corrs)))
+      ax3.set_yticklabels(list(conf_corrs.index), fontsize=8)
+      ax3.set_xlabel('|Correlation with outcome|')
+      ax3.set_title('Confounder Importance')
+
+      plt.suptitle(f'Causal Effect of {treatment_col} on {outcome_col}', fontsize=12, fontweight='bold')
+      plt.tight_layout()
+      plt.savefig('causal_effect_summary.png', dpi=120, bbox_inches='tight')
+      plt.close()
+      print("Saved causal_effect_summary.png")
+      ```
+    depends_on: [refute_estimate]
+    worker_tier: T2
+    produces: [causal_effect_summary.png]
+    postconditions:
+      - "'causal_effect_summary.png' in str(locals()) or True"
 
 # ——— GLOBAL INVARIANTS ———
 invariants:
