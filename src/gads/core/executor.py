@@ -220,13 +220,13 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
         code = re.sub(r'import autogluon\.models[^\n]*\n?', '', code)
         print("  [Sanitizer] Removed hallucinated AutogluonModels/autogluon.models/gads_emit_insight imports", flush=True)
 
-    # Remove hallucinated causal library imports (causal_models, causalinference do not exist)
-    _causal_hallucinations = ['causal_models', 'causalinference', 'causal_inference_lib']
+    # Remove hallucinated causal library imports that do not exist as installed packages.
+    # Note: `causalinference` (pip: CausalInference) IS a real package — do NOT strip it.
+    _causal_hallucinations = ['causal_models', 'causal_inference_lib']
     if any(h in code for h in _causal_hallucinations):
         code = re.sub(r'(?:from causal_models|import causal_models)[^\n]*\n?', '', code)
-        code = re.sub(r'(?:from causalinference|import causalinference)[^\n]*\n?', '', code)
         code = re.sub(r'(?:from causal_inference_lib|import causal_inference_lib)[^\n]*\n?', '', code)
-        print("  [Sanitizer] Removed hallucinated causal library imports (causal_models/causalinference)", flush=True)
+        print("  [Sanitizer] Removed hallucinated causal library imports (causal_models/causal_inference_lib)", flush=True)
 
     # Strip causal_learn imports when used for DoWhy estimation tasks (wrong library).
     # The package is pip install causal-learn; correct import name is `causallearn` (no underscore).
