@@ -1879,16 +1879,60 @@ def list_specs():
         return []
     files = sorted([f for f in specs_dir.iterdir() if f.is_file() and f.suffix == ".md"], key=lambda f: f.name)
 
-    # Build last_used_at map from DB: max project.created_at per spec_filename
+    # Read spec contents once for retroactive matching
+    spec_contents: Dict[str, str] = {}
+    for f in files:
+        try:
+            spec_contents[f.name] = f.read_text(encoding="utf-8")
+        except Exception:
+            pass
+
+    def _strip_injected(content: str) -> str:
+        """Strip lines injected by fast_mode (sample_rows) for content comparison."""
+        return re.sub(r"sample_rows:\s*\d+\n?", "", content)
+
+    # Build last_used_at map from DB: max project.created_at per spec_filename.
+    # Also retroactively tag old projects that predate spec_filename tracking by
+    # matching their workspace workflow_spec.md content against known spec files.
     last_used_map: Dict[str, str] = {}
     with Session(engine) as session:
         projects = session.exec(select(Project)).all()
+        needs_flush = False
         for p in projects:
-            fname = (p.last_state_json or {}).get("spec_filename")
+            state = p.last_state_json or {}
+            fname = state.get("spec_filename")
+
+            # Retroactive match for projects missing spec_filename
+            if not fname:
+                ws_spec = Path(f"{WORKSPACE_ROOT}/{p.id}/workflow_spec.md")
+                if ws_spec.exists():
+                    try:
+                        ws_content = _strip_injected(ws_spec.read_text(encoding="utf-8"))
+                        for candidate, raw in spec_contents.items():
+                            if ws_content == _strip_injected(raw):
+                                fname = candidate
+                                state["spec_filename"] = fname
+                                p.last_state_json = state
+                                session.add(p)
+                                needs_flush = True
+                                break
+                    except Exception:
+                        pass
+
             if fname:
                 ts = p.created_at.isoformat()
                 if fname not in last_used_map or ts > last_used_map[fname]:
                     last_used_map[fname] = ts
+
+        if needs_flush:
+            session.commit()
+
+    # Sort: most recently used first, then by created_at desc for unused
+    def _sort_key(f):
+        used = last_used_map.get(f.name)
+        return (0 if used else 1, used or "", -f.stat().st_mtime)
+
+    files = sorted(files, key=_sort_key)
 
     result = []
     for f in files:

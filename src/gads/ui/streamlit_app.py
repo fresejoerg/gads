@@ -476,24 +476,27 @@ def render_orchestrator_panel():
     with st.expander("LAUNCH FROM SPEC", expanded=False):
         specs = api_get("/specs")
         if specs:
-            spec_filenames = [s["filename"] for s in specs]
-            spec_meta = {s["filename"]: s for s in specs}
+            def _fmt_ts(iso):
+                if not iso:
+                    return "never"
+                try:
+                    return datetime.fromisoformat(iso).strftime("%b %d %Y %H:%M")
+                except Exception:
+                    return iso
+
+            def _spec_label(s):
+                used = _fmt_ts(s.get("last_used_at"))
+                created = _fmt_ts(s.get("created_at"))
+                return f"{s['filename']}  ·  last used: {used}  ·  created: {created}"
 
             spec_cols = st.columns([0.4, 0.2, 0.2, 0.2])
-            selected_spec = spec_cols[0].selectbox("Select Spec Document", options=spec_filenames, label_visibility="collapsed")
-
-            # Show timestamps for selected spec
-            if selected_spec and selected_spec in spec_meta:
-                m = spec_meta[selected_spec]
-                def _fmt_ts(iso):
-                    if not iso:
-                        return "never"
-                    try:
-                        from datetime import datetime as _dt
-                        return _dt.fromisoformat(iso).strftime("%b %d %Y %H:%M")
-                    except Exception:
-                        return iso
-                spec_cols[0].caption(f"Created: {_fmt_ts(m.get('created_at'))}  ·  Last used: {_fmt_ts(m.get('last_used_at'))}")
+            selected_spec_obj = spec_cols[0].selectbox(
+                "Select Spec Document",
+                options=specs,
+                format_func=_spec_label,
+                label_visibility="collapsed"
+            )
+            selected_spec = selected_spec_obj["filename"] if selected_spec_obj else None
 
             if spec_cols[1].button("VIEW SPEC", key="btn_view_spec", use_container_width=True):
                 st.session_state.view_spec = selected_spec
