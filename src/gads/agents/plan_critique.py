@@ -43,8 +43,6 @@ class PlanCritiqueAgent(BaseAgent[PlanCritiqueInput, PlanCritiqueOutput]):
             objective=input_data.objective,
             files_list=files_str
         )
-        self.agent._system_prompts = (formatted_prompt,)
-
         user_content = (
             f"PROPOSED PLAN STEPS:\n{steps_str}\n\n"
             f"AVAILABLE FILES:\n{files_str}\n\n"
@@ -54,5 +52,6 @@ class PlanCritiqueAgent(BaseAgent[PlanCritiqueInput, PlanCritiqueOutput]):
         # Use super().run
         return await super().run(
             user_content,
+            system_prompt=formatted_prompt,
             **kwargs
         )

@@ -30,15 +30,13 @@ class DataScienceRouter(BaseAgent[RouterInput, RouterOutput]):
         base_prompt = prompt_registry.get_prompt(self.name)
         recipes_str = json.dumps(input_data.available_recipes, indent=2)
         formatted_prompt = base_prompt.format(recipes_json=recipes_str)
-        
-        # Inject the specialized prompt into the Pydantic AI agent
-        self.agent._system_prompts = (formatted_prompt,)
-        
+
         # Router output is compact JSON (~200 tokens) — cap to fail fast on repetition loops
         kwargs.setdefault("max_tokens", 1024)
         # Use super().run to get streaming support
         res = await super().run(
             f"OBJECTIVE: {input_data.objective}",
+            system_prompt=formatted_prompt,
             **kwargs
         )
         

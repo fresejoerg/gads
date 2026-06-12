@@ -39,7 +39,6 @@ class CompletenessVerifierAgent(BaseAgent[CompletenessVerifierInput, Completenes
 
     async def run(self, input_data: CompletenessVerifierInput, **kwargs):
         base_prompt = prompt_registry.get_prompt(self.name)
-        self.agent._system_prompts = (base_prompt,)
 
         summaries_str = "\n".join(input_data.completed_task_summaries) or "No completed tasks."
         artifacts_str = (
@@ -60,4 +59,4 @@ class CompletenessVerifierAgent(BaseAgent[CompletenessVerifierInput, Completenes
             "List each missing analysis, metric, or comparison that was required but not performed."
         )
 
-        return await super().run(user_content, **kwargs)
+        return await super().run(user_content, system_prompt=base_prompt, **kwargs)

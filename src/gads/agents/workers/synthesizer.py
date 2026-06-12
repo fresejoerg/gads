@@ -37,15 +37,15 @@ class SynthesizerAgent(BaseAgent[SynthesizerInput, SynthesizerOutput]):
             prev_state = f"--- EXISTING NARRATIVE ---\n{input_data.existing_narrative}\n\n--- EXISTING TAKEAWAYS ---\n" + "\n".join([f"- {t}" for t in (input_data.existing_takeaways or [])])
             
         formatted_prompt = base_prompt.format(previous_state=prev_state)
-        self.agent._system_prompts = (formatted_prompt,)
 
         user_content = (
             f"USER OBJECTIVE: {input_data.objective}\n\n"
             f"ARTIFACTS AND OUTPUTS:\n{input_data.context_artifacts}"
         )
-        
+
         # Use super().run
         return await super().run(
             user_content,
+            system_prompt=formatted_prompt,
             **kwargs
         )

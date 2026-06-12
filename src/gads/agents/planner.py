@@ -181,10 +181,6 @@ class DataSciencePlanner(BaseAgent[PlannerInput, PlannerOutput]):
             user_hints=hints_str
         )
         
-        # Set the prompt for the Pydantic AI agent
-        self.agent._system_prompts = (formatted_prompt,)
-
-
         user_content = f"USER OBJECTIVE: {input_data.objective}"
         if input_data.critique_feedback:
             user_content += f"\n\n--- PREVIOUS ATTEMPT REJECTED BY QA ---\nQA Feedback: {input_data.critique_feedback}"
@@ -196,5 +192,6 @@ class DataSciencePlanner(BaseAgent[PlannerInput, PlannerOutput]):
         # Use super().run to get streaming support
         return await super().run(
             user_content,
+            system_prompt=formatted_prompt,
             **kwargs
         )

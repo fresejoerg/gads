@@ -56,11 +56,6 @@ class SpecDrafterAgent(BaseAgent[SpecDraftInput, SpecDraft]):
             files_with_schemas=input_data.files_with_schemas
         )
 
-        self.agent._system_prompts = (formatted_prompt,)
-
-        # Include critical context in user message so local_model path also sees it
-        # (BaseAgent.run() reloads the unformatted system prompt, so structured data
-        # must be in the user message to survive that reload for local models.)
         user_content = (
             f"USER OBJECTIVE: {input_data.objective}\n\n"
             f"AVAILABLE RECIPES (use exact IDs only):\n{recipe_ids_str}\n\n"
@@ -68,4 +63,4 @@ class SpecDrafterAgent(BaseAgent[SpecDraftInput, SpecDraft]):
             "Return the required FLAT JSON object."
         )
 
-        return await super().run(user_content, **kwargs)
+        return await super().run(user_content, system_prompt=formatted_prompt, **kwargs)

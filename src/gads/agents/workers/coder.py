@@ -56,9 +56,6 @@ class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
             contract_json=contract_summary
         )
         
-        # Set the prompt for the Pydantic AI agent
-        self.agent._system_prompts = (formatted_prompt,)
-
         # Build dynamic kernel-reuse warning from live state
         kernel_warnings = []
         try:
@@ -83,5 +80,6 @@ class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
         # Use super().run to get streaming support
         return await super().run(
             user_content,
+            system_prompt=formatted_prompt,
             **kwargs
         )

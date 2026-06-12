@@ -44,12 +44,18 @@ class BaseAgent(ABC, Generic[TIn, TOut]):
             retries=1
         )
 
-    async def run(self, input_data: Any, **kwargs) -> AgentResponse[TOut]:
-        """Execute the agent's logic with Pydantic AI and a robust manual fallback."""
+    async def run(self, input_data: Any, system_prompt: Optional[str] = None, **kwargs) -> AgentResponse[TOut]:
+        """Execute the agent's logic with Pydantic AI and a robust manual fallback.
+
+        Subclasses that resolve {placeholder} templates MUST pass the formatted
+        prompt via `system_prompt` — assigning self.agent._system_prompts is not
+        enough, because this method re-fetches the raw registry template and uses
+        it on every completion path.
+        """
         from gads.core.prompts import prompt_registry
         from gads.core.llm import get_structured_completion
-        
-        self.system_prompt = prompt_registry.get_prompt(self.name)
+
+        self.system_prompt = system_prompt if system_prompt is not None else prompt_registry.get_prompt(self.name)
         user_prompt = input_data if isinstance(input_data, str) else input_data.model_dump_json()
         stream_callback = kwargs.pop("stream_callback", None)
 
