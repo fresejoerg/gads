@@ -430,15 +430,77 @@ def _get_recursive_files(workspace_dir: str) -> List[Dict[str, Any]]:
             all_files.append({"name": rel_path, "size_mb": size_mb})
     return sorted(all_files, key=lambda x: x["name"])
 
+def _compute_prompt_version() -> str:
+    """SHA-256 over effective prompts + recipe/skill files.
+
+    Labels every trace/generation with the prompt regime that produced it, so
+    traces collected under superseded prompts can be excluded from training and
+    eval pools (telemetry plan 010, Phase 1c).
+    """
+    import hashlib
+    from gads.core.prompts import FACTORY_DEFAULTS
+    h = hashlib.sha256()
+    for agent_name in sorted(FACTORY_DEFAULTS.keys()):
+        h.update(agent_name.encode())
+        h.update(prompt_registry.get_prompt(agent_name).encode())
+    knowledge_dir = Path(__file__).resolve().parent.parent / "knowledge"
+    for sub in ("recipes", "skills"):
+        d = knowledge_dir / sub
+        if d.is_dir():
+            for f in sorted(d.glob("*.md")):
+                h.update(f.name.encode())
+                h.update(f.read_bytes())
+    return h.hexdigest()[:12]
+
+def _finalize_workflow_trace(trace, project_id: uuid.UUID, prompt_version: str, recipe_id: Optional[str] = None):
+    """Write outcome labels at the single workflow exit point (telemetry plan 010, Phase 1d).
+
+    Runs in the workflow's `finally` block so success, failure (_mark_workflow_failed)
+    and cancellation all get labeled through one code path.
+    """
+    with Session(engine) as s:
+        proj = s.get(Project, project_id)
+        tasks = s.exec(select(Task).where(Task.project_id == project_id)).all()
+
+    outcome = "completed"
+    if proj and proj.narrative:
+        if "[CANCELLED]" in proj.narrative:
+            outcome = "cancelled"
+        elif proj.narrative.startswith("[HALTED]"):
+            outcome = "failed"
+    status_counts: Dict[str, int] = {}
+    for t in tasks:
+        status_counts[t.status] = status_counts.get(t.status, 0) + 1
+    if outcome == "completed" and not status_counts.get("completed"):
+        outcome = "failed"
+
+    tags = [f"outcome:{outcome}", f"local_only:{get_local_only()}"]
+    if recipe_id:
+        tags.append(f"recipe:{recipe_id}")
+    trace.update(
+        tags=tags,
+        metadata={
+            "outcome": outcome,
+            "prompt_version": prompt_version,
+            "recipe_id": recipe_id,
+            "task_status_counts": status_counts,
+            "task_models": sorted({t.assigned_to for t in tasks if t.assigned_to}),
+            "total_escalations": sum(t.escalation_count or 0 for t in tasks),
+        },
+    )
+    print(f"  [Telemetry] Trace labeled outcome:{outcome} ({len(tasks)} tasks)", flush=True)
+
 async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_id: Optional[uuid.UUID] = None):
     from gads.core.llm import trace_context
-    
+
+    prompt_version = _compute_prompt_version()
+
     # 1. Create top-level Langfuse Trace
     trace = langfuse_client.trace(
         id=str(project_id),
         name="Project Workflow",
         user_id="default_user",
-        metadata={"objective": objective},
+        metadata={"objective": objective, "prompt_version": prompt_version},
         session_id=str(project_id)
     )
 
@@ -446,7 +508,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         "project_id": str(project_id),
         "workflow_id": str(project_id),
         "user_id": "default_user",
-        "langfuse_trace_id": trace.id
+        "langfuse_trace_id": trace.id,
+        "prompt_version": prompt_version
     })
 
     try:
@@ -633,7 +696,10 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 trace_context.get().update({
                     "agent_name": "SpecDrafter",
                     "task_id": str(spec_task_id),
-                    "parent_observation_id": spec_span.id
+                    "parent_observation_id": spec_span.id,
+                    "stage": "Spec Drafting",
+                    "attempt": None,
+                    "escalation_count": None
                 })
 
                 spec_agent = SpecDrafterAgent(model=spec_model)
@@ -742,7 +808,10 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 trace_context.get().update({
                     "agent_name": "Router",
                     "task_id": str(route_task.id),
-                    "parent_observation_id": span.id
+                    "parent_observation_id": span.id,
+                    "stage": "Architect Routing",
+                    "attempt": None,
+                    "escalation_count": None
                 })
 
                 rid_str = str(route_task.id)
@@ -786,6 +855,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                             schema_warnings=[]
                         )
                         recipe_info = f"Applied SOP: {recipe.id}\nRationale: {recipe.rationale}"
+                        trace_context.get().update({"recipe_id": recipe.id})
 
                     route_task.status = "completed"
                     route_task.result_json = {
@@ -927,7 +997,10 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     trace_context.get().update({
                         "agent_name": "Planner",
                         "task_id": pid_str,
-                        "parent_observation_id": span.id
+                        "parent_observation_id": span.id,
+                        "stage": "Project Planning",
+                        "attempt": workflow_attempt,
+                        "escalation_count": None
                     })
 
                     try:
@@ -1072,9 +1145,12 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
 
                     span = trace.span(name=f"Plan Critique (Attempt {workflow_attempt})", metadata={"task_id": str(pc_task.id)})
                     trace_context.get().update({
-                        "agent_name": "PlanCritique", 
+                        "agent_name": "PlanCritique",
                         "task_id": str(pc_task.id),
-                        "parent_observation_id": span.id
+                        "parent_observation_id": span.id,
+                        "stage": "Plan Critique",
+                        "attempt": workflow_attempt,
+                        "escalation_count": None
                     })
 
                     try:
@@ -1295,7 +1371,10 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                     trace_context.get().update({
                         "agent_name": "CodeGenerator",
                         "task_id": tid_str,
-                        "parent_observation_id": task_span.id
+                        "parent_observation_id": task_span.id,
+                        "stage": "Task Execution",
+                        "attempt": None,  # set per coder attempt by the executor retry loop
+                        "escalation_count": None
                     })
 
                     # Keepalive: local-model LLM + execution can exceed the 5-min watchdog window.
@@ -1586,7 +1665,10 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                 trace_context.get().update({
                     "agent_name": "CompletenessVerifier",
                     "task_id": str(cv_task_id),
-                    "parent_observation_id": cv_span.id
+                    "parent_observation_id": cv_span.id,
+                    "stage": "Completeness Verification",
+                    "attempt": workflow_attempt,
+                    "escalation_count": None
                 })
 
                 try:
@@ -1688,7 +1770,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                     session.refresh(synth_task)
 
                     span = trace.span(name=f"Synthesis Attempt {workflow_attempt}")
-                    trace_context.get().update({"agent_name": "Synthesizer", "task_id": str(synth_task.id), "parent_observation_id": span.id})
+                    trace_context.get().update({"agent_name": "Synthesizer", "task_id": str(synth_task.id), "parent_observation_id": span.id, "stage": "Synthesis", "attempt": workflow_attempt, "escalation_count": None})
 
                     all_tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
                     task_log_parts = []
@@ -1779,7 +1861,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                     session.refresh(critique_task)
 
                     span = trace.span(name=f"Critique Attempt {workflow_attempt}")
-                    trace_context.get().update({"agent_name": "Critique", "task_id": str(critique_task.id), "parent_observation_id": span.id})
+                    trace_context.get().update({"agent_name": "Critique", "task_id": str(critique_task.id), "parent_observation_id": span.id, "stage": "Critique", "attempt": workflow_attempt, "escalation_count": None})
 
                     try:
                         critique_agent = CritiqueAgent(model=critique_model) 
@@ -1889,6 +1971,11 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
             _mark_workflow_failed(session, project_id, f"Fatal system error: {str(e)}")
     finally:
         from gads.core.llm import trace_context
+        try:
+            _ctx = trace_context.get() or {}
+            _finalize_workflow_trace(trace, project_id, prompt_version, recipe_id=_ctx.get("recipe_id"))
+        except Exception as label_exc:
+            print(f"  [Telemetry] Failed to label trace outcome: {label_exc}", flush=True)
         trace_context.reset(ctx_token)
         langfuse_client.flush()
 

@@ -512,10 +512,21 @@ class ExecutionManager:
                 
                 # Fetch postcondition contract for the worker
                 contract = None
+                task_escalations = 0
                 with Session(engine) as session:
                     from gads.core.models import Task as DBTask
                     t_obj = session.get(DBTask, task_id)
-                    if t_obj: contract = t_obj.postcondition_json
+                    if t_obj:
+                        contract = t_obj.postcondition_json
+                        task_escalations = t_obj.escalation_count or 0
+
+                # Label the upcoming Coder generation with its attempt number so
+                # first-shot and retried completions are distinguishable in Langfuse
+                # (telemetry plan 010, Phase 1b).
+                from gads.core.llm import trace_context
+                ctx = trace_context.get()
+                if ctx is not None:
+                    ctx.update({"attempt": retry_count + 1, "escalation_count": task_escalations})
 
                 coder_res = await asyncio.wait_for(
                     self.coder.run(CoderInput(

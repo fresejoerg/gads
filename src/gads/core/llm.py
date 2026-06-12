@@ -1,6 +1,7 @@
 import os
 import json
 import re
+import hashlib
 import instructor
 from litellm import acompletion
 from dotenv import load_dotenv
@@ -19,6 +20,17 @@ trace_context: ContextVar[Optional[Dict[str, Any]]] = ContextVar("trace_context"
 
 # Configure instructor with LiteLLM async completion
 client = instructor.patch(create=acompletion, mode=instructor.Mode.JSON_SCHEMA)
+
+def _tier_of(model: str) -> Optional[str]:
+    """Reverse-lookup the capability tier of a model name (T4 for local_model)."""
+    try:
+        from gads.core.registry import TIER_MAPPING
+        for tier, models in TIER_MAPPING.items():
+            if model in models:
+                return tier
+    except Exception:
+        pass
+    return None
 
 async def get_structured_completion(model: str, response_model, messages: list, stream_callback=None, **kwargs):
     """
@@ -41,31 +53,55 @@ async def get_structured_completion(model: str, response_model, messages: list, 
 
     # Inject observability metadata from global context
     ctx = trace_context.get()
+    meta = None
     if ctx:
+        # Hash of the rendered messages: makes "cloud success vs local failure on
+        # the same prompt" an exact join instead of fuzzy matching (plan 010).
+        messages_hash = hashlib.sha256(
+            json.dumps(messages, sort_keys=True, default=str).encode()
+        ).hexdigest()[:16]
         meta = {
-            "trace_id": str(ctx.get("project_id")),
+            # existing_trace_id attaches the generation WITHOUT letting LiteLLM
+            # upsert/rename the trace (trace_id overwrites trace attributes).
+            "existing_trace_id": str(ctx.get("project_id")),
             "session_id": str(ctx.get("project_id")),
             "parent_observation_id": str(ctx.get("parent_observation_id")) if ctx.get("parent_observation_id") else None,
             "generation_name": str(ctx.get("agent_name", "agent_call")),
-            "user_id": str(ctx.get("user_id", "default_user")),
+            "trace_user_id": str(ctx.get("user_id", "default_user")),
+            # Non-reserved keys below land in the generation's metadata.
+            "task_id": str(ctx.get("task_id")) if ctx.get("task_id") else None,
+            "stage": ctx.get("stage"),
+            "attempt": ctx.get("attempt"),
+            "escalation_count": ctx.get("escalation_count"),
+            "model_tier": _tier_of(model),
+            "prompt_version": ctx.get("prompt_version"),
+            "completion_path": "first_shot",
+            "messages_hash": messages_hash,
         }
         meta = {k: v for k, v in meta.items() if v is not None}
-        
+
         if "extra_body" not in kwargs:
             kwargs["extra_body"] = {}
-        
+
         kwargs["extra_body"]["metadata"] = meta
 
         if "extra_headers" not in kwargs:
             kwargs["extra_headers"] = {}
-        
+
         kwargs["extra_headers"].update({
             "x-langfuse-trace-id": str(ctx.get("project_id")),
             "x-langfuse-session-id": str(ctx.get("project_id")),
             "x-langfuse-tags": f"agent:{ctx.get('agent_name')}"
         })
-        
+
         print(f"  [LLM] Injecting Trace Metadata (Headers + Body): {ctx.get('project_id')}", flush=True)
+
+    def _mark_path(path: str):
+        # Label repair/fallback sub-calls so first-shot and repaired completions
+        # are distinguishable in the trace. `meta` is the same dict referenced by
+        # kwargs["extra_body"]; LiteLLM serializes it at call time.
+        if meta is not None:
+            meta["completion_path"] = path
 
     # Set a robust default timeout if none specified
     if "timeout" not in kwargs:
@@ -149,8 +185,9 @@ async def get_structured_completion(model: str, response_model, messages: list, 
             repair_messages = list(messages)
             repair_messages.append({"role": "assistant", "content": full_content})
             repair_messages.append({"role": "user", "content": "Your previous response was malformed. Please return ONLY a valid JSON object matching the required schema. Ensure you do not include any conversational text or markdown formatting."})
-            
+
             try:
+                _mark_path("stream_repair")
                 return await client(
                     model=model,
                     response_model=response_model,
@@ -206,8 +243,9 @@ async def get_structured_completion(model: str, response_model, messages: list, 
             "role": "user",
             "content": f"CRITICAL INSTRUCTION: Return ONLY a raw JSON object conforming EXACTLY to this schema:\n{schema_str}\n\nDo NOT include any <think> tags, reasoning blocks, or markdown formatting."
         })
-        
+
         try:
+            _mark_path("manual_fallback")
             raw_resp = await acompletion(
                 model=model,
                 messages=fallback_messages,

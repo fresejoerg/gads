@@ -56,12 +56,24 @@ class BaseAgent(ABC, Generic[TIn, TOut]):
         # MANDATE: Bypass Pydantic AI's tool-calling for local_model.
         # Local models frequently get stuck in infinite repetition loops when forced into Tool Calls.
         # We use our robust direct completion logic instead.
-        if self.model_str == "local_model":
-            print(f"  [BaseAgent] Detected local_model. Using direct robust completion for {self.name}...", flush=True)
+        #
+        # UNIFIED COMPLETION (telemetry plan 010, Phase 2): cloud models also route
+        # through the direct path so every call carries trace metadata and all models
+        # share one prompt serialization. Set GADS_UNIFIED_COMPLETION=false to restore
+        # the legacy Pydantic AI path for cloud models.
+        unified = os.getenv("GADS_UNIFIED_COMPLETION", "true").lower() == "true"
+        if self.model_str == "local_model" or unified:
+            path_reason = "local_model" if self.model_str == "local_model" else "unified completion"
+            print(f"  [BaseAgent] Using direct robust completion for {self.name} ({path_reason})...", flush=True)
             messages = [
                 {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": user_prompt}
             ]
+            if self.model_str != "local_model":
+                # Cloud via the direct path: the 60s default is too tight for large
+                # generations (Coder); match the 300s cloud convention. local_model
+                # timeout is forced to 600s inside get_structured_completion.
+                kwargs.setdefault("timeout", 300.0)
             content = await get_structured_completion(
                 model=self.model_str,
                 response_model=self.output_schema,
