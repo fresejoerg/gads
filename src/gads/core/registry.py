@@ -71,22 +71,35 @@ async def get_model_hierarchy() -> Dict[str, Any]:
             
             hierarchy = {}
             for tier, keywords in TIER_MAPPING.items():
+                # HARD MANDATE: local_model (T4) is reachable ONLY in local_only mode.
+                # Cloud runs must never plan onto or fall back to the local model, so
+                # T4 is excluded from the hierarchy the Planner/sanitizer/enforcer see.
+                if tier == "T4":
+                    continue
                 # Preservation of order: if gemini is in TIER_MAPPING, it will be first in matching_models
                 matching_models = [m for m in keywords if m in available_models]
                 if matching_models:
                     if get_random_routing():
                         import random
                         random.shuffle(matching_models)
-                        
+
                     hierarchy[tier] = {
                         "description": TIER_DESCRIPTIONS.get(tier, ""),
                         "models": matching_models
                     }
-            
+
+            if not hierarchy:
+                raise RuntimeError(
+                    "No cloud models available from LiteLLM. Refusing to fall back to "
+                    "local_model in cloud mode — enable local_only to run locally."
+                )
             return hierarchy
     except Exception as e:
+        # Fail loudly: silently degrading a cloud run onto local_model violates the
+        # local-isolation mandate. The workflow marks itself failed (trace labeled
+        # outcome:failed) instead of quietly running on the local model.
         print(f"Registry Error: {e}")
-        return {"T4": {"description": "Fallback", "models": ["local_model"]}}
+        raise
 
 def get_next_model_dynamic(current_model: str, hierarchy: Dict[str, Any], aggressive: bool = False) -> Optional[str]:
     """
