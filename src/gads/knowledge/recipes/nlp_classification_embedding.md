@@ -75,7 +75,7 @@ dag:
     postconditions:
       - "output_type == 'model'"
       - "baseline_cv_scores.mean() > 0.5"
-    attached_skills: [model_evaluation_best_practices]
+    attached_skills: []
 
   - id: embedding_generation
     intent: "Generate sentence embeddings using a pretrained model. Prefer 'all-MiniLM-L6-v2' from sentence-transformers (fast, 384-dim). If sentence-transformers is unavailable, fall back to TruncatedSVD(n_components=100) on the TF-IDF matrix. Encode df_train['clean_text'] and df_test['clean_text'] into dense matrices."
@@ -86,7 +86,7 @@ dag:
       - "output_type == 'ndarray'"
       - "X_train_emb.shape[0] == len(df_train)"
       - "X_train_emb.shape[1] >= 50"
-    attached_skills: [nlp_embeddings]
+    attached_skills: [local_text_embedding]
 
   - id: feature_fusion
     intent: "Concatenate the embedding features with the hand-crafted text features (word_count, char_count, sentence_count, etc.) into a single feature matrix X_train_combined and X_test_combined using np.hstack or scipy.sparse.hstack as appropriate."
@@ -105,7 +105,7 @@ dag:
     postconditions:
       - "output_type == 'model'"
       - "ensemble_cv_scores.mean() >= baseline_cv_scores.mean()"
-    attached_skills: [model_evaluation_best_practices]
+    attached_skills: []
 
   - id: evaluation_plots
     intent: "Generate and save: (1) a normalized confusion matrix heatmap (Figure 1). (2) ROC curves with AUC per class using OvR strategy, as a single figure (Figure 2). (3) A bar chart of per-class F1 scores comparing baseline vs ensemble (Figure 3). Use matplotlib; save each as a Plotly JSON artifact where possible."

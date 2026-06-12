@@ -4,14 +4,37 @@ import re
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 
+def _extract_rationale(body_str: str, fallback: str = "") -> str:
+    """Pull the ## Rationale section from a recipe body.
+
+    Tolerant of recipes that end the section with EOF rather than a trailing `##`
+    heading. Falls back to any frontmatter `rationale:` value (passed in) when the
+    body has no parseable section, instead of clobbering it with an empty string.
+    """
+    match = re.search(r"##\s*Rationale\s*\n(.*?)(?:\n\s*##|\Z)", body_str, re.DOTALL)
+    if match:
+        extracted = match.group(1).strip()
+        if extracted:
+            return extracted
+    return (fallback or "").strip()
+
+
 class RecipeTask(BaseModel):
     id: str
     intent: str
     worker_tier: str
     depends_on: List[str] = []
     produces: List[str] = []
+    # NOTE: `postconditions` are advisory contract-design aids that document a node's
+    # success criteria for recipe authors. They are NOT evaluated at runtime — the
+    # ExecutionHub builds the enforced contract from `produces`/`required_metrics`
+    # only. Hard-asserting these arbitrary expressions would cause false failures on
+    # forgetful local models, against the project's deliberate soft-fail philosophy.
     postconditions: List[str] = []
     required_metrics: List[str] = []
+    # Skill IDs to inject (full body) into the Coder prompt for this node. When set,
+    # the RecipeEnforcer uses these verbatim instead of keyword-scoring the intent.
+    attached_skills: List[str] = []
     skippable_if: Optional[str] = None
     rationale_required: bool = False
 
@@ -61,9 +84,9 @@ class KnowledgeRegistry:
                         body_str = match.group(2)
 
                         data = yaml.safe_load(yaml_str)
-                        # Extract Rationale from body for the Recipe model
-                        rationale_match = re.search(r"# .*?\n\n## Rationale\n(.*?)\n\n##", body_str, re.DOTALL)
-                        data["rationale"] = rationale_match.group(1).strip() if rationale_match else ""
+                        # Extract Rationale from body; preserve any frontmatter
+                        # `rationale:` rather than overwriting it with an empty match.
+                        data["rationale"] = _extract_rationale(body_str, data.get("rationale", ""))
 
                         recipe = Recipe(**data)
                         self.recipes[recipe.id] = recipe
@@ -132,11 +155,10 @@ class KnowledgeRegistry:
             yaml_str = match.group(1)
             body_str = match.group(2)
             data = yaml.safe_load(yaml_str)
-            
-            # Extract Rationale for validation
-            rationale_match = re.search(r"# .*?\n\n## Rationale\n(.*?)\n\n##", body_str, re.DOTALL)
-            data["rationale"] = rationale_match.group(1).strip() if rationale_match else ""
-            
+
+            # Extract Rationale for validation (preserve frontmatter fallback)
+            data["rationale"] = _extract_rationale(body_str, data.get("rationale", ""))
+
             # Validate with Pydantic
             Recipe(**data)
         except Exception as e:
@@ -183,21 +205,36 @@ class KnowledgeRegistry:
         
         self.load_skills()
 
+    @staticmethod
+    def _trigger_hits(triggers: List[str], desc_lower: str) -> int:
+        """Count triggers that match on a word boundary (not bare substring).
+
+        Substring matching caused spurious loads — e.g. the trigger 'list' firing on
+        'tolist()' or 'top' on a 'fi_top' variable. Word-boundary matching keeps
+        multi-word phrase triggers ('auto ml', 'treatment effect') working while
+        eliminating mid-token false positives that dilute a small model's attention.
+        """
+        hits = 0
+        for t in triggers:
+            pattern = r"\b" + re.escape(t.lower().strip()) + r"\b"
+            if re.search(pattern, desc_lower):
+                hits += 1
+        return hits
+
     def find_skills(self, task_description: str) -> List[Skill]:
         """Returns skills that match triggers in the task description (case-insensitive)."""
-        matches = []
         desc_lower = task_description.lower()
-        for skill in self.skills.values():
-            if any(t.lower() in desc_lower for t in skill.triggers):
-                matches.append(skill)
-        return matches
+        return [
+            skill for skill in self.skills.values()
+            if self._trigger_hits(skill.triggers, desc_lower) > 0
+        ]
 
     def find_skills_scored(self, task_description: str) -> List[tuple]:
         """Returns [(Skill, hit_count)] for skills with at least one trigger match."""
         desc_lower = task_description.lower()
         results = []
         for skill in self.skills.values():
-            hits = sum(1 for t in skill.triggers if t.lower() in desc_lower)
+            hits = self._trigger_hits(skill.triggers, desc_lower)
             if hits > 0:
                 results.append((skill, hits))
         return results

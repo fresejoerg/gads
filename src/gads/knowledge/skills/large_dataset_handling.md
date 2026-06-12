@@ -1,7 +1,7 @@
 ---
 id: large_dataset_handling
 description: "Strategies for processing datasets >50MB or 500K rows in the sandbox without timeout or OOM errors"
-triggers: ["large", "100mb", "50mb", "huge", "millions", "800k", "vectorize"]
+triggers: ["large dataset", "100mb", "50mb", "huge", "millions of rows", "800k", "vectorize", "out of memory", "oom"]
 ---
 # Context-Aware Large Dataset Handling
 

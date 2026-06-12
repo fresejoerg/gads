@@ -220,6 +220,18 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
         code = re.sub(r'import autogluon\.models[^\n]*\n?', '', code)
         print("  [Sanitizer] Removed hallucinated AutogluonModels/autogluon.models/gads_emit_insight imports", flush=True)
 
+    # Remove hallucinated imports of the gads native helpers. Functions like
+    # gads_causal_estimate_ate, gads_emit_insight, gads_automl_fit, and
+    # gads_calibrate_threshold are INJECTED into the kernel by the executor preamble —
+    # they are not importable modules. Local models often invent a wrapper module
+    # (e.g. `import gads_utils`, `from gads_helpers import gads_causal_estimate_ate`),
+    # which raises ModuleNotFoundError and, in local_only mode, cannot escalate away.
+    # Stripping the import line is safe: there is no legitimate `gads*` package to import.
+    if re.search(r'(?m)^[ \t]*(?:from|import)[ \t]+gads', code):
+        code = re.sub(r'(?m)^[ \t]*from[ \t]+gads\w*[ \t]+import[^\n]*\n?', '', code)
+        code = re.sub(r'(?m)^[ \t]*import[ \t]+gads\w*(?:[ \t]+as[ \t]+\w+)?[ \t]*\n?', '', code)
+        print("  [Sanitizer] Removed hallucinated gads_* module imports (native helpers are kernel-injected)", flush=True)
+
     # Remove hallucinated causal library imports that do not exist as installed packages.
     # Note: `causalinference` (pip: CausalInference) IS a real package — do NOT strip it.
     _causal_hallucinations = ['causal_models', 'causal_inference_lib']

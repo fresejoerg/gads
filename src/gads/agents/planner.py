@@ -67,6 +67,7 @@ class ReconciliationReport(BaseModel):
     recipe_id: str
     rationale: str
     recommended_dag_nodes: List[Dict[str, Any]]
+    invariants: List[str] = []
     skippable_nodes: List[str] = []
     schema_warnings: List[str] = []
 

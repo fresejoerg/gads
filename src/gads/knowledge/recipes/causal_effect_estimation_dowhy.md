@@ -1,6 +1,6 @@
 ---
 id: causal_effect.observational.dowhy
-version: 1.2.0
+version: 2.0.0
 schema_version: 1
 author: gads-core
 
@@ -24,233 +24,164 @@ requires:
 dag:
   - id: define_causal_question
     intent: >
-      Identify roles and select confounder columns.
-      You MUST use this exact Python code block:
-      ```python
-      import pandas as pd
-      import numpy as np
-
-      if 'df' not in globals():
-          df = pd.read_csv('creditcard.csv')
-
-      treatment_col = 'Amount'
-      outcome_col = 'Class'
-
-      temporal_id_patterns = {'time', 'date', 'timestamp', 'id', 'index'}
-      confounder_cols = [
-          c for c in df.columns
-          if c not in (treatment_col, outcome_col)
-          and df[c].dtype in [np.float64, np.float32, np.int64, np.int32]
-          and not any(p in c.lower() for p in temporal_id_patterns)
-      ]
-
-      if len(confounder_cols) > 10:
-          corrs = df[confounder_cols].corrwith(df[outcome_col]).abs()
-          confounder_cols = corrs.nlargest(10).index.tolist()
-
-      minority_class_frac = float(df[outcome_col].value_counts(normalize=True).min())
-
-      print(f"Treatment: {treatment_col}")
-      print(f"Outcome: {outcome_col}")
-      print(f"Confounders: {confounder_cols}")
-      print(f"Minority class fraction: {minority_class_frac}")
-      ```
+      Identify the variable roles from the objective and the dataset schema. Do NOT
+      hardcode column names — read them from the objective and the actual columns of `df`.
+      (1) TREATMENT: the column whose effect is being estimated (named or strongly implied
+          by the objective). Store its name in `treatment_col`.
+      (2) OUTCOME: the column being affected. Store its name in `outcome_col`. If a
+          target column was provided in the spec hints, that is the outcome.
+      (3) CONFOUNDERS: numeric columns that are NOT the treatment, NOT the outcome, and
+          NOT temporal/ID columns. Build this list programmatically:
+            import numpy as np
+            temporal_id_patterns = {'time', 'date', 'timestamp', 'id', 'index'}
+            confounder_cols = [
+                c for c in df.columns
+                if c not in (treatment_col, outcome_col)
+                and df[c].dtype in [np.float64, np.float32, np.int64, np.int32]
+                and not any(p in c.lower() for p in temporal_id_patterns)
+            ]
+            if len(confounder_cols) > 10:
+                corrs = df[confounder_cols].corrwith(df[outcome_col]).abs()
+                confounder_cols = corrs.nlargest(10).index.tolist()
+      (4) Compute and print the outcome's minority-class fraction (if categorical):
+            minority_class_frac = float(df[outcome_col].value_counts(normalize=True).min()) if df[outcome_col].nunique() <= 20 else 0.5
+      Print `treatment_col`, `outcome_col`, `confounder_cols`, and `minority_class_frac`.
     worker_tier: T2
     produces: [treatment_col, outcome_col, confounder_cols, minority_class_frac]
+    # Minimal skills: this node only reads the schema. An explicit (non-empty) list
+    # suppresses the enforcer's keyword fallback, which would otherwise greedily load
+    # several heavy skills and overflow a small local model's context. The native-node
+    # guidance is loaded on estimate_and_refute where it actually matters.
+    attached_skills: [sandbox_environment]
     postconditions:
       - "isinstance(treatment_col, str)"
       - "isinstance(outcome_col, str)"
       - "len(confounder_cols) <= 10"
 
-  - id: engineer_and_build_graph
+  - id: estimate_and_refute
     intent: >
-      Engineer treatment and build graph.
-      You MUST use this exact Python code block:
-      ```python
-      import pandas as pd
-      import networkx as nx
-      from dowhy import CausalModel
-
-      if df[treatment_col].nunique() > 2:
-          global_median = float(df[treatment_col].median())
-          bin_col = f"high_{treatment_col}"
-          df[bin_col] = (df[treatment_col] > global_median).astype(int)
-          treatment_col = bin_col
-          print(f"Binarized treatment: {treatment_col}")
-
-      nodes = [treatment_col, outcome_col] + list(confounder_cols)
-      node_idx = {n: i for i, n in enumerate(nodes)}
-      node_str = "\n".join(f'  node [ id {i} label "{n}" ]' for i, n in enumerate(nodes))
-      edges = (
-          [(c, treatment_col) for c in confounder_cols]
-          + [(c, outcome_col) for c in confounder_cols]
-          + [(treatment_col, outcome_col)]
-      )
-      edge_str = "\n".join(
-          f'  edge [ source {node_idx[s]} target {node_idx[t]} ]' for s, t in edges
-      )
-      gml_string = "\n".join(["graph [ directed 1", node_str, edge_str, "]"])
-
-      causal_model = CausalModel(
-          data=df,
-          treatment=treatment_col,
-          outcome=outcome_col,
-          graph=gml_string,
-      )
-      ```
-    depends_on: [define_causal_question]
-    worker_tier: T2
-    produces: [causal_model, treatment_col]
-    postconditions:
-      - "causal_model is not None"
-
-  - id: identify_estimand
-    intent: >
-      Identify the estimand.
-      You MUST use this exact Python code block:
-      ```python
-      identified_estimand = causal_model.identify_effect(proceed_when_unidentifiable=True)
-      print(identified_estimand)
-      ```
-    depends_on: [engineer_and_build_graph]
-    worker_tier: T2
-    produces: [identified_estimand]
-    postconditions:
-      - "identified_estimand is not None"
-
-  - id: estimate_effect
-    intent: >
-      Call the native causal estimation node and unpack metrics.
-      You MUST use this exact Python code block:
+      Estimate the average treatment effect AND run both refutation tests in a single
+      call to the pre-defined native kernel function. It handles subsampling, continuous
+      treatment binarization, programmatic GML construction, estimand identification,
+      estimator selection, and both refuters internally — do NOT reimplement any of this.
+      You MUST use this exact pattern:
       ```python
       result = gads_causal_estimate_ate(df, treatment_col, outcome_col, confounder_cols)
 
       ate = float(result["ate"])
       placebo_new_effect = float(result["placebo_new_effect"])
       subset_new_effect = float(result["subset_new_effect"])
-      causal_estimate = result["causal_estimate"]
+      treatment_col = result["treatment_col"]          # may be 'high_<name>' if binarized
+      causal_model = result.get("causal_estimate")     # kept for reference
+      df_sample = result["df_sample"]                  # rows actually used
       refutation_results = {
           "placebo_new_effect": placebo_new_effect,
-          "subset_new_effect": subset_new_effect
+          "subset_new_effect": subset_new_effect,
       }
 
-      print(f"ATE={ate:.6f}")
-      print(f"placebo={placebo_new_effect:.6f}")
-      print(f"subset={subset_new_effect:.6f}")
-
-      gads_emit_insight("causal_effect", f"ATE={ate:.4f}, placebo={placebo_new_effect:.4f}, subset={subset_new_effect:.4f}")
+      print(f"ATE={ate:.6f}  placebo={placebo_new_effect:.6f}  subset={subset_new_effect:.6f}")
+      gads_emit_insight(
+          "causal_effect",
+          f"ATE={ate:.4f}, placebo={placebo_new_effect:.4f} (should be ~0), subset={subset_new_effect:.4f} (should be ~ATE)",
+      )
       ```
-    depends_on: [identify_estimand]
+    depends_on: [define_causal_question]
     worker_tier: T2
-    produces: [causal_estimate, ate, placebo_new_effect, subset_new_effect, refutation_results]
+    attached_skills: [causal_inference_dowhy]
+    produces: [ate, placebo_new_effect, subset_new_effect, treatment_col, df_sample, refutation_results]
     postconditions:
-      - "causal_estimate is not None"
-    required_metrics: [ate]
-
-  - id: refute_estimate
-    intent: >
-      Read refutation metrics from the kernel.
-      You MUST use this exact Python code block:
-      ```python
-      assert isinstance(placebo_new_effect, float), "placebo_new_effect missing"
-      assert isinstance(subset_new_effect, float), "subset_new_effect missing"
-
-      print(f"placebo_new_effect={placebo_new_effect:.6f}")
-      print(f"subset_new_effect={subset_new_effect:.6f}")
-
-      refutation_results = {
-          "placebo_new_effect": placebo_new_effect,
-          "subset_new_effect": subset_new_effect
-      }
-
-      gads_emit_insight("refutation", f"Placebo effect={placebo_new_effect:.4f} (should be ~0). Subset effect={subset_new_effect:.4f} (should be ~ATE).")
-      ```
-    depends_on: [estimate_effect]
-    worker_tier: T2
-    produces: [refutation_results, placebo_new_effect, subset_new_effect]
-    postconditions:
-      - "refutation_results is not None"
-    required_metrics: [placebo_new_effect, subset_new_effect]
+      - "isinstance(ate, float)"
+      - "isinstance(placebo_new_effect, float)"
+      - "isinstance(subset_new_effect, float)"
+    required_metrics: [ate, placebo_new_effect, subset_new_effect]
 
   - id: visualize_results
     intent: >
-      Visualize the causal effect results.
-      You MUST use this exact Python code block:
+      Visualize the causal results. Use the variables already in the kernel
+      (`ate`, `placebo_new_effect`, `subset_new_effect`, `treatment_col`, `outcome_col`,
+      `confounder_cols`, and `df_sample`). Do NOT hardcode any column name or class label.
+      You MUST adapt this pattern to the variables in the kernel:
       ```python
       import matplotlib
       matplotlib.use('Agg')
       import matplotlib.pyplot as plt
 
-      fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+      dfv = df_sample if 'df_sample' in globals() else df
+      is_binary_outcome = dfv[outcome_col].nunique() == 2
+      n_panels = 3 if is_binary_outcome else 2
+      fig, axes = plt.subplots(1, n_panels, figsize=(5 * n_panels, 5))
 
-      ax1 = axes[0]
-      q99 = df[treatment_col].quantile(0.99)
-      fraud_vals = df[df[outcome_col] == 1][treatment_col].clip(upper=q99)
-      legit_vals = df[df[outcome_col] == 0][treatment_col].clip(upper=q99)
-      ax1.hist(legit_vals, bins=50, alpha=0.6, label='Outcome=0', color='steelblue', density=True)
-      ax1.hist(fraud_vals, bins=50, alpha=0.6, label='Outcome=1', color='tomato', density=True)
-      ax1.set_xlabel(treatment_col)
-      ax1.set_ylabel('Density')
-      ax1.set_title('Treatment Distribution by Outcome')
-      ax1.legend()
+      # Panel 1: ATE vs refutation checks
+      ax = axes[0]
+      labels = ['ATE', 'Placebo', 'Subset']
+      values = [ate, placebo_new_effect, subset_new_effect]
+      bars = ax.bar(labels, values, color=['steelblue', 'tomato', 'mediumseagreen'],
+                    alpha=0.85, edgecolor='black', linewidth=0.5)
+      ax.axhline(y=0, color='black', linewidth=0.8, linestyle='--')
+      ax.set_ylabel('Effect Size')
+      ax.set_title('ATE vs Refutation Checks')
+      for bar, val in zip(bars, values):
+          ax.text(bar.get_x() + bar.get_width() / 2.0, bar.get_height(),
+                  f'{val:.4f}', ha='center', va='bottom', fontsize=9)
 
-      ax2 = axes[1]
-      bar_labels = ['ATE', 'Placebo', 'Subset']
-      bar_values = [ate, placebo_new_effect, subset_new_effect]
-      bar_colors = ['steelblue', 'tomato', 'mediumseagreen']
-      bars = ax2.bar(bar_labels, bar_values, color=bar_colors, alpha=0.8, edgecolor='black', linewidth=0.5)
-      ax2.axhline(y=0, color='black', linewidth=0.8, linestyle='--')
-      ax2.set_ylabel('Effect Size')
-      ax2.set_title('ATE vs Refutation Checks')
-      for bar, val in zip(bars, bar_values):
-          ypos = bar.get_height() + 0.001 if val >= 0 else bar.get_height() - 0.004
-          ax2.text(bar.get_x() + bar.get_width() / 2.0, ypos, f'{val:.4f}', ha='center', va='bottom', fontsize=9)
+      # Panel 2: confounder importance (|correlation with outcome|)
+      ax = axes[1]
+      conf_corrs = dfv[confounder_cols].corrwith(dfv[outcome_col]).abs().sort_values()
+      ax.barh(range(len(conf_corrs)), conf_corrs.values, color='steelblue', alpha=0.7)
+      ax.set_yticks(range(len(conf_corrs)))
+      ax.set_yticklabels(list(conf_corrs.index), fontsize=8)
+      ax.set_xlabel('|Correlation with outcome|')
+      ax.set_title('Confounder Importance')
 
-      ax3 = axes[2]
-      conf_corrs = df[confounder_cols].corrwith(df[outcome_col]).abs().sort_values(ascending=True)
-      ax3.barh(range(len(conf_corrs)), conf_corrs.values, color='steelblue', alpha=0.7)
-      ax3.set_yticks(range(len(conf_corrs)))
-      ax3.set_yticklabels(list(conf_corrs.index), fontsize=8)
-      ax3.set_xlabel('|Correlation with outcome|')
-      ax3.set_title('Confounder Importance')
+      # Panel 3 (binary outcome only): treatment distribution by outcome class
+      if is_binary_outcome:
+          ax = axes[2]
+          tcol = treatment_col if treatment_col in dfv.columns else confounder_cols[0]
+          q99 = dfv[tcol].quantile(0.99)
+          for cls, color in zip(sorted(dfv[outcome_col].unique()), ['steelblue', 'tomato']):
+              vals = dfv[dfv[outcome_col] == cls][tcol].clip(upper=q99)
+              ax.hist(vals, bins=50, alpha=0.6, label=f'{outcome_col}={cls}',
+                      color=color, density=True)
+          ax.set_xlabel(tcol)
+          ax.set_ylabel('Density')
+          ax.set_title('Treatment Distribution by Outcome')
+          ax.legend()
 
-      plt.suptitle(f'Causal Effect of {treatment_col} on {outcome_col}', fontsize=12, fontweight='bold')
+      plt.suptitle(f'Causal Effect of {treatment_col} on {outcome_col}',
+                   fontsize=12, fontweight='bold')
       plt.tight_layout()
       plt.savefig('causal_effect_summary.png', dpi=120, bbox_inches='tight')
       plt.close()
       print("Saved causal_effect_summary.png")
       ```
-    depends_on: [refute_estimate]
+    depends_on: [estimate_and_refute]
     worker_tier: T2
+    attached_skills: [visualization_best_practices]
     produces: [causal_effect_summary.png]
     postconditions:
       - "'causal_effect_summary.png' in str(locals()) or True"
 
 # ——— GLOBAL INVARIANTS ———
 invariants:
-  - "USE DOWHY LIBRARY: always use CausalModel.estimate_effect() — NEVER implement propensity scoring, DR/AIPW, or causal estimation manually from scratch. DoWhy handles all of this internally."
-  - "LARGE DATASET PERFORMANCE: for datasets >20K rows, ALWAYS subsample to 20K before building CausalModel. Use df_sample = df.sample(20000, random_state=42). Build CausalModel(data=df_sample, ...). NEVER run PSM or DML on the full dataset — it will timeout."
-  - "CONFOUNDERS: infer from schema as numeric columns that are not treatment, outcome, or temporal/ID. Never ask the user to list them."
-  - "TREATMENT ENGINEERING: if treatment is continuous, always binarise at its median. Name the new column high_{original_name}."
-  - "GML CONSTRUCTION: always build the GML string programmatically from the confounder list. Never hardcode node IDs. Use INTEGER id + STRING label: node [ id 0 label \"treatment\" ]. Edges use integer source/target indices. String ids fail with NetworkXError."
-  - "NATIVE NODE: prefer gads_causal_estimate_ate(df, treatment_col, outcome_col, confounder_cols) — it handles all GML construction, subsampling, and refutation internally."
-  - "ESTIMATOR SELECTION: check minority_class_frac. Use propensity_score_matching for rare outcomes (<5%), linear_regression otherwise. Never use propensity_score_weighting — it produces NaN on imbalanced data."
-  - "CLASS IMBALANCE: never use imblearn/SMOTE (not installed). Use class_weight='balanced' in sklearn propensity models if needed."
-  - "REFUTATION: always reuse the existing causal_model object — never rebuild it. Both refuters are mandatory. Store placebo_new_effect and subset_new_effect as plain Python floats."
-  - "POSTCONDITION CONTRACTS: required_columns must contain only string column names from the actual dataset schema, never integer indices."
-  - "Random state must be 42 everywhere."
-  - "Store all metric values (ate, placebo_new_effect, subset_new_effect) as plain Python floats, not numpy scalars."
+  - "NATIVE NODE IS MANDATORY: estimate the effect with gads_causal_estimate_ate(df, treatment_col, outcome_col, confounder_cols). It performs subsampling, treatment binarization, GML construction, identification, estimator selection, and BOTH refutations internally. NEVER build a CausalModel by hand, NEVER implement propensity scoring / DML / AIPW from scratch, and NEVER skip refutation."
+  - "CONFOUNDERS: infer from the schema as numeric columns that are not treatment, outcome, or temporal/ID. Never ask the user to list them, never hardcode them."
+  - "NO HARDCODED NAMES: never hardcode a dataset filename, column name, or class label. Read treatment, outcome, and confounders from the objective and the live schema of `df`."
+  - "METRICS AS FLOATS: store ate, placebo_new_effect, and subset_new_effect as plain Python floats, not numpy scalars."
+  - "REUSE KERNEL VARIABLES: the visualization step must reuse ate / placebo_new_effect / subset_new_effect / df_sample already in the kernel — never recompute the effect."
+  - "Random state must be 42 everywhere (the native node already enforces this internally)."
 ---
 
 # Causal Effect Estimation with DoWhy (Observational Data)
 
 ## Rationale
-This recipe implements the DoWhy four-step workflow: **Model → Identify → Estimate → Refute**. It encodes the methodology decisions that should not need to appear in a spec: confounder identification from the schema, treatment engineering from continuous variables, estimator selection based on outcome class balance, and programmatic GML construction.
+This recipe implements the DoWhy four-step workflow — **Model → Identify → Estimate → Refute** — but delegates the entire mechanical core to the audited native kernel function `gads_causal_estimate_ate`. That function deterministically handles the steps where local models reliably fail: subsampling large datasets, binarizing continuous treatments at the global median, building a valid GML graph programmatically, selecting an estimator from outcome balance, and running both the placebo and data-subset refuters. The LLM is left with only the two judgments that genuinely vary per dataset — naming the variable roles (treatment, outcome, confounders) and interpreting the result — which small models handle reliably.
 
 ## When to use
-Use when the objective is to estimate *how much* a treatment causally affects an outcome in observational tabular data. The spec needs only to identify the treatment column, outcome column, and any columns that are purely temporal or identifiers (to exclude from confounders).
+Use when the objective is to estimate *how much* a treatment causally affects an outcome in observational tabular data. The spec needs only to identify the treatment and outcome (the target column is taken as the outcome); confounders and all methodology are inferred automatically.
 
 ## Key Constraints
-- Treatment and outcome must be identifiable from the schema and objective.
-- Temporal/ID columns must be excluded from the confounder set — the recipe infers this automatically.
-- Refutation is mandatory before reporting an ATE.
+- Treatment and outcome must be identifiable from the objective and schema.
+- Temporal/ID columns are excluded from confounders automatically.
+- Refutation is mandatory and is performed inside the native node before any ATE is reported.
+</content>
+</invoke>

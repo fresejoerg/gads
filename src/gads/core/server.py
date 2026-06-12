@@ -781,6 +781,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                             recipe_id=recipe.id,
                             rationale=recipe.rationale,
                             recommended_dag_nodes=[node.dict() for node in recipe.dag],
+                            invariants=recipe.invariants,
                             skippable_nodes=[],
                             schema_warnings=[]
                         )
@@ -949,6 +950,18 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         # The node `intent` field is already a full Coder-ready description.
                         if knowledge_report and knowledge_report.recommended_dag_nodes:
                             enforced_steps = []
+                            # Recipe invariants are global failure-mode guardrails. They are
+                            # parsed but otherwise unused unless we forward them here — the
+                            # Coder never sees them via the (overridden) Planner output. Append
+                            # a compact block to every enforced task so each Coder call carries
+                            # the rules relevant to its own step.
+                            invariants_block = ""
+                            if knowledge_report.invariants:
+                                inv_lines = "\n".join(f"- {inv}" for inv in knowledge_report.invariants)
+                                invariants_block = (
+                                    "\n\n[RECIPE INVARIANTS — these rules are MANDATORY for every step:\n"
+                                    + inv_lines + "\n]"
+                                )
                             for idx, node in enumerate(knowledge_report.recommended_dag_nodes):
                                 tier = node.get("worker_tier", "T2")
                                 model_id = (
@@ -977,8 +990,22 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                                     if hint_lines:
                                         description += "\n\n[SPEC HINTS: " + " ".join(hint_lines) + "]"
 
-                                skill_matches = registry.find_skills_scored(description)
-                                attached = [s.id for s, _ in skill_matches]
+                                if invariants_block:
+                                    description += invariants_block
+
+                                # Prefer skills the recipe node explicitly declares; only
+                                # keyword-score when the node names none. Node intents now
+                                # contain code, so keyword scoring is noisiest exactly where
+                                # the recipe author has been most deliberate.
+                                node_skills = [
+                                    s for s in (node.get("attached_skills") or [])
+                                    if s in registry.skills
+                                ]
+                                if node_skills:
+                                    attached = list(node_skills)
+                                else:
+                                    skill_matches = registry.find_skills_scored(description)
+                                    attached = [s.id for s, _ in skill_matches]
                                 if "sandbox_environment" not in attached:
                                     attached.append("sandbox_environment")
 
