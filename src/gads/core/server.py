@@ -650,6 +650,10 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         workflow_spec_path = Path(workspace_dir) / "workflow_spec.md"
         spec_hints: Dict[str, Any] = {}
         formalized_objective = objective  # default: use raw objective
+        # A recipe_id read from workflow_spec.md is an explicit, launch-validated pin
+        # and must override the Router's LLM match. A SpecDrafter-guessed recipe_id
+        # (populated into spec_hints below) stays a soft fallback only.
+        spec_pinned_recipe: Optional[str] = None
 
         if workflow_spec_path.exists():
             # Re-use existing spec (from-spec path or prior run)
@@ -668,6 +672,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 for key in ("target_column", "feature_columns", "filters", "domain", "recipe_id", "save_model", "sample_rows"):
                     if key in yaml_data:
                         spec_hints[key] = yaml_data[key]
+                spec_pinned_recipe = spec_hints.get("recipe_id")
             except Exception as e:
                 print(f"  [SpecDrafter] Failed to parse workflow_spec.md: {e}. Using raw objective.", flush=True)
         else:
@@ -837,6 +842,22 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     else:
                         recipe_id = intent.matched_recipe_id
                         recipe = registry.get_recipe(recipe_id) if recipe_id else None
+                        # HARD PIN: a recipe declared in the spec file wins over the
+                        # Router's LLM classification. Without this, a Router mismatch
+                        # is fatal — the Recipe Enforcer replaces the Planner's tasks
+                        # with the wrong recipe's DAG on every replan attempt, so
+                        # PlanCritique rejects identically until the workflow halts.
+                        if spec_pinned_recipe:
+                            pinned = registry.get_recipe(spec_pinned_recipe)
+                            if pinned and pinned.id != recipe_id:
+                                print(
+                                    f"  [Router] Spec pins recipe '{pinned.id}' — overriding "
+                                    f"Router match '{recipe_id or 'None'}'.",
+                                    flush=True
+                                )
+                                recipe_id = pinned.id
+                                recipe = pinned
+                                intent.matched_recipe_id = pinned.id
                         if not recipe and spec_hints.get("recipe_id"):
                             recipe_id = spec_hints.get("recipe_id")
                             recipe = registry.get_recipe(recipe_id) if recipe_id else None
