@@ -1079,8 +1079,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                                 else:
                                     skill_matches = registry.find_skills_scored(description)
                                     attached = [s.id for s, _ in skill_matches]
-                                if "sandbox_environment" not in attached:
-                                    attached.append("sandbox_environment")
+                                # sandbox_environment is force-loaded for every task by
+                                # the executor-side skill loader; no need to attach here.
 
                                 enforced_steps.append(PlannerTask(
                                     description=description,
@@ -1306,17 +1306,17 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         if skill.id not in full_body_ids and hits >= KEYWORD_HIT_THRESHOLD:
                             full_body_ids.add(skill.id)
 
+                    # The sandbox core constraints are mandatory for every Coder call.
+                    # (The Coder is single-shot — it cannot request skills, so no index
+                    # of unloaded skills is included; only full bodies are useful to it.)
+                    full_body_ids.add("sandbox_environment")
                     loaded_skills = [registry.skills[sid] for sid in full_body_ids if sid in registry.skills]
 
-                    ctx_parts = []
-                    index_lines = [f"- {s.id}: {s.description}" for s in registry.skills.values()]
-                    if index_lines:
-                        ctx_parts.append("### SKILLS INDEX (all available)\n" + "\n".join(index_lines))
+                    skills_ctx = None
                     if loaded_skills:
                         bodies = "\n\n".join(f"#### {s.id}\n{s.content}" for s in loaded_skills)
-                        ctx_parts.append(f"### LOADED SKILL GUIDANCE\n{bodies}")
+                        skills_ctx = f"### LOADED SKILL GUIDANCE\n{bodies}"
                         print(f"    [Workflow] Applied skills: {[s.id for s in loaded_skills]}", flush=True)
-                    skills_ctx = "\n\n".join(ctx_parts) if ctx_parts else None
 
                     # 4.1 CONTEXT HARDENING: SLIDING WINDOW & INTROSPECTION
                     all_tasks = session.exec(select(Task).where(Task.project_id == project_id).order_by(Task.created_at.asc())).all()

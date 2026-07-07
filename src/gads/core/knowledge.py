@@ -240,8 +240,9 @@ class KnowledgeRegistry:
         return results
 
     def get_skills_summary(self) -> List[Dict[str, Any]]:
-        """Returns a list of available skills with their IDs and triggers for agent awareness."""
-        return [{"id": s.id, "triggers": s.triggers} for s in self.skills.values()]
+        """Returns available skills with IDs, descriptions (for agent selection) and
+        triggers (for relevance pruning — strip triggers before serializing into prompts)."""
+        return [{"id": s.id, "description": s.description, "triggers": s.triggers} for s in self.skills.values()]
 
     def get_recipes_summary(self) -> List[Dict[str, Any]]:
         """Returns a list of available recipes with their IDs and rationale for agent awareness."""

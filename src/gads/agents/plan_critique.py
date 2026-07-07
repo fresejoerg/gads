@@ -45,8 +45,8 @@ class PlanCritiqueAgent(BaseAgent[PlanCritiqueInput, PlanCritiqueOutput]):
         )
         user_content = (
             f"PROPOSED PLAN STEPS:\n{steps_str}\n\n"
-            f"AVAILABLE FILES:\n{files_str}\n\n"
-            "Please evaluate if these steps fully satisfy the objective and align with the SOP if applicable."
+            "Please evaluate if these steps fully satisfy the objective and align with the SOP if applicable. "
+            "The available files are listed in the system prompt."
         )
 
         # Use super().run

@@ -158,11 +158,19 @@ class DataSciencePlanner(BaseAgent[PlannerInput, PlannerOutput]):
                 fallback_ids = {"visualization_best_practices", "sandbox_environment", "tabular_visualization"}
                 relevant_skills = [s for s in input_data.available_skills if s.get("id") in fallback_ids]
                 
-            skills_str = json.dumps(relevant_skills, indent=2)
+            # Serialize id + description only — triggers are keyword-matcher internals,
+            # not useful for skill selection, and they bloat the prompt.
+            skills_str = json.dumps(
+                [{"id": s["id"], "description": s.get("description", "")} for s in relevant_skills],
+                indent=2
+            )
             print(f"  [Planner] ✂️ Trimmed system prompt: model hierarchy stripped, skills pruned from {len(input_data.available_skills)} to {len(relevant_skills)}.", flush=True)
         else:
             hierarchy_str = json.dumps(input_data.available_models_hierarchy, indent=2)
-            skills_str = json.dumps(input_data.available_skills, indent=2)
+            skills_str = json.dumps(
+                [{"id": s["id"], "description": s.get("description", "")} for s in input_data.available_skills],
+                indent=2
+            )
         
         # Format files with rich profiles (schema, null rates, cardinality, numeric stats)
         files_str = (

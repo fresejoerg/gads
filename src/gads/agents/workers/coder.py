@@ -55,7 +55,23 @@ class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
             skills_context=input_data.skills_context or "No specific skills required for this task.",
             contract_json=contract_summary
         )
-        
+
+        # Runtime-conditional guidance: only included when the workspace facts call
+        # for it, so single-file tasks don't carry merge instructions they can copy
+        # incorrectly.
+        tabular_files = [f for f in input_data.available_files if f.endswith((".csv", ".parquet"))]
+        if len(tabular_files) > 1:
+            formatted_prompt += (
+                "\n\n## MULTI-FILE ASSEMBLY\n"
+                "Engineered features may be split across multiple files. When a task needs features "
+                "from several files, merge them explicitly on the shared key column — never assume "
+                "they are already in one DataFrame:\n"
+                "```python\n"
+                "df = df_base.merge(df_feat_a, on='id').merge(df_feat_b, on='id')\n"
+                "```\n"
+                "Use the EXACT column names from the schemas in AVAILABLE FILES. Do NOT invent column names."
+            )
+
         # Build dynamic kernel-reuse warning from live state
         kernel_warnings = []
         try:
@@ -68,7 +84,7 @@ class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
             pass
 
         user_content = f"TASK: {input_data.task_description}\n\n"
-        user_content += f"CRITICAL: Use ONLY these exact filenames: {files_summary}\n\n"
+        user_content += "CRITICAL: Use ONLY the exact filenames listed in AVAILABLE FILES (system prompt).\n\n"
         if kernel_warnings:
             user_content += (
                 "KERNEL MEMORY — these DataFrames are ALREADY LOADED. "

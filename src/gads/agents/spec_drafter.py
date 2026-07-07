@@ -58,8 +58,7 @@ class SpecDrafterAgent(BaseAgent[SpecDraftInput, SpecDraft]):
 
         user_content = (
             f"USER OBJECTIVE: {input_data.objective}\n\n"
-            f"AVAILABLE RECIPES (use exact IDs only):\n{recipe_ids_str}\n\n"
-            f"AVAILABLE FILES WITH SCHEMAS:\n{input_data.files_with_schemas}\n\n"
+            "The available recipes and file schemas are listed in the system prompt. "
             "Return the required FLAT JSON object."
         )
 
