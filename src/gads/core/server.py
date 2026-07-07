@@ -19,9 +19,10 @@ from gads.core.bus import bus, dispatcher_loop
 from gads.core.execution_hub import watchdog_loop, ExecutionHub
 from gads.core.database import init_db, engine
 from gads.core.models import Project, Task, Artifact, Instruction
-from gads.agents.planner import DataSciencePlanner, PlannerInput, PlannerTask, ReconciliationReport, FileMetadata
-from gads.agents.router import DataScienceRouter, RouterInput
-from gads.agents.plan_critique import PlanCritiqueAgent, PlanCritiqueInput
+from gads.agents.planner import DataSciencePlanner, PlannerInput, PlannerOutput, PlannerTask, ReconciliationReport, FileMetadata
+from gads.agents.base import AgentResponse
+from gads.agents.router import DataScienceRouter, RouterInput, RouterOutput
+from gads.agents.plan_critique import PlanCritiqueAgent, PlanCritiqueInput, PlanCritiqueOutput
 from gads.agents.spec_drafter import SpecDrafterAgent, SpecDraftInput
 from gads.agents.workers.synthesizer import SynthesizerAgent, SynthesizerInput
 from gads.agents.workers.critique import CritiqueAgent, CritiqueInput
@@ -793,8 +794,61 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
 
         intent = None
         knowledge_report = None
+        intent = None
 
-        while True:
+        # DETERMINISTIC ROUTING: when the spec pins a valid recipe, the Router LLM
+        # call is redundant — the pin overrides its match anyway (see the HARD PIN
+        # block below). On local models that call is also the workflow's most
+        # fragile stage: unbounded `reasoning` rambling hits max_tokens, the JSON
+        # never closes, and with no T4 escalation target the whole run halts.
+        # Derive the intent from the recipe's own routing metadata instead.
+        if not disable_recipes and spec_pinned_recipe:
+            pinned = registry.get_recipe(spec_pinned_recipe)
+            if pinned:
+                def _first(v: Any, default: str) -> str:
+                    if isinstance(v, list):
+                        return str(v[0]) if v else default
+                    return str(v) if v else default
+                aw = pinned.applies_when or {}
+                intent = RouterOutput(
+                    task_type=_first(aw.get("task_type"), "unknown"),
+                    data_modality=_first(aw.get("data_modality"), "tabular"),
+                    matched_recipe_id=pinned.id,
+                    confidence=1.0,
+                    reasoning=f"Deterministic route: spec pins recipe '{pinned.id}'. Router LLM call skipped."
+                )
+                knowledge_report = ReconciliationReport(
+                    recipe_id=pinned.id,
+                    rationale=pinned.rationale,
+                    recommended_dag_nodes=[node.dict() for node in pinned.dag],
+                    invariants=pinned.invariants,
+                    skippable_nodes=[],
+                    schema_warnings=[]
+                )
+                trace_context.get().update({"recipe_id": pinned.id})
+                print(f"  [Router] Spec pins recipe '{pinned.id}' — deterministic route, LLM call skipped.", flush=True)
+                with Session(engine) as session:
+                    route_task = Task(
+                        project_id=project_id,
+                        instruction_id=instruction_id,
+                        description="Architect (deterministic) routed via spec-pinned recipe — no LLM call needed.",
+                        assigned_to="Router",
+                        status="completed",
+                        heartbeat=datetime.now(),
+                        result_json={
+                            "stdout": (
+                                f"**Deterministic Routing (spec pin):**\n"
+                                f"- Task Type: `{intent.task_type}`\n- Modality: `{intent.data_modality}`\n"
+                                f"- Recipe: `{pinned.id}`\n\n--- KNOWLEDGE BASE ---\n"
+                                f"Applied SOP: {pinned.id}\nRationale: {pinned.rationale}"
+                            ),
+                            "model_used": "none (deterministic)"
+                        }
+                    )
+                    session.add(route_task)
+                    session.commit()
+
+        while intent is None:
             with Session(engine) as session:
                 route_task = Task(
                     project_id=project_id,
@@ -994,7 +1048,106 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             # planner_files and spec_hints are pre-computed above (outside this retry loop)
 
             planner_res = None
-            while True:
+            plan_is_deterministic = False
+
+            # --- RECIPE PLAN COMPILER (deterministic, no LLM) ---
+            # When a recipe is matched, the plan IS the recipe DAG: the Recipe
+            # Enforcer used to discard the Planner's LLM output and rebuild it
+            # from the recipe anyway. On local models that LLM call is worse
+            # than wasted — the model transcribes the recipe intents until it
+            # hits max_tokens and the truncated JSON halts the workflow.
+            # Compile the plan directly from the DAG nodes instead, and skip
+            # PlanCritique below (auditing a deterministic plan can only reject
+            # into a replan that recompiles the identical plan).
+            if knowledge_report and knowledge_report.recommended_dag_nodes:
+                enforced_steps = []
+                # Recipe invariants are global failure-mode guardrails; append a
+                # compact block to every task so each Coder call carries them.
+                invariants_block = ""
+                if knowledge_report.invariants:
+                    inv_lines = "\n".join(f"- {inv}" for inv in knowledge_report.invariants)
+                    invariants_block = (
+                        "\n\n[RECIPE INVARIANTS — these rules are MANDATORY for every step:\n"
+                        + inv_lines + "\n]"
+                    )
+                for idx, node in enumerate(knowledge_report.recommended_dag_nodes):
+                    tier = node.get("worker_tier", "T2")
+                    model_id = (
+                        hierarchy.get(tier, hierarchy.get("T2", {}))
+                        .get("models", ["local_model"])[0]
+                    )
+
+                    postcondition: Dict[str, Any] = {"output_type": "value"}
+                    if node.get("required_metrics"):
+                        postcondition["required_metrics"] = node["required_metrics"]
+                    if node.get("produces"):
+                        postcondition["required_variables"] = node["produces"]
+
+                    description = node.get("intent", node.get("id", "")).strip()
+                    if idx == 0:
+                        hint_lines = []
+                        if spec_hints.get("target_column"):
+                            hint_lines.append(f"Target column: `{spec_hints['target_column']}`.")
+                        if spec_hints.get("sample_rows"):
+                            n = spec_hints["sample_rows"]
+                            hint_lines.append(
+                                f"SAMPLING CONSTRAINT: immediately after loading, apply "
+                                f"`df = df.sample({n}, random_state=42).reset_index(drop=True)` "
+                                f"to cap the dataset at {n:,} rows."
+                            )
+                        if hint_lines:
+                            description += "\n\n[SPEC HINTS: " + " ".join(hint_lines) + "]"
+
+                    if invariants_block:
+                        description += invariants_block
+
+                    # Prefer skills the recipe node explicitly declares; only
+                    # keyword-score when the node names none.
+                    node_skills = [
+                        s for s in (node.get("attached_skills") or [])
+                        if s in registry.skills
+                    ]
+                    if node_skills:
+                        attached = list(node_skills)
+                    else:
+                        skill_matches = registry.find_skills_scored(description)
+                        attached = [s.id for s, _ in skill_matches]
+                    # sandbox_environment is force-loaded at the executor.
+
+                    enforced_steps.append(PlannerTask(
+                        description=description,
+                        assigned_to=model_id,
+                        postcondition=postcondition,
+                        attached_skills=attached
+                    ))
+
+                planner_res = AgentResponse(
+                    content=PlannerOutput(steps=enforced_steps),
+                    model_used="none (deterministic)"
+                )
+                plan_is_deterministic = True
+                print(
+                    f"  [RecipeCompiler] Compiled {len(enforced_steps)} tasks directly from "
+                    f"recipe DAG '{knowledge_report.recipe_id}' — Planner LLM call skipped.",
+                    flush=True
+                )
+                with Session(engine) as session:
+                    plan_task = Task(
+                        project_id=project_id,
+                        instruction_id=instruction_id,
+                        description=f"Planner (deterministic): plan compiled from recipe '{knowledge_report.recipe_id}' (Attempt {workflow_attempt}).",
+                        assigned_to="Planner",
+                        status="completed",
+                        heartbeat=datetime.now(),
+                        result_json={
+                            "stdout": f"Compiled {len(enforced_steps)} tasks from recipe DAG `{knowledge_report.recipe_id}` — no LLM call needed.",
+                            "model_used": "none (deterministic)"
+                        }
+                    )
+                    session.add(plan_task)
+                    session.commit()
+
+            while planner_res is None:
                 # Create a Task for the Planner to show in the UI
                 with Session(engine) as session:
                     plan_task = Task(
@@ -1036,88 +1189,9 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                             user_hints={k: v for k, v in spec_hints.items() if k != "save_model"} or None
                         ), stream_callback=stream_planner_callback)
                         span.end(output=planner_res.content.model_dump())
-
-                        # --- RECIPE ENFORCER (deterministic post-Planner override) ---
-                        # The local model reliably ignores the MANDATORY recipe instruction
-                        # in the prompt. When a recipe is matched, replace the LLM's tasks
-                        # verbatim with tasks constructed from the recipe DAG nodes.
-                        # The node `intent` field is already a full Coder-ready description.
-                        if knowledge_report and knowledge_report.recommended_dag_nodes:
-                            enforced_steps = []
-                            # Recipe invariants are global failure-mode guardrails. They are
-                            # parsed but otherwise unused unless we forward them here — the
-                            # Coder never sees them via the (overridden) Planner output. Append
-                            # a compact block to every enforced task so each Coder call carries
-                            # the rules relevant to its own step.
-                            invariants_block = ""
-                            if knowledge_report.invariants:
-                                inv_lines = "\n".join(f"- {inv}" for inv in knowledge_report.invariants)
-                                invariants_block = (
-                                    "\n\n[RECIPE INVARIANTS — these rules are MANDATORY for every step:\n"
-                                    + inv_lines + "\n]"
-                                )
-                            for idx, node in enumerate(knowledge_report.recommended_dag_nodes):
-                                tier = node.get("worker_tier", "T2")
-                                model_id = (
-                                    hierarchy.get(tier, hierarchy.get("T2", {}))
-                                    .get("models", ["local_model"])[0]
-                                )
-
-                                postcondition: Dict[str, Any] = {"output_type": "value"}
-                                if node.get("required_metrics"):
-                                    postcondition["required_metrics"] = node["required_metrics"]
-                                if node.get("produces"):
-                                    postcondition["required_variables"] = node["produces"]
-
-                                description = node.get("intent", node.get("id", "")).strip()
-                                if idx == 0:
-                                    hint_lines = []
-                                    if spec_hints.get("target_column"):
-                                        hint_lines.append(f"Target column: `{spec_hints['target_column']}`.")
-                                    if spec_hints.get("sample_rows"):
-                                        n = spec_hints["sample_rows"]
-                                        hint_lines.append(
-                                            f"SAMPLING CONSTRAINT: immediately after loading, apply "
-                                            f"`df = df.sample({n}, random_state=42).reset_index(drop=True)` "
-                                            f"to cap the dataset at {n:,} rows."
-                                        )
-                                    if hint_lines:
-                                        description += "\n\n[SPEC HINTS: " + " ".join(hint_lines) + "]"
-
-                                if invariants_block:
-                                    description += invariants_block
-
-                                # Prefer skills the recipe node explicitly declares; only
-                                # keyword-score when the node names none. Node intents now
-                                # contain code, so keyword scoring is noisiest exactly where
-                                # the recipe author has been most deliberate.
-                                node_skills = [
-                                    s for s in (node.get("attached_skills") or [])
-                                    if s in registry.skills
-                                ]
-                                if node_skills:
-                                    attached = list(node_skills)
-                                else:
-                                    skill_matches = registry.find_skills_scored(description)
-                                    attached = [s.id for s, _ in skill_matches]
-                                # sandbox_environment is force-loaded for every task by
-                                # the executor-side skill loader; no need to attach here.
-
-                                enforced_steps.append(PlannerTask(
-                                    description=description,
-                                    assigned_to=model_id,
-                                    postcondition=postcondition,
-                                    attached_skills=attached
-                                ))
-
-                            original_count = len(planner_res.content.steps)
-                            planner_res.content.steps = enforced_steps
-                            print(
-                                f"  [RecipeEnforcer] Replaced {original_count} Planner tasks with "
-                                f"{len(enforced_steps)} recipe DAG nodes "
-                                f"(recipe: {knowledge_report.recipe_id})",
-                                flush=True
-                            )
+                        # NOTE: recipe-matched plans never reach this LLM path — they
+                        # are compiled deterministically above (RECIPE PLAN COMPILER),
+                        # which replaced the old post-Planner Recipe Enforcer.
 
                         plan_task.status = "completed"
                         plan_task.result_json = {
@@ -1145,12 +1219,34 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                             raise e
 
             
-            # 3.1 PLAN CRITIQUE
+            # 3.1 PLAN CRITIQUE (skipped for deterministic recipe plans: an LLM
+            # audit of a compiled plan can only reject into a replan that
+            # recompiles the identical plan, or halt a user-pinned recipe — and
+            # on local models the audit call itself is a fatal-failure risk)
+            plan_critique = None
+            if plan_is_deterministic:
+                plan_critique = PlanCritiqueOutput(
+                    is_approved=True,
+                    feedback=f"Plan compiled deterministically from recipe '{knowledge_report.recipe_id}' — audit skipped."
+                )
+                print(f"  [PlanCritique] Skipped — plan is deterministic from recipe DAG.", flush=True)
+                with Session(engine) as session:
+                    pc_task = Task(
+                        project_id=project_id,
+                        instruction_id=instruction_id,
+                        description=f"Auditor skipped: plan compiled deterministically from recipe (Attempt {workflow_attempt}).",
+                        assigned_to="PlanCritique",
+                        status="completed",
+                        heartbeat=datetime.now(),
+                        result_json={"stdout": plan_critique.feedback, "model_used": "none (deterministic)"}
+                    )
+                    session.add(pc_task)
+                    session.commit()
+
             plan_critique_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash"]
             plan_critique_model = hierarchy.get("T2", {}).get("models", plan_critique_fallback)[0]
-            
-            plan_critique = None
-            while True:
+
+            while plan_critique is None:
                 with Session(engine) as session:
                     pc_task = Task(
                         project_id=project_id,
