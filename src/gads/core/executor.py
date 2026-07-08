@@ -21,6 +21,13 @@ def _sanitize_code(code: str) -> str:
     pickle is blocked by sandbox security policy.
     Replacements happen regardless of what the LLM generated.
     """
+    # Strip markdown code fences that leak into the code field. Local models
+    # habitually wrap their output in ``` blocks despite the JSON schema; a
+    # trailing fence is a guaranteed SyntaxError that burns every retry
+    # (observed: gemma-4-12b fenced all 3 generations of a task, each dying
+    # at the same parse error before its logic was ever executed).
+    code = re.sub(r'^\s*```[a-zA-Z]*\s*$', '', code, flags=re.MULTILINE)
+
     # lightgbm → sklearn HistGradientBoosting
     code = re.sub(r'from lightgbm import LGBMClassifier', 'from sklearn.ensemble import HistGradientBoostingClassifier', code)
     code = re.sub(r'from lightgbm import LGBMRegressor', 'from sklearn.ensemble import HistGradientBoostingRegressor', code)

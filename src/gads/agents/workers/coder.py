@@ -1,6 +1,6 @@
 from typing import Optional, List, Any, Dict
 from pydantic import BaseModel, Field
-from gads.agents.base import BaseAgent
+from gads.agents.base import BaseAgent, AgentResponse
 from gads.core.prompts import prompt_registry
 import json
 
@@ -91,6 +91,34 @@ class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
                 "Use them directly. DO NOT call pd.read_csv() or reload from disk:\n"
                 + "\n".join(kernel_warnings) + "\n\n"
             )
+
+        # RAW CODE MODE for local models: forcing a small model to escape an
+        # entire Python script inside a JSON string field triggers degeneration
+        # loops (observed: gemma-4-12b burning the full 8K token budget on one
+        # derailed CoderOutput generation, repeatedly). Ask for plain fenced
+        # code and build the schema object ourselves.
+        if self.model_str == "local_model":
+            from gads.core.llm import get_code_completion
+            raw_system = formatted_prompt + (
+                "\n\n## OUTPUT FORMAT — OVERRIDES ALL PRIOR FORMAT INSTRUCTIONS\n"
+                "Return ONLY the Python code for this task, inside a single ```python fence.\n"
+                "Do NOT return JSON. Do NOT write prose before or after the fence."
+            )
+            raw_user = user_content + "Return ONLY a single ```python code block."
+            print(f"    [Coder] RAW CODE MODE (local_model) — plain fenced code, no JSON envelope.", flush=True)
+            code = await get_code_completion(
+                model=self.model_str,
+                messages=[
+                    {"role": "system", "content": raw_system},
+                    {"role": "user", "content": raw_user}
+                ],
+                stream_callback=kwargs.pop("stream_callback", None),
+            )
+            return AgentResponse(
+                content=CoderOutput(code=code, libraries_used=[], explanation="raw code mode (local)"),
+                model_used=self.model_str
+            )
+
         user_content += "Return the required FLAT JSON object."
 
         # Use super().run to get streaming support

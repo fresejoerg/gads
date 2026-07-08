@@ -32,13 +32,11 @@ def _tier_of(model: str) -> Optional[str]:
         pass
     return None
 
-async def get_structured_completion(model: str, response_model, messages: list, stream_callback=None, **kwargs):
-    """
-    Wrapper around litellm to get validated Pydantic objects.
-    Supports streaming reasoning tokens to a callback, stripping <think> tags,
-    and automatic repair via `instructor` if manual extraction fails.
-    Injects Langfuse/LiteLLM metadata from trace_context for observability.
-    """
+def _prepare_llm_kwargs(model: str, messages: list, kwargs: dict):
+    """Shared setup for every LiteLLM call: provider/base_url/api_key, token
+    budget, trace-metadata injection, timeouts, and local-model hardening.
+    Mutates `kwargs` in place; returns the metadata dict (or None) so callers
+    can relabel `completion_path` on repair/fallback sub-calls."""
     # CRITICAL: We pass custom_llm_provider="openai" to allow raw model names (like 'local_model')
     # without requiring a prefix that confuses the proxy server.
     if "custom_llm_provider" not in kwargs:
@@ -96,13 +94,6 @@ async def get_structured_completion(model: str, response_model, messages: list, 
 
         print(f"  [LLM] Injecting Trace Metadata (Headers + Body): {ctx.get('project_id')}", flush=True)
 
-    def _mark_path(path: str):
-        # Label repair/fallback sub-calls so first-shot and repaired completions
-        # are distinguishable in the trace. `meta` is the same dict referenced by
-        # kwargs["extra_body"]; LiteLLM serializes it at call time.
-        if meta is not None:
-            meta["completion_path"] = path
-
     # Set a robust default timeout if none specified
     if "timeout" not in kwargs:
         kwargs["timeout"] = 60.0
@@ -117,8 +108,114 @@ async def get_structured_completion(model: str, response_model, messages: list, 
             "repetition_penalty": 1.1,
             "temperature": 0.1 # Stricter output for local models
         })
-        kwargs["max_tokens"] = min(kwargs.get("max_tokens", 4096), 4096)
+        # 8192, not 4096: the old clamp truncated legitimate long generations
+        # (Coder writing a full training step, Planner JSON) mid-string —
+        # finish_reason='length' → unparseable JSON → fatal in local mode.
+        # Runaway rambling is bounded by repetition_penalty + the 600s timeout.
+        kwargs["max_tokens"] = min(kwargs.get("max_tokens", 8192), 8192)
         kwargs["timeout"] = 600.0  # 60s default kills local planning; 192s observed in prod
+
+    return meta
+
+
+_CODE_FENCE_RE = re.compile(r"```(?:python|py)?\s*\n(.*?)```", re.DOTALL)
+
+
+async def get_code_completion(model: str, messages: list, stream_callback=None, **kwargs) -> str:
+    """Plain-text completion that returns a Python code string (RAW CODE MODE).
+
+    Small local models degenerate when forced to escape an entire script inside
+    a JSON string field — observed: gemma-4-12b burning the full 8K budget on a
+    single derailed CoderOutput generation, twice in one run. Asking for fenced
+    plain code removes the escaping pressure entirely; the caller wraps the
+    result into its schema programmatically.
+    """
+    meta = _prepare_llm_kwargs(model, messages, kwargs)
+    if meta is not None:
+        meta["completion_path"] = "raw_code"
+
+    # Accumulate BOTH channels: LM Studio routes gemma-style thinking into
+    # reasoning_content, and depending on the generation the entire output —
+    # code included — can land there while `content` stays empty. The
+    # structured path already reads both; this must too.
+    full_content = ""
+    full_reasoning = ""
+    if stream_callback:
+        resp = await acompletion(model=model, messages=messages, stream=True, **kwargs)
+        async for chunk in resp:
+            delta = chunk.choices[0].delta
+            content = getattr(delta, "content", "") or ""
+            reasoning = ""
+            if hasattr(delta, "reasoning_content") and delta.reasoning_content:
+                reasoning = delta.reasoning_content
+            elif hasattr(delta, "provider_specific_fields") and delta.provider_specific_fields:
+                reasoning = delta.provider_specific_fields.get("reasoning_content", "") or ""
+            full_content += content
+            full_reasoning += reasoning
+            active = content if content else reasoning
+            if active:
+                await stream_callback(active)
+    else:
+        resp = await acompletion(model=model, messages=messages, **kwargs)
+        msg = resp.choices[0].message
+        full_content = msg.content or ""
+        full_reasoning = getattr(msg, "reasoning_content", "") or ""
+        if not full_reasoning:
+            psf = getattr(msg, "provider_specific_fields", None) or {}
+            full_reasoning = psf.get("reasoning_content", "") or ""
+
+    def _fenced_code(text: str) -> Optional[str]:
+        cleaned = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)
+        fenced = _CODE_FENCE_RE.findall(cleaned)
+        if fenced:
+            # Largest fenced block is the program; smaller ones are usually examples.
+            return max(fenced, key=len).strip() or None
+        # Unclosed fence (finish before the closing ```): take everything after
+        # the last opening fence.
+        m = list(re.finditer(r"```(?:python|py)?\s*\n", cleaned))
+        if m:
+            return cleaned[m[-1].end():].strip() or None
+        return None
+
+    # Prefer whichever channel actually contains a fence — content first, then
+    # reasoning (the model sometimes puts its whole answer, code included, in
+    # the reasoning channel while content stays empty or prose-only).
+    for candidate in (full_content, full_reasoning):
+        code = _fenced_code(candidate)
+        if code:
+            return code
+    # No fence anywhere: the model followed "code only" literally. Use the
+    # longer channel as-is (the executor's sanitizer strips stray fence lines).
+    unfenced = max(
+        (re.sub(r'<think>.*?</think>', '', t, flags=re.DOTALL).strip() for t in (full_content, full_reasoning)),
+        key=len
+    )
+    if unfenced:
+        return unfenced
+    # Never return an empty program — empty code "succeeds" in the sandbox and
+    # fails only at the metrics probe, a far more confusing failure than an
+    # explicit error here.
+    raise ValueError(
+        f"Raw code mode: model returned no usable code "
+        f"(content={len(full_content)} chars, reasoning={len(full_reasoning)} chars)."
+    )
+
+
+async def get_structured_completion(model: str, response_model, messages: list, stream_callback=None, **kwargs):
+    """
+    Wrapper around litellm to get validated Pydantic objects.
+    Supports streaming reasoning tokens to a callback, stripping <think> tags,
+    and automatic repair via `instructor` if manual extraction fails.
+    Injects Langfuse/LiteLLM metadata from trace_context for observability.
+    """
+    meta = _prepare_llm_kwargs(model, messages, kwargs)
+
+    def _mark_path(path: str):
+        # Label repair/fallback sub-calls so first-shot and repaired completions
+        # are distinguishable in the trace. `meta` is the same dict referenced by
+        # kwargs["extra_body"]; LiteLLM serializes it at call time.
+        if meta is not None:
+            meta["completion_path"] = path
 
     if stream_callback:
         print(f"  [LLM] Streaming enabled for {model}...", flush=True)
