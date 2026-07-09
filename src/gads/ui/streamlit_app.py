@@ -101,8 +101,10 @@ st.markdown("""
 # --- SESSION STATE ---
 if "current_project_id" not in st.session_state:
     st.session_state.current_project_id = None
-if "local_only_mode" not in st.session_state:
-    st.session_state.local_only_mode = False
+if "routing_mode" not in st.session_state:
+    st.session_state.routing_mode = "cloud"
+if "pinned_model" not in st.session_state:
+    st.session_state.pinned_model = None
 
 # --- API HELPERS ---
 def api_get(path):
@@ -398,12 +400,25 @@ def render_orchestrator_panel():
     if "initial_config_synced" not in st.session_state:
         config = api_get("/config")
         if config:
-            st.session_state.local_only_mode = config.get("local_only", False)
+            st.session_state.routing_mode = config.get("routing_mode", "cloud")
+            st.session_state.pinned_model = config.get("pinned_model")
+            st.session_state.available_models = config.get("available_models", [])
             st.session_state.random_routing_mode = config.get("random_routing", False)
             st.session_state.initial_config_synced = True
         else:
-            st.session_state.local_only_mode = False
+            st.session_state.routing_mode = "cloud"
+            st.session_state.pinned_model = None
+            st.session_state.available_models = []
             st.session_state.random_routing_mode = False
+        # Snapshot of the backend's current config: POST only when the user
+        # actually changes something. (The previous unconditional POST on every
+        # rerender silently clobbered config changes made outside this session,
+        # e.g. reverting a routing-mode flip mid-run.)
+        st.session_state.last_synced_config = (
+            st.session_state.routing_mode,
+            st.session_state.pinned_model,
+            st.session_state.random_routing_mode,
+        )
 
     proj = None
     last_state = {}
@@ -426,21 +441,46 @@ def render_orchestrator_panel():
     if "disable_recipes" not in st.session_state:
         st.session_state.disable_recipes = False
 
-    # SYSTEM CONFIGURATION SECTION (4 Checkboxes in a border container)
+    # SYSTEM CONFIGURATION SECTION
     with st.container(border=True):
         st.markdown("**SYSTEM CONFIGURATION**")
         cfg_col1, cfg_col2, cfg_col3, cfg_col4 = st.columns(4)
-        
-        st.session_state.local_only_mode = cfg_col1.checkbox(
-            "Local Only",
-            value=st.session_state.local_only_mode,
-            help="Force the system to use local LLM models (e.g. Ollama) instead of cloud APIs."
+
+        _mode_options = ["cloud", "local", "hybrid", "cloud_pinned"]
+        _mode_labels = {
+            "cloud": "Cloud (tiered)",
+            "local": "Local only",
+            "hybrid": "Hybrid (cloud plan/report, local exec)",
+            "cloud_pinned": "Cloud pinned (single model)",
+        }
+        _current_mode = st.session_state.get("routing_mode", "cloud")
+        st.session_state.routing_mode = cfg_col1.selectbox(
+            "Routing Mode",
+            options=_mode_options,
+            index=_mode_options.index(_current_mode) if _current_mode in _mode_options else 0,
+            format_func=lambda m: _mode_labels.get(m, m),
+            help=(
+                "cloud: tiered hierarchy with the T3→T2→T1 escalation ladder. "
+                "local: every stage on local_model. "
+                "hybrid: plan construction + report writing on cloud, execution on local_model. "
+                "cloud_pinned: one cloud model for all steps, no escalation ladder."
+            )
         )
-        st.session_state.random_routing_mode = cfg_col2.checkbox(
-            "Random Routing",
-            value=st.session_state.random_routing_mode,
-            help="Bypass the Planner and randomly route the objective to a worker agent (for testing)."
-        )
+        if st.session_state.routing_mode == "cloud_pinned":
+            _models = st.session_state.get("available_models") or []
+            _pin = st.session_state.get("pinned_model")
+            st.session_state.pinned_model = cfg_col2.selectbox(
+                "Pinned Model",
+                options=_models,
+                index=_models.index(_pin) if _pin in _models else 0,
+                help="Used for every workflow step. Failures retry on this model or fail — no escalation."
+            ) if _models else cfg_col2.text_input("Pinned Model", value=_pin or "", help="LiteLLM model id")
+        else:
+            st.session_state.random_routing_mode = cfg_col2.checkbox(
+                "Random Routing",
+                value=st.session_state.random_routing_mode,
+                help="Shuffle intra-tier model order (for testing)."
+            )
         st.session_state.fast_mode = cfg_col3.checkbox(
             "Fast Mode",
             value=st.session_state.fast_mode,
@@ -452,11 +492,23 @@ def render_orchestrator_panel():
             help="Bypass Standard Operating Procedures (recipes) to run raw objective. Useful for side-by-side comparison."
         )
 
-    # Sync backend settings for local_only and random_routing
-    api_post("/config", {
-        "local_only": st.session_state.local_only_mode,
-        "random_routing": st.session_state.random_routing_mode
-    })
+    # Sync backend settings ONLY when something actually changed in this session.
+    _desired_config = (
+        st.session_state.routing_mode,
+        st.session_state.get("pinned_model"),
+        st.session_state.random_routing_mode,
+    )
+    if _desired_config != st.session_state.get("last_synced_config"):
+        resp = api_post("/config", {
+            "routing_mode": st.session_state.routing_mode,
+            "pinned_model": st.session_state.get("pinned_model"),
+            "random_routing": st.session_state.random_routing_mode,
+        })
+        if resp:
+            st.session_state.last_synced_config = _desired_config
+            st.toast(f"Routing mode: {st.session_state.routing_mode}")
+        else:
+            st.warning("Failed to update backend config — check that the routing mode/pinned model is valid.")
 
     if st.session_state.current_project_id:
         badge_text = f"ACTIVE PROJECT: {st.session_state.current_project_id}"

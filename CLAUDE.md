@@ -59,7 +59,7 @@ Before the main loop, two one-shot stages run:
 
 `TIER_MAPPING` defines T1 (Opus/Pro) → T2 (Sonnet/Flash) → T3 (Haiku/Flash-Lite) → T4 (`local_model`). `get_next_model_dynamic` does **intra-tier random fallback first**, then jumps to the next tier in `TIER_ORDER = ["T3", "T2", "T1"]`. **T4 (local) never escalates to cloud** — this is a hard mandate, enforced in two places. The Planner's prompt must only emit model strings present in the runtime hierarchy fetched from LiteLLM (the orchestrator sanitizes hallucinated model names).
 
-Toggle with `POST /config {local_only, random_routing}` or `GADS_LOCAL_ONLY=true` in `.env`. In `local_only` mode all four tiers collapse to `["local_model"]`.
+**Routing modes** (`registry.py`, `resolve_stage_model` is the single choke point): `cloud` (tiered + escalation ladder), `local` (all tiers collapse to `["local_model"]`, no escalation), `hybrid` (plan construction — SpecDrafter/Router/Planner/PlanCritique — and report writing — Synthesizer/Critique — on cloud tiers; execution tasks + CompletenessVerifier on `local_model`), `cloud_pinned` (one operator-chosen cloud model for every stage, **no escalation ladder**). Set via `POST /config {routing_mode, pinned_model, random_routing}` (legacy `{local_only}` still maps to local/cloud and cannot clobber a mode when absent) or `GADS_ROUTING_MODE`/`GADS_PINNED_MODEL` in `.env` (fallback: `GADS_LOCAL_ONLY`). Runtime config is in-process only — a backend restart reverts to `.env`.
 
 ### BaseAgent (agents/base.py)
 

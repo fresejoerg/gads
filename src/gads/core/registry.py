@@ -8,16 +8,66 @@ load_dotenv()
 LITELLM_URL = os.getenv("LITELLM_BASE_URL", "http://localhost:4000/v1")
 LITELLM_KEY = os.getenv("LITELLM_MASTER_KEY", "sk-1234")
 
-# Allow runtime toggling of local only mode
-_LOCAL_ONLY = os.getenv("GADS_LOCAL_ONLY", "false").lower() == "true"
+# ---------------------------------------------------------------------------
+# ROUTING MODES — how workflow stages map to models.
+#
+#   cloud        — tiered cloud hierarchy (T3→T2→T1) with the escalation ladder.
+#   local        — every stage on local_model. No escalation (T4 isolation).
+#   hybrid       — plan construction (SpecDrafter/Router/Planner/PlanCritique)
+#                  and report writing (Synthesizer/Critique) on cloud tiers;
+#                  everything else (execution tasks, CompletenessVerifier) on
+#                  local_model. Cloud stages keep the ladder; local tasks never
+#                  escalate to cloud (isolation mandate unchanged).
+#   cloud_pinned — one operator-chosen cloud model for EVERY stage. No
+#                  escalation ladder by design: a failure retries on the same
+#                  model (inner Coder retries) or fails.
+#
+# `local_only` is kept as a legacy alias: true ≡ mode "local", false ≡ "cloud".
+# ---------------------------------------------------------------------------
+VALID_ROUTING_MODES = ("cloud", "local", "hybrid", "cloud_pinned")
+
+def _initial_mode() -> str:
+    mode = os.getenv("GADS_ROUTING_MODE", "").strip().lower()
+    if mode in VALID_ROUTING_MODES:
+        return mode
+    return "local" if os.getenv("GADS_LOCAL_ONLY", "false").lower() == "true" else "cloud"
+
+_ROUTING_MODE = _initial_mode()
+_PINNED_MODEL: Optional[str] = os.getenv("GADS_PINNED_MODEL", "").strip() or None
 _RANDOM_ROUTING = False
 
+# Stages that stay on cloud tiers in hybrid mode. Everything not listed here
+# (Coder execution tasks, CompletenessVerifier, any future stage) goes local.
+HYBRID_CLOUD_STAGES = {"SpecDrafter", "Router", "Planner", "PlanCritique", "Synthesizer", "Critique"}
+
+def set_routing_mode(mode: str, pinned_model: Optional[str] = None):
+    global _ROUTING_MODE, _PINNED_MODEL
+    mode = (mode or "").strip().lower()
+    if mode not in VALID_ROUTING_MODES:
+        raise ValueError(f"Unknown routing mode '{mode}'. Valid: {VALID_ROUTING_MODES}")
+    if mode == "cloud_pinned":
+        if not pinned_model or pinned_model == "local_model":
+            raise ValueError("cloud_pinned mode requires a cloud pinned_model (use mode 'local' for local_model).")
+        _PINNED_MODEL = pinned_model
+    elif pinned_model:
+        _PINNED_MODEL = pinned_model
+    _ROUTING_MODE = mode
+    print(f"  [Registry] Routing mode set to '{_ROUTING_MODE}'"
+          + (f" (pinned: {_PINNED_MODEL})" if _ROUTING_MODE == "cloud_pinned" else ""), flush=True)
+
+def get_routing_mode() -> str:
+    return _ROUTING_MODE
+
+def get_pinned_model() -> Optional[str]:
+    return _PINNED_MODEL
+
 def set_local_only(enabled: bool):
-    global _LOCAL_ONLY
-    _LOCAL_ONLY = enabled
+    """Legacy alias for old clients/UI: maps onto routing modes."""
+    set_routing_mode("local" if enabled else "cloud")
 
 def get_local_only() -> bool:
-    return _LOCAL_ONLY
+    """Legacy alias: true only in fully-local mode."""
+    return _ROUTING_MODE == "local"
 
 def set_random_routing(enabled: bool):
     global _RANDOM_ROUTING
@@ -25,6 +75,22 @@ def set_random_routing(enabled: bool):
 
 def get_random_routing() -> bool:
     return _RANDOM_ROUTING
+
+def resolve_stage_model(stage: str, tier_default: str) -> str:
+    """Central mode-aware model choice for a workflow stage.
+
+    `tier_default` is what the tier/hierarchy logic picked; this applies the
+    routing-mode override on top. Every stage and every execution-task
+    assignment must route through here so a mode change covers the whole
+    pipeline.
+    """
+    if _ROUTING_MODE == "local":
+        return "local_model"
+    if _ROUTING_MODE == "cloud_pinned" and _PINNED_MODEL:
+        return _PINNED_MODEL
+    if _ROUTING_MODE == "hybrid" and stage not in HYBRID_CLOUD_STAGES:
+        return "local_model"
+    return tier_default
 
 # Hardcoded rules for mapping model names to Tiers
 # Gemini/Local are always index 0 to ensure they are the primary choice.
@@ -46,9 +112,19 @@ TIER_DESCRIPTIONS = {
     "T4": "Local tier. Use for simple, mechanical tasks. NEVER escalates to cloud tiers."
 }
 
+async def get_available_models() -> List[str]:
+    """Raw model list from LiteLLM (for the UI's pinned-model picker etc.)."""
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            f"{LITELLM_URL}/models",
+            headers={"Authorization": f"Bearer {LITELLM_KEY}"}
+        )
+        resp.raise_for_status()
+        return [m["id"] for m in resp.json()["data"]]
+
 async def get_model_hierarchy() -> Dict[str, Any]:
     """Fetches models from LiteLLM and organizes them into capability tiers."""
-    if get_local_only():
+    if get_routing_mode() == "local":
         print("  [Registry] 🏠 LOCAL ONLY MODE ENABLED. Overriding all tiers to 'local_model'.")
         # In local mode, everything is pinned to the local model.
         # No escalation path exists because all tiers lead to the same model.
@@ -68,7 +144,22 @@ async def get_model_hierarchy() -> Dict[str, Any]:
             )
             resp.raise_for_status()
             available_models = [m["id"] for m in resp.json()["data"]]
-            
+
+            if get_routing_mode() == "cloud_pinned":
+                pinned = get_pinned_model()
+                if pinned not in available_models:
+                    raise RuntimeError(
+                        f"cloud_pinned mode: pinned model '{pinned}' is not served by "
+                        f"LiteLLM (available: {available_models}). Refusing to start."
+                    )
+                print(f"  [Registry] 📌 CLOUD PINNED MODE. All tiers → '{pinned}'. No escalation ladder.", flush=True)
+                return {
+                    tier: {
+                        "description": TIER_DESCRIPTIONS.get(tier, ""),
+                        "models": [pinned]
+                    } for tier in ["T3", "T2", "T1"]
+                }
+
             hierarchy = {}
             for tier, keywords in TIER_MAPPING.items():
                 # HARD MANDATE: local_model (T4) is reachable ONLY in local_only mode.
@@ -106,10 +197,12 @@ def get_next_model_dynamic(current_model: str, hierarchy: Dict[str, Any], aggres
     Escalation Logic:
     1. If LOCAL ONLY MODE is active: No escalation is permitted.
     2. If current model is 'local_model': No escalation to cloud models is permitted.
-    3. If cloud mode: Try other models in same tier, then move to better tiers (T3 -> T2 -> T1).
+       (This also covers hybrid mode's local execution tasks.)
+    3. If CLOUD PINNED mode: No escalation ladder by design — retry-or-fail on the pinned model.
+    4. If cloud/hybrid-cloud: Try other models in same tier, then move to better tiers (T3 -> T2 -> T1).
     """
-    # HARD MANDATE: No escalation in local mode or FROM local model
-    if get_local_only() or current_model == "local_model":
+    # HARD MANDATE: No escalation in local mode, FROM local model, or in pinned mode
+    if get_local_only() or current_model == "local_model" or get_routing_mode() == "cloud_pinned":
         return None
 
     import random

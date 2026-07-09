@@ -29,7 +29,11 @@ from gads.agents.workers.critique import CritiqueAgent, CritiqueInput
 from gads.agents.workers.completeness_verifier import CompletenessVerifierAgent, CompletenessVerifierInput
 from gads.core.executor import ExecutionManager
 from gads.tools.sandbox import SandboxClient
-from gads.core.registry import get_model_hierarchy, get_local_only, set_local_only, get_random_routing, set_random_routing, get_next_model_dynamic
+from gads.core.registry import (
+    get_model_hierarchy, get_local_only, set_local_only, get_random_routing,
+    set_random_routing, get_next_model_dynamic, get_routing_mode, set_routing_mode,
+    get_pinned_model, resolve_stage_model, get_available_models, VALID_ROUTING_MODES
+)
 from gads.core.knowledge import KnowledgeRegistry
 from gads.core.reporting import create_master_reports
 from gads.core.notebook_exporter import export_python_script, export_notebook, copy_applied_recipe
@@ -116,8 +120,13 @@ class ProjectResponse(BaseModel):
     instructions: List[InstructionRead] = []
 
 class ConfigUpdate(BaseModel):
-    local_only: bool
-    random_routing: bool
+    # Legacy toggle (old clients): true ≡ mode "local", false ≡ mode "cloud".
+    # Ignored when routing_mode is provided.
+    local_only: Optional[bool] = None
+    random_routing: bool = False
+    # New-style routing: cloud | local | hybrid | cloud_pinned
+    routing_mode: Optional[str] = None
+    pinned_model: Optional[str] = None
 
 class FileUpload(BaseModel):
     name: str
@@ -220,22 +229,36 @@ def save_skill_raw(filename: str, req: RecipeContent):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.get("/config")
-def get_config():
+def _config_payload() -> Dict[str, Any]:
     return {
         "local_only": get_local_only(),
-        "random_routing": get_random_routing()
+        "random_routing": get_random_routing(),
+        "routing_mode": get_routing_mode(),
+        "pinned_model": get_pinned_model(),
+        "valid_routing_modes": list(VALID_ROUTING_MODES),
     }
+
+@app.get("/config")
+async def get_config():
+    payload = _config_payload()
+    # Best-effort model list for the UI's pinned-model picker.
+    try:
+        payload["available_models"] = [m for m in await get_available_models() if m != "local_model"]
+    except Exception:
+        payload["available_models"] = []
+    return payload
 
 @app.post("/config")
 def update_config(req: ConfigUpdate):
-    set_local_only(req.local_only)
+    try:
+        if req.routing_mode is not None:
+            set_routing_mode(req.routing_mode, pinned_model=req.pinned_model)
+        elif req.local_only is not None:
+            set_local_only(req.local_only)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     set_random_routing(req.random_routing)
-    return {
-        "status": "success", 
-        "local_only": get_local_only(),
-        "random_routing": get_random_routing()
-    }
+    return {"status": "success", **_config_payload()}
 
 async def archive_cleanup_loop():
     """Background task to delete project artifacts older than 30 days."""
@@ -475,7 +498,7 @@ def _finalize_workflow_trace(trace, project_id: uuid.UUID, prompt_version: str, 
     if outcome == "completed" and not status_counts.get("completed"):
         outcome = "failed"
 
-    tags = [f"outcome:{outcome}", f"local_only:{get_local_only()}"]
+    tags = [f"outcome:{outcome}", f"local_only:{get_local_only()}", f"routing_mode:{get_routing_mode()}"]
     if recipe_id:
         tags.append(f"recipe:{recipe_id}")
     trace.update(
@@ -679,7 +702,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         else:
             # Run SpecDrafter to generate the spec
             spec_model_fallback = ["local_model"] if get_local_only() else ["claude-haiku-4.5"]
-            spec_model = hierarchy.get("T3", {}).get("models", spec_model_fallback)[0]
+            spec_model = resolve_stage_model("SpecDrafter", hierarchy.get("T3", {}).get("models", spec_model_fallback)[0])
             available_recipe_ids = [r["id"] for r in registry.get_recipes_summary() if "id" in r]
 
             with Session(engine) as session:
@@ -790,7 +813,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
 
         # 1. ROUTING (Resilient & Resourced)
         router_fallback = ["local_model"] if get_local_only() else ["gemini-3.1-flash-lite-preview"]
-        router_model = hierarchy.get("T3", {}).get("models", router_fallback)[0]
+        router_model = resolve_stage_model("Router", hierarchy.get("T3", {}).get("models", router_fallback)[0])
 
         intent = None
         knowledge_report = None
@@ -1044,7 +1067,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
 
             # 3. PLANNING (Resilient Decomposition)
             planner_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash"]
-            planner_model = hierarchy.get("T2", {}).get("models", planner_fallback)[0]
+            planner_model = resolve_stage_model("Planner", hierarchy.get("T2", {}).get("models", planner_fallback)[0])
             # planner_files and spec_hints are pre-computed above (outside this retry loop)
 
             planner_res = None
@@ -1072,10 +1095,10 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     )
                 for idx, node in enumerate(knowledge_report.recommended_dag_nodes):
                     tier = node.get("worker_tier", "T2")
-                    model_id = (
+                    model_id = resolve_stage_model("Coder", (
                         hierarchy.get(tier, hierarchy.get("T2", {}))
                         .get("models", ["local_model"])[0]
-                    )
+                    ))
 
                     postcondition: Dict[str, Any] = {"output_type": "value"}
                     if node.get("required_metrics"):
@@ -1244,7 +1267,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     session.commit()
 
             plan_critique_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash"]
-            plan_critique_model = hierarchy.get("T2", {}).get("models", plan_critique_fallback)[0]
+            plan_critique_model = resolve_stage_model("PlanCritique", hierarchy.get("T2", {}).get("models", plan_critique_fallback)[0])
 
             while plan_critique is None:
                 with Session(engine) as session:
@@ -1345,6 +1368,11 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     if assigned_model not in valid_models:
                         print(f"  [Workflow] Warning: Planner hallucinated model '{assigned_model}'. Falling back to '{fallback_model}'.", flush=True)
                         assigned_model = fallback_model
+                    # Routing-mode override AFTER hallucination sanitization: hybrid
+                    # sends all execution tasks to local_model (not in the cloud
+                    # hierarchy, so it must be applied here, not via valid_models);
+                    # cloud_pinned forces the pinned model.
+                    assigned_model = resolve_stage_model("Coder", assigned_model)
 
                     new_task = Task(
                         project_id=project_id,
@@ -1742,7 +1770,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
             # Only fires when execution succeeded and a replan is still possible.
             if not (failed_tasks or pending_tasks) and workflow_attempt < MAX_WORKFLOW_ATTEMPTS:
                 cv_model_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash"]
-                cv_model = hierarchy.get("T2", {}).get("models", cv_model_fallback)[0]
+                cv_model = resolve_stage_model("CompletenessVerifier", hierarchy.get("T2", {}).get("models", cv_model_fallback)[0])
 
                 with Session(engine) as session:
                     cv_task = Task(
@@ -1867,10 +1895,10 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
 
             # 5. SYNTHESIS & CRITIQUE LOOP
             synthesizer_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash"]
-            synthesizer_model = hierarchy.get("T2", {}).get("models", synthesizer_fallback)[0]
-            
+            synthesizer_model = resolve_stage_model("Synthesizer", hierarchy.get("T2", {}).get("models", synthesizer_fallback)[0])
+
             critique_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash"]
-            critique_model = hierarchy.get("T2", {}).get("models", hierarchy.get("T3", {}).get("models", critique_fallback))[0]
+            critique_model = resolve_stage_model("Critique", hierarchy.get("T2", {}).get("models", hierarchy.get("T3", {}).get("models", critique_fallback))[0])
 
             while True:
                 with Session(engine) as session:
