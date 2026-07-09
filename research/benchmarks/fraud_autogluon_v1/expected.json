@@ -1,0 +1,60 @@
+{
+  "benchmark_id": "fraud_autogluon_v1",
+  "spec_file": "autogluon_fraud_classification.md",
+  "recipe_id": "tabular_automl.autogluon.standard",
+  "reference_runs": {
+    "cloud": "faa3870e-1e6b-4f4a-9596-e1ae7556f1f5",
+    "local": "e9ecf496-daec-40b2-a93c-31e33c28358a",
+    "hybrid": "3fcb048a-d696-4f28-9f38-b95d312996ec",
+    "cloud_pinned": "151a323d-3481-4bc1-9fbc-d1b9a3fe0c74"
+  },
+  "metrics": {
+    "naive_baseline": {
+      "value": 0.99834,
+      "exact": true,
+      "tol": 0.0,
+      "note": "Pure function of the seeded 50K sample (majority-class fraction); must match bitwise."
+    },
+    "test_score": {
+      "value": 0.9570593538427091,
+      "exact": false,
+      "tol": 0.02,
+      "note": "ROC-AUC. 3/4 reference runs match bitwise; the cloud reference diverged to 0.9693 because the recipe's fit(time_limit=120) is wall-clock-dependent (journal 2026-07-09). Tolerance covers that variance until the recipe pins a fixed model portfolio; tighten to exact afterwards."
+    }
+  },
+  "artifacts": {
+    "required": [
+      "metrics.json",
+      "figure_1_feature_importance.json",
+      "figure_2_model_performance.json",
+      "model.joblib",
+      "final_dashboard.html",
+      "research_report.md",
+      "workflow_execution.py"
+    ],
+    "forbidden_stdout": ["mock data", "simulating data", "synthetic data generated"]
+  },
+  "tasks": {
+    "expected_count": 3,
+    "produces": {
+      "Profile": ["target_col", "problem_type", "drop_cols", "naive_baseline"],
+      "Train": ["predictor", "score_test"],
+      "Extract": ["fi"]
+    }
+  },
+  "methodology": {
+    "required_patterns": [
+      "\\.sample\\(50000,\\s*random_state=42\\)",
+      "train_test_split\\([^)]*stratify=",
+      "train_test_split\\([^)]*random_state=42",
+      "TabularPredictor\\(",
+      "roc_auc",
+      "feature_importance"
+    ],
+    "forbidden_patterns": [
+      "import pickle",
+      "from imblearn",
+      "pd\\.read_csv\\(['\"](?!creditcard)"
+    ]
+  }
+}
