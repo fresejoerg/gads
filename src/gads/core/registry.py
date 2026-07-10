@@ -94,10 +94,13 @@ def resolve_stage_model(stage: str, tier_default: str) -> str:
 
 # Hardcoded rules for mapping model names to Tiers
 # Gemini/Local are always index 0 to ensure they are the primary choice.
+# gpt-5.6 suite (sol/terra/luna) is primary for OpenAI slots; 5.4/5.5 retained
+# as same-tier fallbacks until the 5.6 rollout (GA 2026-07-08) reaches this
+# account — intra-tier escalation absorbs the interim 404s, then self-heals.
 TIER_MAPPING = {
-    "T1": ["gemini-3.1-pro-preview", "claude-opus-4.8", "claude-fable-5", "gpt-5.5", "kimi-k2.6"],
-    "T2": ["gemini-3.5-flash", "claude-sonnet-4.6", "gpt-5.4", "kimi-k2.6"],
-    "T3": ["gemini-3.1-flash-lite-preview", "claude-haiku-4.5", "gpt-5.4-mini", "kimi-k2.6"],
+    "T1": ["gemini-3.1-pro-preview", "claude-opus-4.8", "claude-fable-5", "gpt-5.6-sol", "gpt-5.5", "kimi-k2.6"],
+    "T2": ["gemini-3.5-flash", "claude-sonnet-4.6", "gpt-5.6-terra", "gpt-5.4", "kimi-k2.6"],
+    "T3": ["gemini-3.1-flash-lite-preview", "claude-haiku-4.5", "gpt-5.6-luna", "gpt-5.4-mini", "kimi-k2.6"],
     "T4": ["local_model"]
 }
 
