@@ -57,7 +57,14 @@ def gads_calibrate_threshold(y_true, y_prob, metric="f1"):
             
     y_true = np.array(y_true)
     y_prob = np.array(y_prob)
-    
+
+    # Binarize non-{0,1} targets (e.g. string labels '<=50K'/'>50K'): the positive
+    # class is the lexicographically last unique value, matching the ordering of
+    # AutoGluon's predict_proba columns from which callers take iloc[:, 1].
+    uniq = sorted(np.unique(y_true).tolist())
+    if len(uniq) == 2 and uniq != [0, 1] and uniq != [False, True]:
+        y_true = (y_true == uniq[-1]).astype(int)
+
     thresholds = np.linspace(0.01, 0.99, 99)
     best_threshold = 0.5
     best_score = -1.0

@@ -1,0 +1,73 @@
+{
+  "benchmark_id": "amlb_segment_v1",
+  "spec_file": "amlb_segment.md",
+  "recipe_id": "tabular_automl.autogluon.deterministic",
+  "external_source": "AMLB / OpenML data_id 40984 ('segment')",
+  "reference_runs": {
+    "cloud": "11f012e1-0b7f-48ef-886d-189bf015c958"
+  },
+  "metrics": {
+    "naive_baseline": {
+      "value": 0.14285714285714285,
+      "exact": true,
+      "tol": 0.0,
+      "note": "1/7 \u2014 the seven region classes are perfectly balanced; pure data function."
+    },
+    "test_score": {
+      "value": 0.9281148405938683,
+      "exact": false,
+      "tol": 0.005,
+      "note": "macro-F1, deterministic portfolio (GBM+XGB+RF, num_bag_folds=0). Should reproduce bitwise \u2014 tighten to exact:true once a repeat run confirms."
+    }
+  },
+  "artifacts": {
+    "required": [
+      "metrics.json",
+      "figure_1_feature_importance.json",
+      "figure_2_model_performance.json",
+      "model.joblib",
+      "final_dashboard.html",
+      "research_report.md",
+      "workflow_execution.py"
+    ],
+    "forbidden_stdout": [
+      "mock data",
+      "simulating data"
+    ]
+  },
+  "tasks": {
+    "expected_count": 3,
+    "produces": {
+      "Profile": [
+        "target_col",
+        "problem_type",
+        "drop_cols",
+        "naive_baseline"
+      ],
+      "Train": [
+        "predictor",
+        "test_score"
+      ],
+      "Extract": [
+        "fi"
+      ]
+    }
+  },
+  "methodology": {
+    "required_patterns": [
+      "train_test_split\\([^)]*stratify=",
+      "train_test_split\\([^)]*random_state=42",
+      "TabularPredictor\\(",
+      "hyperparameters=\\{'GBM': \\{\\}, 'XGB': \\{\\}, 'RF': \\{\\}\\}",
+      "num_bag_folds=0",
+      "f1_macro",
+      "feature_importance"
+    ],
+    "forbidden_patterns": [
+      "time_limit\\s*=",
+      "presets=",
+      "import pickle",
+      "from imblearn"
+    ]
+  }
+}

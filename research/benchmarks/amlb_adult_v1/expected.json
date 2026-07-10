@@ -1,0 +1,73 @@
+{
+  "benchmark_id": "amlb_adult_v1",
+  "spec_file": "amlb_adult.md",
+  "recipe_id": "tabular_automl.autogluon.deterministic",
+  "external_source": "AMLB / OpenML data_id 1590 ('adult')",
+  "reference_runs": {
+    "cloud": "75fba428-298b-487d-8ed5-82f40d143de2"
+  },
+  "metrics": {
+    "naive_baseline": {
+      "value": 0.7607182343065395,
+      "exact": true,
+      "tol": 0.0,
+      "note": "Majority-class fraction of the full 48,842-row dataset (no sampling); pure data function."
+    },
+    "test_score": {
+      "value": 0.931129925396338,
+      "exact": false,
+      "tol": 0.005,
+      "note": "ROC-AUC, deterministic portfolio (GBM+XGB+RF, num_bag_folds=0). Should reproduce bitwise \u2014 tighten to exact:true once a repeat run (local/hybrid) confirms; tolerance is a placeholder, not an explanation. External anchor: AMLB reports AutoGluon AUC ~0.93 on adult (10-fold CV vs our seeded 80/20 holdout)."
+    }
+  },
+  "artifacts": {
+    "required": [
+      "metrics.json",
+      "figure_1_feature_importance.json",
+      "figure_2_model_performance.json",
+      "model.joblib",
+      "final_dashboard.html",
+      "research_report.md",
+      "workflow_execution.py"
+    ],
+    "forbidden_stdout": [
+      "mock data",
+      "simulating data"
+    ]
+  },
+  "tasks": {
+    "expected_count": 3,
+    "produces": {
+      "Profile": [
+        "target_col",
+        "problem_type",
+        "drop_cols",
+        "naive_baseline"
+      ],
+      "Train": [
+        "predictor",
+        "test_score"
+      ],
+      "Extract": [
+        "fi"
+      ]
+    }
+  },
+  "methodology": {
+    "required_patterns": [
+      "train_test_split\\([^)]*stratify=",
+      "train_test_split\\([^)]*random_state=42",
+      "TabularPredictor\\(",
+      "hyperparameters=\\{'GBM': \\{\\}, 'XGB': \\{\\}, 'RF': \\{\\}\\}",
+      "num_bag_folds=0",
+      "roc_auc",
+      "feature_importance"
+    ],
+    "forbidden_patterns": [
+      "time_limit\\s*=",
+      "presets=",
+      "import pickle",
+      "from imblearn"
+    ]
+  }
+}

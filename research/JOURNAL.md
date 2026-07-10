@@ -19,6 +19,45 @@ without run evidence are marked *(hypothesis)*.
 
 ---
 
+## 2026-07-10 — `[method]` First new benchmark immediately exposed a latent recipe defect (label-dtype)
+
+The very first run of `amlb_adult` (project `52406af9`, cloud) failed its Extract task with
+`Labels in y_true and y_pred should be of the same type: y_true=['<=50K' '>50K'], y_pred=[0 1]`.
+Root cause: **two layers** of the AutoGluon recipes assumed binary targets are 0/1 ints —
+the recipe's calibration pattern (`(y_prob.iloc[:,1] >= t).astype(int)`) *and* the
+`gads_calibrate_threshold` native helper (int preds vs. raw y_true inside f1_score). The fraud
+benchmark never caught it because `Class` is already 0/1; adult's string labels did, on the
+first attempt, deterministically (the recipe mandates the exact pattern — all replans would
+have failed identically; run cancelled after attempt 1 confirmed it).
+
+Fixes: recipe pattern now maps thresholded booleans back to `y_prob.columns` (the class
+labels); native helper binarizes non-{0,1} targets against the lexicographically-last class
+(matching AutoGluon's proba column order). Both recipe variants patched.
+
+**Implication.** A recipe verified on one dataset encodes that dataset's incidental properties
+as silent assumptions. Benchmark *diversity* is what converts "methodologically appropriate on
+fraud" into "methodologically appropriate for the recipe's declared applicability domain" —
+one new dataset falsified an invariant assumption within minutes. Corollary for the flywheel:
+distilled invariants must state their preconditions, or diverse benchmarks will break them.
+
+## 2026-07-10 — `[harness]` Benchmark infrastructure stood up; engine fleet change (gpt-5.6)
+
+- **Benchmark repo + scorer live** (`be0079d`): `research/benchmarks/` format (metrics with
+  exact/tolerance semantics, artifact manifest, methodology regexes) + `scripts/score_benchmark.py`.
+  First benchmark `fraud_autogluon_v1` seeded from the four verified reference runs; scorer
+  validated (local reference 18/18 PASS; divergent cloud reference passes within the documented
+  `time_limit` tolerance).
+- **External landscape surveyed** (`47e9012`, `research/benchmark_landscape.md`): AMLB and BLADE
+  are the priority adaptations (external reference results / expert-verified analysis decisions
+  respectively); QRData → causal recipes; StatQA → hypothesis-testing recipe. Phase 1 = AMLB
+  slice + QRData causal.
+- **Engine fleet change:** OpenAI GPT-5.6 suite (sol/terra/luna) went GA 2026-07-08/09; this
+  account's rollout hadn't landed as of 07-10 (IDs 404 upstream). Ladder now carries 5.6 as
+  primary OpenAI slots with 5.4/5.5 same-tier fallbacks — escalation absorbs the interim 404s
+  and self-heals. **Comparability rule this implies:** benchmark records must capture the
+  *actual serving model* per generation (they do — `model_used` per task + LiteLLM logs), not
+  the tier label; cross-time comparisons on "T2" are meaningless across fleet changes.
+
 ## 2026-07-09 — `[repro]` `[method]` Wall-clock AutoML budgets break reproducibility with *identical* generated code
 
 Same spec, same recipe, **same generated code shape** (verified by diffing

@@ -1,5 +1,5 @@
 ---
-id: tabular_automl.autogluon.standard
+id: tabular_automl.autogluon.deterministic
 version: 1.0.0
 schema_version: 1
 author: gads-core
@@ -65,7 +65,7 @@ dag:
             except ValueError:
                 df_train, df_test = train_test_split(df_clean, test_size=0.2, random_state=42)
       (3) Fit — put ALL arguments on ONE logical line inside the parentheses (no backslash continuation):
-            predictor = TabularPredictor(label=target_col, eval_metric=eval_metric, verbosity=0).fit(df_train, presets='good_quality', time_limit=120, excluded_model_types=['NN_TORCH', 'FASTAI'])
+            predictor = TabularPredictor(label=target_col, eval_metric=eval_metric, verbosity=0).fit(df_train, hyperparameters={'GBM': {}, 'XGB': {}, 'RF': {}}, num_bag_folds=0, fit_weighted_ensemble=True)
       (4) Evaluate:
             leaderboard = predictor.leaderboard(df_test, silent=True)
             test_score = float(leaderboard.iloc[0]['score_test'])
@@ -137,9 +137,9 @@ dag:
 # ——— GLOBAL INVARIANTS ———
 invariants:
   - "USE AUTOGLUON: always use TabularPredictor.fit() — NEVER build manual sklearn pipelines, encoders, or imputers. AutoGluon handles all preprocessing internally."
-  - "TIME LIMIT: always set time_limit=120 in .fit(). Never omit it — unlimited training will exhaust the sandbox budget."
+  - "DETERMINISM: NEVER pass time_limit or presets to .fit(). Always pass EXACTLY hyperparameters={'GBM': {}, 'XGB': {}, 'RF': {}}, num_bag_folds=0, fit_weighted_ensemble=True — a fixed model portfolio makes the trained ensemble independent of wall-clock and machine load (see research/JOURNAL.md 2026-07-09)."
   - "VERBOSITY: always set verbosity=0 in TabularPredictor() to suppress log spam."
-  - "EXCLUDE NEURAL NETS IN CPU SANDBOX: always pass excluded_model_types=['NN_TORCH', 'FASTAI'] unless the user explicitly requests neural network models."
+  - "MODEL PORTFOLIO IS FIXED: do not add, remove, or configure models beyond the mandated hyperparameters dict — no neural nets, no CatBoost, no extra params."
   - "DROP ID COLUMNS: remove columns whose names contain 'id', 'index', 'key', or 'name' (case-insensitive) before fitting — they cause leakage."
   - "SAVE WITH JOBLIB: joblib.dump(predictor, 'model.joblib') — never use pickle (sandbox-blocked)."
   - "EVAL METRIC: roc_auc for binary, f1_macro for multiclass, rmse for regression."
@@ -147,10 +147,12 @@ invariants:
   - "THRESHOLD CALIBRATION: For binary classification, always calibrate the decision threshold on validation/test data using gads_calibrate_threshold() before evaluating predictions or confusion matrices."
 ---
 
-# AutoML Classification & Regression with AutoGluon
+# Deterministic AutoML with AutoGluon (benchmark variant)
 
 ## Rationale
-This recipe replaces the manual sklearn pipeline approach (preprocessing → split → model selection → hyperparameter tuning → evaluate) with a single AutoGluon `.fit()` call. AutoGluon trains and ensembles LightGBM, CatBoost, XGBoost, Random Forest, and Extra Trees automatically, handling missing values, categorical encoding, and feature type inference without any Coder intervention. This makes the recipe maximally reliable for local LLMs — the Coder calls one function with three arguments rather than constructing a multi-step pipeline.
+Benchmark variant of `tabular_automl.autogluon.standard`: identical DAG, but the fit uses a FIXED model portfolio instead of a wall-clock time budget, because time_limit makes the trained stack depend on machine load — identical generated code produced ROC-AUC 0.9571 vs 0.9693 across days (research/JOURNAL.md 2026-07-09). With a fixed portfolio and seeded splits, consecutive runs must produce identical scores, which is what `research/benchmarks/` scoring assumes.
+
+Like the standard recipe, this replaces the manual sklearn pipeline approach (preprocessing → split → model selection → hyperparameter tuning → evaluate) with a single AutoGluon `.fit()` call. AutoGluon trains and ensembles LightGBM, CatBoost, XGBoost, Random Forest, and Extra Trees automatically, handling missing values, categorical encoding, and feature type inference without any Coder intervention. This makes the recipe maximally reliable for local LLMs — the Coder calls one function with three arguments rather than constructing a multi-step pipeline.
 
 ## When to use
 Use for standard supervised learning on tabular data when the objective is to predict a target column as accurately as possible. The spec needs only to identify the target column and whether the task is classification or regression. Use the existing `binary_classification_tabular.md` recipe instead if interpretability, manual feature engineering, or a specific model architecture is required.
@@ -158,4 +160,4 @@ Use for standard supervised learning on tabular data when the objective is to pr
 ## Key Constraints
 - Datasets over 500K rows should be subsampled to 200K before training to avoid OOM.
 - The sandbox has no GPU — neural net models are excluded by default.
-- `time_limit=120s` is the default; increase to 240s in the spec if the dataset is large.
+- No time budget: the fixed portfolio (GBM+XGB+RF, no bagging) trains in well under the sandbox timeout for ≤200K-row datasets. If a dataset is larger, subsample via the spec's `sample_rows` — never reintroduce time_limit.
