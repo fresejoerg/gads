@@ -1109,6 +1109,11 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     description = node.get("intent", node.get("id", "")).strip()
                     if idx == 0:
                         hint_lines = []
+                        # Recipe intents routinely reference "the objective" (e.g. the causal
+                        # recipe derives treatment/outcome from it), but the Coder only ever
+                        # sees the task description — so the objective must ride along here.
+                        if formalized_objective:
+                            hint_lines.append(f"OBJECTIVE: {formalized_objective[:600]}")
                         if spec_hints.get("target_column"):
                             hint_lines.append(f"Target column: `{spec_hints['target_column']}`.")
                         if spec_hints.get("sample_rows"):
