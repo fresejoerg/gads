@@ -19,6 +19,29 @@ without run evidence are marked *(hypothesis)*.
 
 ---
 
+## 2026-07-13 — `[harness]` Semantic skill retrieval (embedding-based), gated to uncurated tasks
+
+Skills can now be found semantically, not just by keyword triggers: fastembed (ONNX,
+CPU-local, deterministic) runs `all-MiniLM-L6-v2` — the same model family the sandbox uses —
+over lean skill cards (id + description + triggers). Wired into the compiler fallback and the
+executor (`core/skill_semantics.py`; debug endpoint `GET /skills/match?query=…`).
+
+**Reproducibility gate:** semantic discovery fires ONLY for tasks with no curated
+`attached_skills` (drafted-lane tasks, recipe nodes that declare none). Curated tasks —
+including every frozen-benchmark node — keep byte-stable prompts.
+
+**Calibration findings (2026-07-13):**
+- Absolute cosine values are not comparable across queries with this model (a true match
+  scored 0.27 on one query, 0.54 on another; a false positive hit 0.31). Selection therefore
+  uses a per-query z-score (skill must be an outlier ≥2.0 among all 15 skill scores) AND an
+  absolute floor (0.25), capped at top-3.
+- Card content matters: including section headings in the embedded text *degraded* ranking
+  (top-3 containment 2/5 → 5/5 after dropping them — keyword-dense soup dilutes the vector).
+- Technical Planner-style phrasings select cleanly, including two cases keyword triggers miss
+  entirely; colloquial paraphrases may return [] — the safe failure (keyword matching still
+  applies). Precision was chosen over recall: a wrongly attached skill costs local-model
+  context budget on every retry.
+
 ## 2026-07-13 — `[method]` `[repro]` `[harness]` Recipe/skill re-layering: bitwise reproducibility survives decision-level prompts
 
 The recipe library was refactored from verbatim code dictation to a three-layer split

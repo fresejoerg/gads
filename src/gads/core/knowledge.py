@@ -61,6 +61,10 @@ class KnowledgeRegistry:
         self.recipes: Dict[str, Recipe] = {}
         self.skills: Dict[str, Skill] = {}
         self._recipe_filepaths: Dict[str, str] = {}
+        # Lazy semantic index (embedding-based skill retrieval). Import is local so a
+        # missing fastembed never breaks the registry — semantic lookups just return [].
+        from gads.core.skill_semantics import SkillEmbeddingIndex
+        self.semantic_index = SkillEmbeddingIndex()
         self.load_recipes()
         self.load_skills()
 
@@ -122,6 +126,8 @@ class KnowledgeRegistry:
                         print(f"  [Registry] Loaded skill: {skill.id}")
                 except Exception as e:
                     print(f"  [Registry] Error loading skill {filename}: {e}")
+        # Keep the semantic index in sync with the skill collection (hot-edits included).
+        self.semantic_index.rebuild(list(self.skills.values()))
 
     def get_recipe(self, recipe_id: str) -> Optional[Recipe]:
         return self.recipes.get(recipe_id)
@@ -238,6 +244,35 @@ class KnowledgeRegistry:
             if hits > 0:
                 results.append((skill, hits))
         return results
+
+    def find_skills_semantic(self, task_description: str) -> List[tuple]:
+        """Returns [(Skill, cosine_similarity)] via the embedding index, best first.
+
+        Empty when semantic matching is disabled/unavailable. Intended for tasks with
+        NO curated attached_skills — callers keep compiled benchmark prompts stable by
+        not augmenting curated tasks (see skill_semantics module docstring).
+        """
+        return [
+            (self.skills[sid], score)
+            for sid, score in self.semantic_index.find(task_description)
+            if sid in self.skills
+        ]
+
+    def find_skills_combined(self, task_description: str) -> List[tuple]:
+        """Union of keyword and semantic matches as [(Skill, source, score)].
+
+        Keyword matches come first (exact signal beats similarity); a skill matched by
+        both is reported once, as keyword.
+        """
+        keyword = self.find_skills_scored(task_description)
+        seen = {s.id for s, _ in keyword}
+        combined = [(s, "keyword", float(hits)) for s, hits in keyword]
+        combined += [
+            (s, "semantic", score)
+            for s, score in self.find_skills_semantic(task_description)
+            if s.id not in seen
+        ]
+        return combined
 
     def get_skills_summary(self) -> List[Dict[str, Any]]:
         """Returns available skills with IDs, descriptions (for agent selection) and

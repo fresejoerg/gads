@@ -214,6 +214,18 @@ def reset_prompt(agent_name: str):
 def list_skills_files():
     return registry.list_skill_files()
 
+@app.get("/skills/match")
+def match_skills(query: str):
+    """Debug: show how a task description would rank against the skill library
+    with both matchers (keyword triggers + semantic embeddings)."""
+    return {
+        "query": query[:300],
+        "matches": [
+            {"skill": s.id, "source": src, "score": round(score, 4)}
+            for s, src, score in registry.find_skills_combined(query)
+        ],
+    }
+
 @app.get("/skills/{filename}")
 def get_skill_raw(filename: str):
     try:
@@ -1129,8 +1141,9 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     if invariants_block:
                         description += invariants_block
 
-                    # Prefer skills the recipe node explicitly declares; only
-                    # keyword-score when the node names none.
+                    # Prefer skills the recipe node explicitly declares; only fall back
+                    # to discovery (keyword + semantic) when the node names none, so
+                    # curated recipes keep byte-stable prompts.
                     node_skills = [
                         s for s in (node.get("attached_skills") or [])
                         if s in registry.skills
@@ -1138,8 +1151,15 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     if node_skills:
                         attached = list(node_skills)
                     else:
-                        skill_matches = registry.find_skills_scored(description)
-                        attached = [s.id for s, _ in skill_matches]
+                        matches = registry.find_skills_combined(description)
+                        attached = [s.id for s, _src, _score in matches]
+                        if matches:
+                            print(
+                                "  [RecipeCompiler] discovered skills for "
+                                f"'{node.get('id')}': "
+                                + ", ".join(f"{s.id}({src}:{score:.2f})" for s, src, score in matches),
+                                flush=True
+                            )
                     # sandbox_environment is force-loaded at the executor.
 
                     enforced_steps.append(PlannerTask(
@@ -1455,6 +1475,17 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     for skill, hits in scored_matches:
                         if skill.id not in full_body_ids and hits >= KEYWORD_HIT_THRESHOLD:
                             full_body_ids.add(skill.id)
+
+                    # Semantic discovery — only for uncurated tasks. Tasks with
+                    # recipe/Planner-attached skills keep byte-stable prompts (the
+                    # frozen benchmarks depend on that); tasks nobody curated get the
+                    # embedding matcher as a safety net beyond keyword triggers.
+                    if not assigned_ids:
+                        sem_matches = registry.find_skills_semantic(desc)
+                        for skill, score in sem_matches:
+                            if skill.id not in full_body_ids:
+                                full_body_ids.add(skill.id)
+                                print(f"    [SkillSemantics] attached '{skill.id}' (cos={score:.2f})", flush=True)
 
                     # The sandbox core constraints are mandatory for every Coder call.
                     # (The Coder is single-shot — it cannot request skills, so no index
