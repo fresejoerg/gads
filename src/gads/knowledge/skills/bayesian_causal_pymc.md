@@ -32,11 +32,16 @@ print(f"n_rows={n_rows}")
 import pandas as pd
 import numpy as np
 
-# 1. Identify confounders automatically
+# 1. Identify confounders. The objective is authoritative: if it names confounders or
+#    variables to EXCLUDE (post-treatment mediators/consequences of the treatment), use
+#    exactly those. Adjusting for post-treatment variables biases the estimate, and only
+#    the objective text can identify them. Programmatic fallback:
 TEMPORAL_ID_PATTERNS = {"time", "date", "timestamp", "id", "index"}
+post_treatment_cols = []   # fill from the objective if it describes any
 confounder_cols = [
     c for c in df.columns
     if c not in (treatment_col, outcome_col)
+    and c not in post_treatment_cols
     and df[c].dtype in [np.float64, np.float32, np.int64, np.int32]
     and not any(p in c.lower() for p in TEMPORAL_ID_PATTERNS)
 ]
@@ -169,7 +174,7 @@ print(f"Bayesian ATE (ADVI): {ate:.4f}  94% HDI: [{float(ate_hdi[0]):.4f}, {floa
 
 ```python
 model = bmb.Model(
-    "fraud ~ high_amount + V1 + V2 + V3 + V4 + V5",
+    formula,                       # built programmatically, e.g. "y ~ treated + x1 + x2"
     data=df.sample(3000, random_state=42),
     family="bernoulli",
     link="logit"
@@ -177,7 +182,7 @@ model = bmb.Model(
 idata = model.fit(draws=500, tune=300, chains=1, cores=1,
                   random_seed=42, progressbar=False)
 
-treat_coef = idata.posterior["high_amount"].values.flatten()
+treat_coef = idata.posterior[treatment_col].values.flatten()
 print(f"Posterior mean log-odds: {treat_coef.mean():.4f}")
 print(f"P(effect > 0): {(treat_coef > 0).mean():.3f}")
 ```
@@ -188,9 +193,9 @@ print(f"P(effect > 0): {(treat_coef > 0).mean():.3f}")
 import pymc as pm
 import numpy as np
 
-X = df[["V1", "V2", "V3"]].values    # confounders (standardised)
-T = df["treatment"].values            # treatment (0/1)
-Y = df["outcome"].values              # outcome
+X = df[confounder_cols].values       # confounders (standardised)
+T = df[treatment_col].values          # treatment (0/1)
+Y = df[outcome_col].values            # outcome
 
 with pm.Model() as causal_model:
     alpha  = pm.Normal("alpha",  mu=0, sigma=1)

@@ -1,6 +1,6 @@
 ---
 id: causal_effect.timeseries.causalimpact
-version: 1.0.0
+version: 1.1.0
 schema_version: 1
 author: gads-core
 
@@ -26,6 +26,7 @@ dag:
   - id: prepare_time_series
     intent: "Parse and validate the time index. Identify the outcome metric column and any available control series (unaffected by the intervention). Identify the intervention date that splits pre-period from post-period. Print a summary of the timeline and any gaps/nulls."
     worker_tier: T2
+    attached_skills: [causal_impact_timeseries]
     produces: [ts_data, pre_period, post_period]
     postconditions:
       - "ts_data is not None"
@@ -36,6 +37,7 @@ dag:
     intent: "Fit the CausalImpact model using pycausalimpact. Pass the pre_period and post_period. If control series are available, include them as additional columns. Store results in `ci`. Print ci.summary()."
     depends_on: [prepare_time_series]
     worker_tier: T2
+    attached_skills: [causal_impact_timeseries]
     produces: [ci]
     postconditions:
       - "ci is not None"
@@ -44,6 +46,7 @@ dag:
     intent: "Extract the average absolute effect, relative effect (%), cumulative effect, and p-value from ci.summary_data. Store the absolute effect in a variable named exactly `abs_effect` and relative effect in `rel_effect`. Print the full summary table."
     depends_on: [run_causal_impact]
     worker_tier: T2
+    attached_skills: [causal_impact_timeseries]
     produces: [abs_effect, rel_effect]
     postconditions:
       - "isinstance(abs_effect, float)"
@@ -53,6 +56,7 @@ dag:
     intent: "Generate the CausalImpact three-panel chart (original + counterfactual, pointwise effect, cumulative effect). Save as Figure 1. Also plot the pre-period fit quality to validate the model. Save as Figure 2."
     depends_on: [extract_impact_metrics]
     worker_tier: T2
+    attached_skills: [causal_impact_timeseries, visualization_best_practices]
     postconditions:
       - "abs_effect is not None"
 
@@ -67,7 +71,6 @@ dag:
 invariants:
   - "The pre-period must contain enough observations to fit the state-space model (minimum ~20 time points)."
   - "Control series must not themselves be affected by the intervention."
-  - "Always use matplotlib.use('Agg') before plotting in the headless sandbox."
   - "Store abs_effect and rel_effect as plain Python floats, not numpy scalars."
 ---
 

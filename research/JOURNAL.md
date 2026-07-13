@@ -19,6 +19,41 @@ without run evidence are marked *(hypothesis)*.
 
 ---
 
+## 2026-07-13 — `[method]` `[repro]` `[harness]` Recipe/skill re-layering: bitwise reproducibility survives decision-level prompts
+
+The recipe library was refactored from verbatim code dictation to a three-layer split
+(`approach_docs/012`): methodology decisions stay in recipes, reusable code-hints move to
+skills (injected deterministically via `attached_skills`), environment facts live in the
+force-loaded `sandbox_environment` skill. All 14 recipes rewritten; dataset residue removed
+(Kaggle section, Titanic, `'<=50K'` examples); the DoWhy/Bayesian confounder rule now treats
+objective-named roles as authoritative and **excludes post-treatment variables** (the old
+all-numeric heuristic would have conditioned on mediators — e.g. QRData collections_email's
+`opened`/`agreement` — guaranteeing a biased ATE on that upcoming benchmark).
+
+**Verification (amlb_segment, local/gemma-4-12b):** run `523bd7eb` — 3/3 tasks, 0 escalations,
+scored **PASS 20/20** with `test_score = 0.9281148405938683`, bitwise-identical to the cloud
+(`11f012e1`) and pre-refactor local (`f4e64460`) reference runs, under `exact: true`.
+**The determinism never lived in the verbatim intents** — it lives in the invariants (fixed
+portfolio, seeded split) plus skill patterns; a 12B model realizes decision-level intents into
+metric-identical code.
+
+**The two failed attempts on the way were both harness, not model:**
+1. Run 1 (invalid): a stale backend predating the rewrite still held the old registry in
+   memory — my restart had silently died on the occupied port, and WSL clock skew made the
+   zombie's `lstart` look fresh. In-memory registry state is invisible; compiled task text is
+   the only trustworthy witness of what the workflow actually saw.
+2. Runs `835cf36c`/`590c6055`: the Extract task failed with `SyntaxError: keyword argument
+   repeated: num_shuffle_sets` — **not** gemma's doing. The executor's feature_importance
+   timeout sanitizer checked only for `subsample_size` before appending
+   `subsample_size=1000, num_shuffle_sets=1`, corrupting the skill's already-guarded call.
+   Gemma had followed the new pattern correctly in every attempt. Fixed in `executor.py`
+   (inject only when the call is completely unguarded).
+
+**Lesson for boundary attribution:** before charging a failure to the engine, rule out the
+harness — here, two consecutive "local-model failures" were a stale process and a sanitizer
+regex. Layered guidance also needs cross-auditing: deterministic code-mutating barriers
+(sanitizers) must be checked against the skill patterns they may collide with.
+
 ## 2026-07-10 — `[method]` First new benchmark immediately exposed a latent recipe defect (label-dtype)
 
 The very first run of `amlb_adult` (project `52406af9`, cloud) failed its Extract task with

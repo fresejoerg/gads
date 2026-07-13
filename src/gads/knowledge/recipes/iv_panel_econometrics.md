@@ -1,6 +1,6 @@
 ---
 id: causal_effect.iv_panel.linearmodels
-version: 1.0.0
+version: 1.1.0
 schema_version: 1
 author: gads-core
 
@@ -25,6 +25,7 @@ dag:
   - id: specify_instrument_or_panel
     intent: "Determine the estimation strategy from the objective: (A) Instrumental Variables — identify the instrument(s) Z that affect treatment T but have no direct path to outcome Y; or (B) Panel/DiD — identify entity and time columns. Print the chosen strategy and variable mapping."
     worker_tier: T1
+    attached_skills: [sandbox_environment]
     produces: [strategy, treatment_col, outcome_col]
     postconditions:
       - "strategy in ['iv', 'panel', 'did']"
@@ -33,6 +34,7 @@ dag:
     intent: "For IV: run the first-stage OLS regression (T ~ Z + controls) and report the F-statistic. Flag weak instruments if F < 10. For panel/DiD: verify panel balance and print a pre-trend summary."
     depends_on: [specify_instrument_or_panel]
     worker_tier: T2
+    attached_skills: [sandbox_environment]
     produces: [first_stage_f]
     postconditions:
       - "isinstance(first_stage_f, (int, float))"
@@ -42,6 +44,7 @@ dag:
     intent: "Estimate the causal effect. IV: use linearmodels.iv.model.IV2SLS. Panel/FE: use linearmodels.panel.model.PanelOLS with entity_effects=True. DiD: use a two-way FE regression or statsmodels OLS with interaction term. Store the numeric effect estimate in a variable named exactly `effect_estimate`."
     depends_on: [check_instrument_strength]
     worker_tier: T2
+    attached_skills: [sandbox_environment]
     produces: [model_result, effect_estimate]
     postconditions:
       - "model_result is not None"
@@ -59,7 +62,6 @@ invariants:
   - "Always report first-stage F-statistic before interpreting IV results. Do not proceed if F < 10."
   - "Cluster standard errors at the entity level for panel data."
   - "For DiD, verify parallel pre-trends before interpreting the DiD coefficient."
-  - "Never use pickle — use joblib for any serialization."
 ---
 
 # Instrumental Variables & Panel Econometrics

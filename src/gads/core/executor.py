@@ -393,8 +393,11 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
 
     # AutoGluon feature_importance timeout guard: permutation importance over the full
     # test set (10K+ rows, 5 shuffle sets) easily exceeds the 600s sandbox limit.
-    # Force subsample_size=1000, num_shuffle_sets=1 if not already specified.
-    if 'feature_importance(' in code and 'subsample_size' not in code:
+    # Force subsample_size=1000, num_shuffle_sets=1 only when the call is completely
+    # unguarded. A num_shuffle_sets kwarg means the author already addressed the cost
+    # (the skill pattern pre-subsamples into fi_df) — appending here would duplicate
+    # the kwarg and turn valid code into a SyntaxError.
+    if 'feature_importance(' in code and 'subsample_size' not in code and 'num_shuffle_sets' not in code:
         code = re.sub(
             r'\.feature_importance\(([^)]*?)\)',
             lambda m: '.feature_importance(' + m.group(1).rstrip(', ') +

@@ -1,6 +1,6 @@
 ---
 id: nlp_classification.text.embedding_ensemble
-version: 1.0.0
+version: 1.1.0
 schema_version: 1
 author: gads-core
 
@@ -24,157 +24,140 @@ invariants:
   - "The target column must be excluded from all feature matrices (X)."
   - "Random seeds must be fixed (random_state=42) for reproducibility."
   - "Cross-validation must be used; never evaluate on the training split directly."
-  - "A logistic regression baseline must be established before any ensemble method."
+  - "A simple baseline (TF-IDF + logistic regression) must be established and reported BEFORE any ensemble method — report both, even if the ensemble does not win."
   - "All evaluation metrics must include both macro and weighted averages."
+  - "Class imbalance is handled with class_weight='balanced' — never resampling libraries."
 
 # ——— EXECUTION DAG ———
 dag:
   - id: data_inspection
-    intent: "Load the dataset, inspect dtypes and shape, identify the primary text column and label column, report class distribution and check for class imbalance."
+    intent: "Load the dataset, inspect dtypes and shape, identify the primary text column and label column, report the class distribution and flag class imbalance."
     worker_tier: T3
     produces: [df, text_col, label_col, class_counts]
     postconditions:
-      - "output_type == 'dataframe'"
       - "df.shape[0] > 0"
     attached_skills: []
 
   - id: text_feature_engineering
-    intent: "Compute character-level and word-level features from the text column: character count, word count, sentence count, average word length, punctuation density, uppercase ratio, and unique word ratio. Append as new columns to df."
+    intent: "Compute stylometric features from the text column: character count, word count, sentence count, average word length, punctuation density, uppercase ratio, and unique-word ratio. Append as new columns to df."
     worker_tier: T3
     depends_on: [data_inspection]
     produces: [df]
     postconditions:
-      - "output_type == 'dataframe'"
       - "'word_count' in df.columns"
       - "'char_count' in df.columns"
 
   - id: text_cleaning
-    intent: "Lowercase the text column, remove HTML tags and URLs, strip excessive whitespace, and handle null/empty texts by dropping or replacing with a placeholder. Produce a 'clean_text' column."
+    intent: "Lowercase the text column, remove HTML tags and URLs, strip excessive whitespace, and handle null/empty texts (drop or placeholder). Produce a 'clean_text' column with no nulls."
     worker_tier: T3
     depends_on: [text_feature_engineering]
     produces: [df]
     postconditions:
-      - "output_type == 'dataframe'"
       - "'clean_text' in df.columns"
       - "df['clean_text'].isna().sum() == 0"
 
   - id: stratified_split
-    intent: "Perform a stratified train/test split (80/20) on the processed dataset to preserve class ratios. Verify that the label distribution in train and test is within 5% of the overall distribution."
+    intent: "Perform a stratified 80/20 train/test split (random_state=42) preserving class ratios. Verify the label distribution in train and test is within 5% of the overall distribution."
     worker_tier: T3
     depends_on: [text_cleaning]
     produces: [df_train, df_test]
     postconditions:
-      - "output_type == 'dataframe'"
       - "abs(df_train[label_col].value_counts(normalize=True) - df_test[label_col].value_counts(normalize=True)).max() < 0.05"
 
   - id: baseline_tfidf
-    intent: "Build a TF-IDF baseline: fit TfidfVectorizer(max_features=50000, ngram_range=(1,2)) on df_train['clean_text'], transform both splits. Train a LogisticRegression classifier with 5-fold cross-validation on the training set. Report macro-AUC, macro-F1, and weighted-F1. Save CV scores."
+    intent: "Build the auditable baseline: fit TfidfVectorizer(max_features=50000, ngram_range=(1,2)) on df_train['clean_text'] only (never on test), transform both splits, and train a LogisticRegression (class_weight='balanced') with 5-fold cross-validation on the training set. Report macro-AUC, macro-F1, and weighted-F1; save the CV scores."
     worker_tier: T2
     depends_on: [stratified_split]
     produces: [tfidf_vec, X_train_tfidf, X_test_tfidf, baseline_cv_scores, baseline_model]
+    attached_skills: [supervised_modeling]
     postconditions:
-      - "output_type == 'model'"
-      - "baseline_cv_scores.mean() > 0.5"
-    attached_skills: []
+      - "baseline_cv_scores is not None"
 
   - id: embedding_generation
-    intent: "Generate sentence embeddings using a pretrained model. Prefer 'all-MiniLM-L6-v2' from sentence-transformers (fast, 384-dim). If sentence-transformers is unavailable, fall back to TruncatedSVD(n_components=100) on the TF-IDF matrix. Encode df_train['clean_text'] and df_test['clean_text'] into dense matrices."
+    intent: "Generate dense sentence embeddings for clean_text in both splits with the locally cached sentence-transformer (pattern in the attached skill). If sentence-transformers is unavailable, fall back to TruncatedSVD(n_components=100) on the TF-IDF matrix."
     worker_tier: T2
     depends_on: [stratified_split]
     produces: [X_train_emb, X_test_emb]
     postconditions:
-      - "output_type == 'ndarray'"
       - "X_train_emb.shape[0] == len(df_train)"
-      - "X_train_emb.shape[1] >= 50"
     attached_skills: [local_text_embedding]
 
   - id: feature_fusion
-    intent: "Concatenate the embedding features with the hand-crafted text features (word_count, char_count, sentence_count, etc.) into a single feature matrix X_train_combined and X_test_combined using np.hstack or scipy.sparse.hstack as appropriate."
+    intent: "Concatenate the embeddings with the stylometric features into X_train_combined / X_test_combined (np.hstack or scipy.sparse.hstack as appropriate), and bind y_train / y_test."
     worker_tier: T3
     depends_on: [baseline_tfidf, embedding_generation]
     produces: [X_train_combined, X_test_combined, y_train, y_test]
     postconditions:
-      - "output_type == 'ndarray'"
       - "X_train_combined.shape[0] == len(df_train)"
 
   - id: ensemble_classifier
-    intent: "Train an ensemble on the combined features: (1) LightGBM or XGBoost classifier with early stopping if a validation split is available; fall back to RandomForestClassifier if neither is installed. Use 5-fold StratifiedKFold cross-validation. Report macro-AUC, macro-F1, weighted-F1, and per-class F1. Compare these metrics against the TF-IDF baseline."
+    intent: "Train a gradient-boosted ensemble (LightGBM or XGBoost; RandomForest fallback) on the combined features with 5-fold StratifiedKFold cross-validation. Report macro-AUC, macro-F1, weighted-F1, and per-class F1, and compare each against the TF-IDF baseline — report the comparison honestly whichever way it goes."
     worker_tier: T2
     depends_on: [feature_fusion]
     produces: [ensemble_model, ensemble_cv_scores, y_pred, y_prob]
+    attached_skills: [supervised_modeling]
     postconditions:
-      - "output_type == 'model'"
-      - "ensemble_cv_scores.mean() >= baseline_cv_scores.mean()"
-    attached_skills: []
+      - "ensemble_cv_scores is not None"
 
   - id: evaluation_plots
-    intent: "Generate and save: (1) a normalized confusion matrix heatmap (Figure 1). (2) ROC curves with AUC per class using OvR strategy, as a single figure (Figure 2). (3) A bar chart of per-class F1 scores comparing baseline vs ensemble (Figure 3). Use matplotlib; save each as a Plotly JSON artifact where possible."
+    intent: "Generate and save: (1) a normalized confusion-matrix heatmap (Figure 1); (2) per-class ROC curves with AUC, one-vs-rest (Figure 2); (3) a bar chart of per-class F1 comparing baseline vs ensemble (Figure 3). Prefer Plotly JSON artifacts."
     worker_tier: T2
     depends_on: [ensemble_classifier]
     attached_skills: [visualization_best_practices]
     postconditions:
-      - "output_type == 'artifact'"
+      - "y_pred is not None"
 
   - id: feature_importance
-    intent: "If the ensemble model supports feature importances (LightGBM/XGBoost/RandomForest), extract the top-20 most important features. For TF-IDF features, show the top tokens; for embedding dimensions, note their index. For meta-features (word_count etc.), show their rank. Visualize as a horizontal bar chart (Figure 4)."
+    intent: "If the ensemble exposes feature importances, extract the top 20: name top TF-IDF tokens, note embedding-dimension indices, and rank the stylometric features. Visualize as a horizontal bar chart (Figure 4). Inspect the ranking for leakage — a metadata-like feature dominating is a red flag to report."
     worker_tier: T2
     depends_on: [ensemble_classifier, evaluation_plots]
     attached_skills: [visualization_best_practices]
     postconditions:
-      - "output_type == 'artifact'"
+      - "ensemble_model is not None"
     skippable_if: "not hasattr(ensemble_model, 'feature_importances_')"
 
   - id: error_analysis
-    intent: "Identify the 10 most confidently misclassified examples (highest predicted probability for the wrong class). For each, print the text excerpt (first 200 chars), true label, predicted label, and confidence. Emit these as a gads_emit_insight with artifact='error_analysis' and include a brief hypothesis about why the model struggled."
+    intent: "Identify the 10 most confidently misclassified examples (highest predicted probability on the wrong class). For each, print a 200-char excerpt, true label, predicted label, and confidence. Emit a gads_emit_insight with artifact='error_analysis' including a brief hypothesis about the systematic failure mode."
     worker_tier: T2
     depends_on: [ensemble_classifier]
     postconditions:
-      - "output_type == 'insight'"
+      - "y_pred is not None"
 
 ---
 # NLP Text Classification with Embedding Ensemble
 
-This recipe implements a robust NLP classification pipeline combining TF-IDF baselines with
-dense sentence embeddings, designed for tasks such as authorship attribution, fine-tuning
-technique classification, sentiment analysis, or topic classification on essay/document data.
+A general text-classification pipeline combining a TF-IDF baseline with dense sentence
+embeddings and stylometric features — applicable to sentiment, topic, authorship,
+intent, or any label-per-document task.
 
 ## Rationale
 
-Pure TF-IDF misses semantic similarity between paraphrases. Pure embeddings miss precise lexical
-signals (specific tokens, n-grams). The fusion approach captures both: (1) a TF-IDF baseline
-establishes the minimum bar and makes the feature engineering auditable; (2) sentence embeddings
-capture semantic similarity; (3) hand-crafted stylometric features (word count, punctuation
-density) capture writing-style signals that embeddings encode only weakly.
+Pure TF-IDF misses semantic similarity between paraphrases; pure embeddings miss precise
+lexical signals (specific tokens, n-grams); neither captures writing-style signals
+(length, punctuation density) that matter when the label reflects *how* rather than
+*what* was written. The fusion captures all three, and the mandatory baseline keeps the
+gain auditable: (1) TF-IDF + logistic regression sets the floor and exposes the lexical
+signal; (2) embeddings add semantics; (3) stylometric features add form. A
+gradient-boosted model on the fused matrix trains in seconds — cheap enough for honest
+cross-validation — and often rivals fine-tuned transformers when the signal is
+stylometric rather than deeply semantic.
 
-LightGBM on the fused feature matrix typically outperforms fine-tuned transformers on tasks
-where the signal is stylometric rather than semantic — and runs in seconds rather than minutes,
-enabling cross-validation.
-
-## Kaggle LLM Classification Context
-
-This recipe was designed for tasks like the Kaggle LLM Fine-Tuning Classification competition
-[https://www.kaggle.com/competitions/llm-classification-finetuning], where the task is to
-classify student essays by the fine-tuning technique (if any) applied to the generating model.
-Key signals in that task: sentence-level repetition patterns, unusual punctuation distributions,
-and embedding-space clustering by generation style. The error analysis step is particularly
-important — misclassified examples often reveal boundary conditions between fine-tuning regimes
-that are useful for model iteration.
+The error-analysis step is not optional garnish: confidently wrong examples are the
+fastest route to discovering label noise, leakage, or class-boundary ambiguity.
 
 ## Key Constraints
 
-- **Class imbalance**: If any class has < 5% of total samples, consider class-weighted loss or
-  SMOTE before the ensemble step.
-- **Embedding fallback**: The sentence-transformer model (~90MB) requires network access on first
-  use. In offline environments, TruncatedSVD on TF-IDF is an adequate substitute.
-- **Memory**: For datasets > 500k rows, use batched encoding in the embedding step
-  (`encode(texts, batch_size=64)`).
-- **Leakage**: Never fit TF-IDF or compute embedding statistics on the test split.
+- **Class imbalance**: use `class_weight='balanced'` in the classifiers. Resampling
+  libraries are not available in the sandbox.
+- **Embedding fallback**: if the cached sentence-transformer is unavailable,
+  TruncatedSVD on TF-IDF is an adequate substitute.
+- **Memory**: for very large corpora, encode in batches (`encode(texts, batch_size=64)`).
+- **Leakage**: never fit TF-IDF, embedding statistics, or any scaler on the test split.
 
 ## Evaluation Checklist
 
-- [ ] Baseline AUC established before ensemble
-- [ ] Cross-validation used (not train-set evaluation)
+- [ ] Baseline metrics established and reported before the ensemble
+- [ ] Cross-validation used (never train-set evaluation)
 - [ ] Confusion matrix shows per-class behavior, not just overall accuracy
 - [ ] Error analysis identifies systematic failure modes
-- [ ] Feature importance is inspected for leakage (e.g. if a metadata column accidentally
-      correlates with label)
+- [ ] Feature importances inspected for leakage

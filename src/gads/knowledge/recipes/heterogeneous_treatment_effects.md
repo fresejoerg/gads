@@ -1,6 +1,6 @@
 ---
 id: causal_effect.heterogeneous.cate
-version: 1.0.0
+version: 1.1.0
 schema_version: 1
 author: gads-core
 
@@ -23,8 +23,9 @@ requires:
 # ——— DAG TEMPLATE ———
 dag:
   - id: prepare_treatment_outcome_features
-    intent: "Split the dataset into: Y (outcome array), T (treatment array, binary or continuous), X (effect modifiers — variables that may change treatment effect magnitude), W (baseline controls that affect outcome but not effect heterogeneity). Print shapes."
+    intent: "Split the dataset into: Y (outcome array), T (treatment array, binary or continuous), X (effect modifiers — variables that may change treatment effect magnitude), W (baseline controls that affect outcome but not effect heterogeneity). Roles named in the objective are authoritative; exclude any post-treatment variables it identifies. Print shapes and a one-line justification per role."
     worker_tier: T2
+    attached_skills: [causal_ml_econml]
     produces: [Y, T, X, W]
     postconditions:
       - "len(Y) == len(T)"
@@ -34,6 +35,7 @@ dag:
     intent: "Fit propensity model (P(T|X,W)) and outcome model (E[Y|T,X,W]) using cross-fitting (cross_val_predict). Use sklearn HistGradientBoostingClassifier/Regressor or RandomForest. These are nuisance models only — do not interpret their coefficients."
     depends_on: [prepare_treatment_outcome_features]
     worker_tier: T2
+    attached_skills: [causal_ml_econml, supervised_modeling]
     produces: [propensity_model, outcome_model]
     postconditions:
       - "propensity_model is not None"
@@ -43,6 +45,7 @@ dag:
     intent: "Estimate Conditional Average Treatment Effects (CATE) using CausalForestDML from econml. Fit the model on (Y, T, X, W). Compute cate_estimates = cate_model.effect(X). Also compute the overall ATE. Store ATE in a variable named exactly `ate`."
     depends_on: [fit_nuisance_models]
     worker_tier: T2
+    attached_skills: [causal_ml_econml]
     produces: [cate_model, cate_estimates, ate]
     postconditions:
       - "cate_estimates is not None"
@@ -52,6 +55,7 @@ dag:
     intent: "Compute SHAP values on the CATE model to identify which features drive effect heterogeneity. Save a SHAP beeswarm or bar chart as Figure 1. Print the top 5 effect-driving features."
     depends_on: [estimate_cate]
     worker_tier: T2
+    attached_skills: [causal_ml_econml, visualization_best_practices]
     postconditions:
       - "isinstance(cate_estimates, object)"
 
@@ -59,6 +63,7 @@ dag:
     intent: "Rank units by their predicted CATE. Segment into high/medium/low effect groups (top/bottom terciles). Plot the CATE distribution as Figure 2. If causalml is available, also compute an uplift curve."
     depends_on: [validate_cate]
     worker_tier: T2
+    attached_skills: [causal_ml_econml, visualization_best_practices]
     postconditions:
       - "isinstance(cate_estimates, object)"
 

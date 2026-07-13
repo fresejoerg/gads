@@ -1,6 +1,6 @@
 ---
 id: ordinal_classification.tabular.regression_wrapper
-version: 1.1.0
+version: 1.2.0
 schema_version: 1
 author: gads-core
 
@@ -9,69 +9,82 @@ applies_when:
   task_type: [ordinal_classification, ordered_multiclass, likert_scale_prediction, rating_prediction]
   data_modality: [tabular, unstructured_text]
 
-# ——— METHODOLOGICAL RATIONALE ———
-rationale: >
-  Ordinal classification respects the inherent order between classes (e.g., 'Low' < 'Medium' < 'High'). 
-  By using a 'Regression-to-Classification' wrapper, we treat the categories as a continuous gradient. 
-  This ensures that being 'one class off' is penalized less than being 'completely off'. 
-  For text predictors, we vectorize the content and reduce dimensionality to capture semantic patterns 
-  while maintaining model efficiency.
-
-# ——— PREREQUISITES ———
+# ——— SCHEMA CONTRACT ———
 requires:
-  variables: [target_column, ordered_labels]
-  capabilities: [numerical_analysis, supervised_learning]
+  variables:
+    - name: target_column
+      kind: str
+    - name: ordered_labels
+      kind: list
+  capabilities: [sklearn, pandas, numpy]
 
 # ——— EXECUTION DAG ———
 dag:
   - id: map_and_preprocess
-    intent: "Map the ordered text labels to integers (0, 1, 2...). Split into train/test sets."
-    worker_tier: "T3"
-    postcondition:
-      output_type: "dataframe"
-      required_columns: []
+    intent: "Map the ordered labels to consecutive integers (0, 1, 2, ...) preserving their order; store the mapping in `label_mapping`. Split 80/20 with random_state=42, stratified by the target."
+    worker_tier: T3
+    produces: [label_mapping, df_train, df_test]
+    postconditions:
+      - "label_mapping is not None"
 
   - id: vectorize_text_features
-    intent: "If the predictor is text, use the local sentence transformer to embed the text. Apply PCA (e.g., n_components=50) to reduce dimensionality while preserving signal. Concatenate with other features if present."
-    worker_tier: "T3"
+    intent: "If the predictors include text, embed it with the locally cached sentence transformer (pattern in the attached skill) and reduce dimensionality with PCA — choose n_components from the data (e.g. min(50, n_features, n_train // 10)) and print the retained variance. Concatenate with any numeric features."
+    worker_tier: T3
     depends_on: [map_and_preprocess]
     attached_skills: [local_text_embedding]
-    postcondition:
-      output_type: "dataframe"
-      required_columns: []
+    produces: [X_train, X_test]
+    postconditions:
+      - "X_train is not None"
+    skippable_if: "no text predictor columns exist"
 
   - id: train_ordinal_regressor
-    intent: "Apply StandardScaler to all features. Train a RandomForestRegressor on the processed data. Implement a wrapper that rounds and clips predictions to the [min, max] range of the mapped labels."
-    worker_tier: "T3"
+    intent: "Apply StandardScaler (fit on train only). Train a regressor on the integer-mapped labels (RandomForestRegressor is the robust default; note that a proportional-odds/ordinal-logit model is the classical alternative when interpretability matters). Wrap predictions: round, then clip to [min, max] of the mapped labels, and store the wrapper logic in `predict_ordinal`."
+    worker_tier: T3
     depends_on: [vectorize_text_features]
-    postcondition:
-      output_type: "list"
-      required_columns: []
+    attached_skills: [supervised_modeling]
+    produces: [ordinal_model, scaler, predict_ordinal]
+    postconditions:
+      - "ordinal_model is not None"
 
   - id: validate_distance_metrics
-    intent: "Evaluate the model using Mean Absolute Error (MAE) and Exact Accuracy. Generate a confusion matrix to visualize 'off-by-one' errors."
-    worker_tier: "T2"
+    intent: "Evaluate with BOTH Mean Absolute Error (primary — distance between classes matters) and exact accuracy (secondary). Generate a confusion matrix to visualize off-by-one vs catastrophic errors. Compare MAE against the trivial predict-the-median baseline."
+    worker_tier: T2
     depends_on: [train_ordinal_regressor]
     attached_skills: [visualization_best_practices]
+    produces: [mae, exact_accuracy]
+    postconditions:
+      - "isinstance(mae, float)"
+    required_metrics: [mae, exact_accuracy]
 
   - id: persist_model_bundle
-    intent: "Use joblib to save a dictionary containing the model, scaler, PCA object (if used), and label mappings into 'ordinal_model_bundle.joblib'."
-    worker_tier: "T3"
+    intent: "Save a joblib bundle containing the model, scaler, PCA object (if used), and label_mapping as 'ordinal_model_bundle.joblib' — everything inference needs, nothing less."
+    worker_tier: T3
     depends_on: [validate_distance_metrics]
+    postconditions:
+      - "ordinal_model is not None"
 
+# ——— GLOBAL INVARIANTS ———
+invariants:
+  - "ORDER IS SIGNAL: never treat ordered categories as unordered classes — the loss must penalize distance, which is why the regression wrapper (or an ordinal-logit model) is used."
+  - "PRIMARY METRIC IS MAE on the integer-mapped labels; exact accuracy is secondary."
+  - "Predictions must be rounded AND clipped to the valid label range."
+  - "Scalers/PCA are fit on the training split only."
+  - "Persist the mapping, scaler, and any projection together with the model — they are part of the model."
+  - "Random seeds must be fixed (random_state=42)."
 ---
+
 # Ordinal Classification (Ordered Multi-Class)
 
-This recipe implements an ordinal classification workflow using a regression-based approach. This is ideal for Likert scales, star ratings, or any categorized data where the "distance" between categories matters.
-
-## Handling Text Predictors
-If your features are textual (e.g., predicting a rating based on a review), the workflow automatically:
-1.  **Embeds** the text using a local SentenceTransformer.
-2.  **Reduces** dimensionality via PCA to prevent overfitting and improve training speed.
-3.  **Standardizes** the compressed features before training the regressor.
+## Rationale
+Ordinal targets ('Low' < 'Medium' < 'High', star ratings, Likert scales) carry order
+information that plain classification discards: being one class off should cost less
+than being three off. The regression-to-classification wrapper treats the categories as
+a gradient — train a regressor on integer-mapped labels, then round and clip. The
+classical alternative is a proportional-odds (ordinal logistic) model, preferable when
+coefficient interpretability is required; the wrapper generalizes better to nonlinear
+feature effects.
 
 ## Key Logic: The Wrapper
-Instead of a standard classifier, we use a **Regressor** and post-process the output:
 ```python
 def predict_ordinal(model, X, min_val, max_val):
     preds = model.predict(X)
@@ -79,6 +92,8 @@ def predict_ordinal(model, X, min_val, max_val):
 ```
 
 ## Best Practices
-- **Evaluation**: Priority should be given to **Mean Absolute Error (MAE)**. An MAE of 0.5 means your model is, on average, only half a category away from the truth.
-- **Scaling**: Regressors are highly sensitive to feature scales. Always use the saved `StandardScaler` for inference.
-- **Persistence**: Always bundle the `mapping`, `scaler`, and `PCA` objects with the model file using `joblib`.
+- **Evaluation**: MAE first — an MAE of 0.5 means predictions are on average half a
+  category off. Always show the confusion matrix so off-by-one errors are visible.
+- **Text predictors**: embed locally, reduce dimensionality (derive the dimension from
+  the data, don't hardcode), standardize before the regressor.
+- **Persistence**: bundle mapping + scaler + projection + model in one joblib file.

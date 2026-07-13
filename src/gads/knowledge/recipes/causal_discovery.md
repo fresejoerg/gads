@@ -1,6 +1,6 @@
 ---
 id: causal_discovery.observational.constraint
-version: 1.0.0
+version: 1.1.0
 schema_version: 1
 author: gads-core
 
@@ -25,6 +25,7 @@ dag:
   - id: prepare_numeric_matrix
     intent: "Produce a clean numeric matrix from the dataset: drop non-numeric columns or encode categoricals, impute or drop missing values. Report the final variable list and matrix shape."
     worker_tier: T2
+    attached_skills: [sandbox_environment]
     produces: [data_matrix, var_names]
     postconditions:
       - "data_matrix is not None"
@@ -34,6 +35,7 @@ dag:
     intent: "Run the PC algorithm (causallearn.search.ConstraintBased.PC) with fisherz CI test and alpha=0.05. If latent confounders are suspected, use FCI instead. Store the resulting graph object in `discovered_graph`. Print the number of directed and undirected edges."
     depends_on: [prepare_numeric_matrix]
     worker_tier: T2
+    attached_skills: [causal_discovery]
     produces: [discovered_graph]
     postconditions:
       - "discovered_graph is not None"
@@ -42,6 +44,7 @@ dag:
     intent: "Render the discovered graph using networkx and matplotlib. Draw directed edges as arrows, undirected edges as plain lines, and bidirected edges (latent confounders) in red. Save as Figure 1."
     depends_on: [run_structure_learning]
     worker_tier: T2
+    attached_skills: [causal_discovery, visualization_best_practices]
     postconditions:
       - "discovered_graph is not None"
 

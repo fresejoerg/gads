@@ -1,6 +1,6 @@
 ---
 id: thematic_analysis.unstructured.text
-version: 1.1.0
+version: 1.2.0
 schema_version: 1
 author: gads-core
 
@@ -23,6 +23,7 @@ dag:
   - id: data_hygiene
     intent: "Clean and prepare the text corpus. Use efficient engines (DuckDB/Polars) if the dataset is large. Identify columns for text and metadata based on the user's objective. Remove nulls and normalize temporal/numerical fields."
     worker_tier: T3
+    attached_skills: [large_dataset_handling]
     postconditions:
       - "len(df) > 0"
 
@@ -52,6 +53,7 @@ dag:
     intent: "Synthesize all findings into a final research report. Interleave narrative insights with interactive visualizations to identify the primary drivers of trends in the data."
     depends_on: [metadata_correlation_analysis, temporal_trend_analysis]
     worker_tier: T1
+    attached_skills: [visualization_best_practices, tabular_visualization]
 
 # ——— GLOBAL INVARIANTS ———
 invariants:
