@@ -65,7 +65,9 @@ def main():
             if rung in RUNGS and mode in MODES and t:
                 grid[RUNGS.index(rung), MODES.index(mode)] = p / t
         fig, ax = plt.subplots(figsize=(7, 5))
-        im = ax.imshow(grid, cmap="RdYlGn", vmin=0, vmax=1, aspect="auto")
+        # Sequential single hue: pass rate is a magnitude, and red-green scales are
+        # unreadable for the most common color-vision deficiency.
+        im = ax.imshow(grid, cmap="Blues", vmin=0, vmax=1, aspect="auto")
         ax.set_xticks(range(len(MODES)), MODES)
         ax.set_yticks(range(len(RUNGS)), RUNGS)
         ax.invert_yaxis()
