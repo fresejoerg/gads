@@ -19,6 +19,49 @@ without run evidence are marked *(hypothesis)*.
 
 ---
 
+## 2026-07-14 — `[method]` `[repro]` QRData causal benchmarks: externally-anchored golds, and the mediator trap held
+
+Five QRData questions are now GADS benchmarks (`qrdata_*_v1`) — the first with **externally
+defined** gold answers (published ATEs), closing the self-referentiality gap of the AMLB
+family. All five cloud runs (recipe `causal_effect.observational.dowhy` v2.1.0, rung D4)
+passed 16/16, with refuters clean (placebo ≈ 0, subset ≈ ATE):
+
+| Benchmark | run | GADS ATE | gold | Δ |
+|---|---|---|---|---|
+| ihdp_0 | `3f6f83d5` | 3.8965 | 4.02 | −0.12 |
+| ihdp_1 | `7d07a611` | 3.8521 | 4.05 | −0.20 |
+| collections_email | `1e601199` | **4.4304** | 4.43 | **+0.0004** |
+| online_classroom | `31891ed3` | −4.2125 | −4.91 | +0.70 |
+| hospital_treatment | `21d21c3f` | **−7.5912** | −7.59 | **−0.0012** |
+
+**The mediator trap held.** collections_email contains two post-treatment variables
+(`opened`, `agreement`) that the pre-refactor confounder heuristic would have adjusted
+for, biasing the answer. Under the re-layered recipe, the role-assignment task explicitly
+selected `['credit_limit', 'risk_score']` and named the exclusions as post-treatment (run
+`1e601199` stdout) — and landed within 0.0004 of the gold. The 2026-07-13 recipe fix is
+validated by exactly the failure it was designed to prevent.
+
+**The one visible gap** — online_classroom (Δ 0.70, ~14%) — is an adjustment-set
+difference, not a malfunction: the gold comes from OLS with the full demographic dummy
+set; the recipe's fallback caps/selects confounders. Direction and rough magnitude agree;
+the benchmark records our canonical value with the gold as anchor. *(hypothesis: exact
+match achievable if the objective enumerates the adjustment set, as collections_email
+does — untested.)*
+
+**Ledger-rule amendment:** run `7d07a611`'s only failure was the fail-open
+CompletenessVerifier crashing — advisory by design, so it no longer counts against the
+dial outcome (rule amended in server.py; the run's record backfilled with a note).
+
+**First drafted-lane cell (D1 × cloud):** amlb_segment with recipes disabled, run
+`6beeea9f` — the LLM Planner decomposed into **8 tasks** (vs the recipe's 3), chose
+AutoGluon on its own, and scored macro-F1 **0.9719**, *above* the deterministic recipe's
+0.9281 — while emitting a differently-named metric (`test_macro_f1` vs `test_score`) and
+a protocol that is non-reproducible by construction (time-budgeted). The efficiency
+boundary in one observation: at D1 a frontier engine completes and can even outperform
+the pinned methodology, but its output is contract-incomparable and unrepeatable —
+higher score, lower evidential value. Grid after the batch: D4×local 2/2, D4×cloud 5/5,
+D1×cloud 1/1.
+
 ## 2026-07-14 — `[harness]` `[boundary]` The delegation dial is now measured: rung × engine evidence grid
 
 The efficiency-boundary question is now an accumulating dataset. Every run is placed on

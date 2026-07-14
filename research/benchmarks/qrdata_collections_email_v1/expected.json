@@ -1,0 +1,74 @@
+{
+  "benchmark_id": "qrdata_collections_email_v1",
+  "spec_file": "qrdata_collections_email.md",
+  "recipe_id": "causal_effect.observational.dowhy",
+  "external_source": "QRData (xxxiaol/QRData) \u2014 gold ATE as external anchor",
+  "reference_runs": {
+    "cloud": "1e601199-d6fa-4c90-8eff-4939023e09f0"
+  },
+  "metrics": {
+    "ate": {
+      "value": 4.430355676952217,
+      "exact": false,
+      "tol": 0.0886,
+      "note": "Canonical from cloud reference run. External anchor: QRData gold ATE = 4.43 (collections email dataset, QRData gold; opened/agreement are post-treatment traps the adjustment set must exclude). Tol provisional pending repeat-run verification \u2014 native node is seeded, so this should tighten to exact."
+    },
+    "placebo_new_effect": {
+      "value": 0.09638697624636279,
+      "exact": false,
+      "tol": 0.02,
+      "note": "Placebo refuter \u2014 should be ~0; value canonical from reference run (seeded)."
+    },
+    "subset_new_effect": {
+      "value": 4.387105465091708,
+      "exact": false,
+      "tol": 0.0877,
+      "note": "Subset refuter \u2014 should be ~ATE; value canonical from reference run (seeded)."
+    }
+  },
+  "artifacts": {
+    "required": [
+      "metrics.json",
+      "causal_effect_summary.png",
+      "final_dashboard.html",
+      "research_report.md",
+      "workflow_execution.py"
+    ],
+    "forbidden_stdout": [
+      "mock data",
+      "simulating data"
+    ]
+  },
+  "tasks": {
+    "expected_count": 3,
+    "produces": {
+      "Define": [
+        "treatment_col",
+        "outcome_col",
+        "confounder_cols"
+      ],
+      "Estimate": [
+        "ate",
+        "placebo_new_effect",
+        "subset_new_effect"
+      ],
+      "Visualize": [
+        "causal_effect_summary.png"
+      ]
+    }
+  },
+  "methodology": {
+    "required_patterns": [
+      "gads_causal_estimate_ate\\(",
+      "treatment_col",
+      "outcome_col",
+      "confounder_cols"
+    ],
+    "forbidden_patterns": [
+      "CausalModel\\(",
+      "import pickle",
+      "from imblearn",
+      "time_limit\\s*="
+    ]
+  }
+}

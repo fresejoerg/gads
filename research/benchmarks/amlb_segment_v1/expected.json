@@ -4,7 +4,8 @@
   "recipe_id": "tabular_automl.autogluon.deterministic",
   "external_source": "AMLB / OpenML data_id 40984 ('segment')",
   "reference_runs": {
-    "cloud": "11f012e1-0b7f-48ef-886d-189bf015c958"
+    "cloud": "11f012e1-0b7f-48ef-886d-189bf015c958",
+    "local": "f4e64460-1797-4417-b90a-07b2204d1e6e"
   },
   "metrics": {
     "naive_baseline": {
@@ -15,9 +16,9 @@
     },
     "test_score": {
       "value": 0.9281148405938683,
-      "exact": false,
-      "tol": 0.005,
-      "note": "macro-F1, deterministic portfolio (GBM+XGB+RF, num_bag_folds=0). Should reproduce bitwise \u2014 tighten to exact:true once a repeat run confirms."
+      "exact": true,
+      "tol": 0.0,
+      "note": "BITWISE-VERIFIED 2026-07-10: cloud and local runs identical under the deterministic portfolio."
     }
   },
   "artifacts": {

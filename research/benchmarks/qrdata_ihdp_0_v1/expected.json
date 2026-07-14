@@ -1,0 +1,74 @@
+{
+  "benchmark_id": "qrdata_ihdp_0_v1",
+  "spec_file": "qrdata_ihdp_0.md",
+  "recipe_id": "causal_effect.observational.dowhy",
+  "external_source": "QRData (xxxiaol/QRData) \u2014 gold ATE as external anchor",
+  "reference_runs": {
+    "cloud": "3f6f83d5-f7a1-48ac-b0b7-afff25801df2"
+  },
+  "metrics": {
+    "ate": {
+      "value": 3.8965142215032187,
+      "exact": false,
+      "tol": 0.0779,
+      "note": "Canonical from cloud reference run. External anchor: QRData gold ATE = 4.02 (IHDP replicate 0, QRData gold answer). Tol provisional pending repeat-run verification \u2014 native node is seeded, so this should tighten to exact."
+    },
+    "placebo_new_effect": {
+      "value": -0.0035779878697929533,
+      "exact": false,
+      "tol": 0.02,
+      "note": "Placebo refuter \u2014 should be ~0; value canonical from reference run (seeded)."
+    },
+    "subset_new_effect": {
+      "value": 3.9023975617605937,
+      "exact": false,
+      "tol": 0.078,
+      "note": "Subset refuter \u2014 should be ~ATE; value canonical from reference run (seeded)."
+    }
+  },
+  "artifacts": {
+    "required": [
+      "metrics.json",
+      "causal_effect_summary.png",
+      "final_dashboard.html",
+      "research_report.md",
+      "workflow_execution.py"
+    ],
+    "forbidden_stdout": [
+      "mock data",
+      "simulating data"
+    ]
+  },
+  "tasks": {
+    "expected_count": 3,
+    "produces": {
+      "Define": [
+        "treatment_col",
+        "outcome_col",
+        "confounder_cols"
+      ],
+      "Estimate": [
+        "ate",
+        "placebo_new_effect",
+        "subset_new_effect"
+      ],
+      "Visualize": [
+        "causal_effect_summary.png"
+      ]
+    }
+  },
+  "methodology": {
+    "required_patterns": [
+      "gads_causal_estimate_ate\\(",
+      "treatment_col",
+      "outcome_col",
+      "confounder_cols"
+    ],
+    "forbidden_patterns": [
+      "CausalModel\\(",
+      "import pickle",
+      "from imblearn",
+      "time_limit\\s*="
+    ]
+  }
+}

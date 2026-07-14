@@ -4,7 +4,8 @@
   "recipe_id": "tabular_automl.autogluon.deterministic",
   "external_source": "AMLB / OpenML data_id 1590 ('adult')",
   "reference_runs": {
-    "cloud": "75fba428-298b-487d-8ed5-82f40d143de2"
+    "cloud": "75fba428-298b-487d-8ed5-82f40d143de2",
+    "local": "32952d0c-1854-4893-a2bc-460023f7ee22"
   },
   "metrics": {
     "naive_baseline": {
@@ -15,9 +16,9 @@
     },
     "test_score": {
       "value": 0.931129925396338,
-      "exact": false,
-      "tol": 0.005,
-      "note": "ROC-AUC, deterministic portfolio (GBM+XGB+RF, num_bag_folds=0). Should reproduce bitwise \u2014 tighten to exact:true once a repeat run (local/hybrid) confirms; tolerance is a placeholder, not an explanation. External anchor: AMLB reports AutoGluon AUC ~0.93 on adult (10-fold CV vs our seeded 80/20 holdout)."
+      "exact": true,
+      "tol": 0.0,
+      "note": "BITWISE-VERIFIED 2026-07-10: cloud and local (gemma-4-12b) runs produced this identical value under the deterministic portfolio. ROC-AUC, deterministic portfolio (GBM+XGB+RF, num_bag_folds=0). Should reproduce bitwise \u2014 tighten to exact:true once a repeat run (local/hybrid) confirms; tolerance is a placeholder, not an explanation."
     }
   },
   "artifacts": {

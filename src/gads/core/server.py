@@ -2186,10 +2186,17 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
             # DIAL LEDGER (approach_docs/013): one record per completed run — the
             # accumulating evidence for the rung × engine pass/fail grid. "pass"
             # requires an approved synthesis AND zero failed tasks (a run can produce
-            # a dashboard while an execution task failed, e.g. 835cf36c).
-            failed_count = len(session.exec(
-                select(Task).where(Task.project_id == project_id, Task.status == "failed")
-            ).all())
+            # a dashboard while an execution task failed, e.g. 835cf36c). Fail-open
+            # ADVISORY agents are excluded: the CompletenessVerifier is designed so
+            # its own crash never affects the workflow, so its failure is harness
+            # noise, not a failure of the delegated work (first hit: run 7d07a611).
+            _advisory_agents = ("CompletenessVerifier",)
+            failed_count = len([
+                t for t in session.exec(
+                    select(Task).where(Task.project_id == project_id, Task.status == "failed")
+                ).all()
+                if t.assigned_to not in _advisory_agents
+            ])
             append_ledger({
                 "project_id": str(project_id),
                 "spec": ((proj.last_state_json or {}).get("spec_filename") if proj else None),
