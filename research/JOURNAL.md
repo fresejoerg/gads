@@ -19,6 +19,40 @@ without run evidence are marked *(hypothesis)*.
 
 ---
 
+## 2026-07-14 — `[harness]` `[boundary]` The delegation dial is now measured: rung × engine evidence grid
+
+The efficiency-boundary question is now an accumulating dataset. Every run is placed on
+the **delegation ladder** (approach_docs/013): D0 full delegation → D1 framed (spec
+hints) → D3 directed (compiled plan + invariants) → D4 patterned (+ curated skills) →
+D5 mechanized (native step functions). Project rung = **minimum over task rungs**
+(the weakest link gets the most freedom). D2 "advised" is reserved but operationally
+unreachable — a Router-matched recipe compiles exactly like a pinned one, so selection
+provenance (`pinned|routed|drafted`) is recorded as a separate field.
+
+Instrumentation (`core/dial.py`): rung computed at plan construction, logged and stored
+on the project; at run end a record lands in **`research/dial_ledger.jsonl`** (rung,
+task rungs, selection, routing_mode, outcome — pass requires approved synthesis AND
+zero failed tasks). `scripts/dial_rung.py` determines any spec's rung statically;
+`scripts/dial_heatmap.py` renders the rung × engine grid. Current spec library: all
+pinned specs are D4 projects (the causal spec's estimate node is individually D5);
+unpinned test specs are D0/D1.
+
+Verified with runs `594fa3cb` and `42d3b901` (amlb_segment, local): both PASS, ledger
+records correct, and both reproduced `test_score = 0.9281148405938683` — the third and
+fourth consecutive bitwise reproductions of that benchmark on the local engine. Grid
+after seeding: **D4 × local = 2/2**.
+
+Found and fixed along the way: kernel-state snapshots were **full-replacing**
+`project.last_state_json` after every completed task, clobbering project metadata —
+including the pre-existing `spec_filename` (the retroactive spec-matching hack in
+`list_projects` existed because of this). Snapshots now merge, preserving metadata keys.
+
+**Interpretation discipline:** cells are observational, not randomized — specs are not
+randomly assigned to rungs or engines. The grid accumulates evidence for D\*(E) (the
+lowest rung where engine E stays within tolerance); it does not estimate causal effects
+of rung on outcome. Known coarseness: skills on drafted-plan tasks do not lift the rung
+above D1 (methodology freedom dominates realization guidance in v1).
+
 ## 2026-07-13 — `[harness]` Semantic skill retrieval (embedding-based), gated to uncurated tasks
 
 Skills can now be found semantically, not just by keyword triggers: fastembed (ONNX,

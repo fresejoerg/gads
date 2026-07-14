@@ -35,6 +35,7 @@ from gads.core.registry import (
     get_pinned_model, resolve_stage_model, get_available_models, VALID_ROUTING_MODES
 )
 from gads.core.knowledge import KnowledgeRegistry
+from gads.core.dial import compiled_plan_dial, drafted_plan_dial, append_ledger
 from gads.core.reporting import create_master_reports
 from gads.core.notebook_exporter import export_python_script, export_notebook, copy_applied_recipe
 from gads.core.introspection import summarize_artifact
@@ -1070,6 +1071,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         redundant_plots = []
         task_ids = []
         workflow_succeeded = False
+        dial_info = None  # delegation-dial rung info (approach_docs/013), set per plan
 
         while workflow_attempt < MAX_WORKFLOW_ATTEMPTS:
             workflow_attempt += 1
@@ -1444,6 +1446,29 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 session.commit()
                 task_ids = [t.id for t in tasks_to_run]
 
+            # DIAL RUNG (approach_docs/013): place this run on the delegation ladder
+            # from the same inputs the plan was built from, and persist it on the
+            # project so it is inspectable while the run is live.
+            if knowledge_report and knowledge_report.recommended_dag_nodes:
+                _selection = "pinned" if spec_hints.get("recipe_id") == knowledge_report.recipe_id else "routed"
+                dial_info = compiled_plan_dial(knowledge_report.recommended_dag_nodes, _selection)
+                dial_info["recipe_id"] = knowledge_report.recipe_id
+            else:
+                dial_info = drafted_plan_dial(spec_hints)
+            print(
+                f"  [Dial] Project rung: {dial_info['rung']} "
+                f"(selection={dial_info['selection']}, tasks={dial_info['task_rungs'] or 'drafted'})",
+                flush=True
+            )
+            with Session(engine) as session:
+                proj = session.get(Project, project_id)
+                if proj:
+                    _state = dict(proj.last_state_json or {})
+                    _state["dial"] = dial_info
+                    proj.last_state_json = _state
+                    session.add(proj)
+                    session.commit()
+
             # 4. EXECUTION
             await _cleanup_stale_sessions(executor.sandbox, project_id)
             for task_id in task_ids:
@@ -1696,7 +1721,19 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
 
                             project = session.get(Project, project_id)
                             if project:
-                                project.last_state_json = executor.authoritative_state
+                                # Kernel snapshots share the JSON column with project
+                                # metadata (spec_filename/fast_mode/dial). Full
+                                # replacement erased those keys on the first completed
+                                # task — the retroactive spec_filename matching in
+                                # list_projects exists because of exactly this. Merge:
+                                # snapshot wins on kernel keys, metadata is preserved.
+                                _meta_keys = ("fast_mode", "disable_recipes", "spec_filename", "dial")
+                                _prev = project.last_state_json or {}
+                                _merged = dict(executor.authoritative_state or {})
+                                for _k in _meta_keys:
+                                    if _k in _prev and _k not in _merged:
+                                        _merged[_k] = _prev[_k]
+                                project.last_state_json = _merged
                                 session.add(project)
                                 session.commit()
 
@@ -2145,6 +2182,28 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
             hub = ExecutionHub(session)
             hub.create_outbox_event("WORKFLOW_FINAL_RESULT", {"project_id": str(project_id)})
             session.commit()
+
+            # DIAL LEDGER (approach_docs/013): one record per completed run — the
+            # accumulating evidence for the rung × engine pass/fail grid. "pass"
+            # requires an approved synthesis AND zero failed tasks (a run can produce
+            # a dashboard while an execution task failed, e.g. 835cf36c).
+            failed_count = len(session.exec(
+                select(Task).where(Task.project_id == project_id, Task.status == "failed")
+            ).all())
+            append_ledger({
+                "project_id": str(project_id),
+                "spec": ((proj.last_state_json or {}).get("spec_filename") if proj else None),
+                "recipe_id": (dial_info or {}).get("recipe_id"),
+                "rung": (dial_info or {}).get("rung"),
+                "task_rungs": (dial_info or {}).get("task_rungs"),
+                "selection": (dial_info or {}).get("selection"),
+                "routing_mode": get_routing_mode(),
+                "pinned_model": get_pinned_model(),
+                "outcome": "pass" if (workflow_succeeded and failed_count == 0) else "fail",
+                "workflow_succeeded": workflow_succeeded,
+                "failed_tasks": failed_count,
+                "workflow_attempts": workflow_attempt,
+            })
 
     except Exception as e:
         print(f"❌ FATAL ERROR: {traceback.format_exc()}")
