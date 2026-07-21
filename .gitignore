@@ -53,3 +53,18 @@ test_preference_model.pkl
 gads_data/
 litellm_config.yaml
 crash_debug.log
+.chainlit/
+
+# Local collaboration & agent scaffolding (multi-agent inbox workflow)
+GOD.md
+GEMINI.md
+agent_inbox.jsonl
+agents_collab.md
+agents_collab_NEXT.md
+
+# Ad-hoc dev scripts, scratch work, and dev notes (not part of the app)
+stress_test_*.py
+scratch/
+proposed_invariants.md
+PERFORMANCE_OPPORTUNITIES.md
+specs/test_*.md

@@ -1,1 +1,0 @@
-Investigate the best approach for ensuring that class imbalances are handled according to state of the art methods. Create a sprint ticket once a plan is agreed.
