@@ -25,6 +25,8 @@ def load(path: Path):
         if not line.strip():
             continue
         r = json.loads(line)
+        if r.get("excluded"):  # annotated as non-evidence (e.g. infrastructure failure)
+            continue
         rung, mode = r.get("rung"), r.get("routing_mode")
         if rung is None or mode is None:
             continue

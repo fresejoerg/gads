@@ -100,6 +100,7 @@ Tasks declare `postcondition_json` with `output_type`, `required_columns`, and o
 | `recipe_id` | str | Forwarded to Planner as a hint |
 | `sample_rows` | int | Hard sandbox budget constraint — caps the maximum number of rows processed in ML training/analysis tasks to prevent execution timeouts |
 | `save_model` | bool | If `true`, a deterministic post-execution hook saves the first fitted sklearn-style classifier found in the kernel (`hasattr(fit) + hasattr(predict) + hasattr(classes_)`) to `model.joblib` via joblib. Runs after all tasks complete successfully, independent of what the Planner generates. NOT forwarded to the Planner. |
+| `disable_recipes` | bool | If `true`, forces the drafted-plan lane: the spec-pin fast path and Router recipe matching are both skipped, so the plan is LLM-drafted (used by delegation-dial D0/D1 specs). Also settable per launch via the request body. |
 
 Path-traversal is blocked via `Path.is_relative_to` checks; recipes are validated against the registry. The endpoint is fully transactional — failure rolls back DB and rm's the workspace.
 

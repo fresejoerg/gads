@@ -38,6 +38,8 @@ def analyze(spec_path: Path, registry: KnowledgeRegistry) -> dict:
         info = drafted_plan_dial(fm)
         if recipe_id:
             info["warning"] = f"recipe_id '{recipe_id}' not found in registry"
+        elif fm.get("disable_recipes"):
+            info["note"] = "drafted lane forced (disable_recipes: true) — Router matching disabled at runtime"
         else:
             info["note"] = "no pinned recipe — Router may still match one at runtime (would lift to D3+)"
     info["spec"] = spec_path.name

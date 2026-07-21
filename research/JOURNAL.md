@@ -19,6 +19,54 @@ without run evidence are marked *(hypothesis)*.
 
 ---
 
+## 2026-07-15 — `[boundary]` `[repro]` `[method]` QRData suite on the local engine: 4/5, and where engine variance actually lives
+
+Full local-mode (gemma-4-12b) sweep of the five QRData causal benchmarks — the first
+qrdata × local cells. Grid after the batch: **D4×local 6/7 (86%), D4×cloud 5/5, D1×cloud 1/1.**
+
+| Benchmark | run | local ATE | cloud ref | agreement |
+|---|---|---|---|---|
+| ihdp_0 | `6e4591f6` | 3.896514 | 3.896514 | ~1e-15 (same top-10 set) |
+| ihdp_1 | `3fbfec1a` | 3.899352 | 3.852051 | 1.2% (different sets) |
+| collections_email | `fc101698` | 4.430356 | 4.430356 | ~1e-13 (same set; mediator trap held) |
+| online_classroom | `c7b0678e` | **FAIL 11/14** | -4.212521 | — |
+| hospital_treatment | `94f77f10` | -7.591172 | -7.591172 | **bitwise** (same set) |
+
+**Where engine variance enters is now precisely located.** The D5 native node contributed
+*zero* variance: given the same adjustment set, engines agree to at worst the last ulp
+(bitwise on hospital_treatment; sandbox counterfactual on ihdp_0: top-10 → 3.8965142215032174,
+all-25 → 3.9286717508727147). All observed variance lives in the D4 role-assignment task:
+on ihdp_1 the local engine passed all 25 covariates, skipping the "at most 10" cap it had
+correctly applied on ihdp_0 in the same session — within-engine, run-to-run variance in
+instruction-following, invisible to outcome metrics when tolerances absorb it.
+
+**The mediator trap held at the local tier** (`fc101698`): the 12B engine excluded
+`opened`/`agreement` as post-treatment and selected exactly `['credit_limit','risk_score']`,
+landing ~1e-13 from the cloud reference. The re-layered recipe's role contract works at
+both engine tiers.
+
+**The one failure is a clean boundary observation** (`c7b0678e`, online_classroom): the
+dataset has NaNs in 76/323 rows of exactly the demographic-dummy confounders; statsmodels
+raises `exog contains inf or nans` inside the native node. Cloud had preemptively cleaned
+(`replace([inf,-inf],nan).dropna(...)`); the local engine emitted byte-identical code across
+all three workflow attempts *with the error in its retry context*. Error → diagnosis →
+insert-a-cleaning-step is beyond the 12B realizer; one-shot realization of the happy path
+is not. Fix direction (deliberate, not applied): harden `gads_causal_estimate_ate` to drop
+NaN/inf rows over used columns internally — matches cloud behavior, leaves NaN-free
+canonicals unchanged. Applying it moves the step from D4-recoverable to D5-mechanized —
+the delegation dial turned one notch by evidence.
+
+**Scorer blind spots, confirmed twice:** (1) the failed run still passed the methodology
+regex tier 8/8 — "right code that never produced numbers" is indistinguishable from a
+working run; (2) the ihdp_1 adjustment-set divergence passes unnoticed inside the 2%
+tolerance. Both are exactly what the Phase-2 decision-matching scorer (BLADE) is for.
+
+**Ledger hygiene:** a first launch of ihdp_0 (`5808672b`) died to the sandbox
+workspace-mount regression (WSL UNC bind; /execute 500 PermissionError) — annotated
+`excluded: true` in the ledger (infrastructure, not engine evidence; `dial_heatmap.py`
+now skips excluded records). Also recurred today: GADS tables vanished from Postgres on
+stack restart (recreated via `init_db`).
+
 ## 2026-07-14 — `[method]` `[repro]` QRData causal benchmarks: externally-anchored golds, and the mediator trap held
 
 Five QRData questions are now GADS benchmarks (`qrdata_*_v1`) — the first with **externally
@@ -303,6 +351,71 @@ today, the benchmark's expected plan tomorrow.
 - Known gap: metric-contract failures burn a workflow attempt without reaching the Coder as
   retry feedback (board P1) — this conflates "engine can't do it" with "engine was never told",
   which pollutes boundary measurements.
+
+## 2026-07-16/20 — `[method]` The local delegation-dial column: a non-monotonic valley at D3
+
+The QRData causal suite (5 benchmarks) was swept across the delegation dial on the local engine
+(gemma-4-12b-qat, `routing_mode:local`), completing a 20-run column. Pass = approved synthesis
+AND zero failed tasks (note: this criterion does **not** audit methodology — see the D0 caveat
+below). Result by rung:
+
+| Rung | Realization channel | QRData causal pass |
+|---|---|---|
+| **D5** mechanized | native `gads_causal_estimate_ate` node | **4/5** (only `online_classroom` fails) |
+| **D4** curated skill | worked-example DoWhy skill | ~4/5 (`ihdp_0` flaky: `6e4591f6` pass, `5808672b` fail) |
+| **D3** directed (dowhy) | model writes DoWhy code, no skill | **0/5** |
+| **D1** framed drafted | LLM-drafted plan + spec hints | **1/5** (only `ihdp_1` `f1efdcfa`) |
+| **D0** full delegation | LLM-drafted plan, bare objective | **1/5** (only `ihdp_0` `2a5e7e1b`) |
+
+**The signature is non-monotonic in structure.** The *most*-structured free-code rung, D3-directed,
+is the single **worst** performer (0/5) — worse than the *less*-structured D0/D1 drafted lanes.
+The reason is specific and uniform: D3 fixes the methodology to the **DoWhy** four-step API, and
+gemma cannot write it — every D3 run burned all 3 attempts in ~5 min on hallucinated modules
+(`dowhy.ifm`, `dowhy.models`) and wrong signatures. This is an **API-knowledge wall, not a
+planning or reasoning failure**: the plan is compiled at D3, and the same engine interprets D4/D5
+results acceptably. **D\*(gemma-4-12b) = D4** for this task family — the lowest rung it clears is
+the one that hands it worked code patterns.
+
+**D0 "passes by doing less" — the pass criterion is methodology-blind.** `ihdp_0` D0 (`2a5e7e1b`)
+passes while its more-guided D1 (`1464af0b`) fails. The D0 plan emitted a bare ATE with no
+refuters; the ledger's pass gate (synthesis approved + zero failed tasks) never checks that the
+refutation checks the recipe mandates were actually run. A pass that gets there by omitting the
+hard part is the inverse of methodological appropriateness — the "external referent" problem from
+the 2026-07-07 entry, now visible from below. Consequence for 014: grade ATE fidelity and
+failure-class, never pass/fail alone.
+
+**`online_classroom` is a rung-invariant covariate, not signal.** It fails at D5/D4/D3/D1/D0 — a
+NaN data-cleaning defect independent of the dial. Effective ceiling for the suite is 4/5; treat
+its cell as N/A when reading the column.
+
+**Harness confound caught and fixed — Router token starvation.** Two `collections_email` D1 runs
+(`c49ade32`, then `9037eea4`) halted fatally with `[HALTED] Fatal system error`. Root cause was
+**not** the engine: `router.py` capped `max_tokens` at 1024, but gemma-4-12b-qat is a reasoning
+model whose `reasoning_content` counts against the completion budget — on a dense drafted-lane
+objective it burned the whole 1024 on CoT (`reasoning_tokens=1021`) and emitted an empty answer,
+`finish_reason='length'`. Raised the cap to 4096 (`router.py:~35`; fits reasoning + the ~200-token
+JSON while still failing fast on a true runaway). **Monotonically safe:** it cannot change any run
+whose reasoning already fit under 1024, so the two already-ledgered D1 passes stay valid. Relaunch
+`666701bd` cleared the halt and produced a genuine fail. This is the 014 threat-to-validity in the
+flesh: harness confounds masquerade as engine failures — grade the failure class before reading any
+cell.
+
+**Operational note — DB loss on stack restart.** The MyLocalStack restart between 07-17 and 07-20
+dropped the GADS tables (`project`/`task`/… vanish, ledger JSONL survives as a file), taking the
+first `online_classroom` D0 attempt (`f1f15912`, unledgered) with it. Recovered via `init_db()` +
+clean backend restart; re-ran as `036fbc68` (fail, genuine — real code errors: `'DataFrame' object
+has no attribute 'schema'`, unclosed brackets). Final D0 run `hospital_treatment` (`4114bb77`, fail,
+genuine syntax errors) closed the column.
+
+**Reading.** The dial has a **valley**: high at D5/D4 (structure supplies the API), collapses at
+D3 (niche API, no scaffold), recovers only marginally at D0/D1 (drafted lane occasionally passes
+by simplifying the task away). The valley's floor is an API-familiarity artifact, which is exactly
+the hypothesis agenda `approach_docs/014` isolates — same estimand, same golds, same D3 rung, but
+swapping DoWhy → statsmodels → sklearn (Phase A recipes/specs built, not yet run). External
+corroboration: decisionspine's `ai-analytics-harness` (2026-07-20 review) independently found
+(a) a small model converging with a flagship once the right structure is present, and (b) prose
+guidance that never improves accuracy while pattern-matchable *examples* do — both directly
+predict the 014 outcome (worked examples, not bare signatures, are the active ingredient of D4).
 
 ---
 

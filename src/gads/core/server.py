@@ -162,6 +162,9 @@ class ProjectSpecMetadata(BaseModel):
     filters: Optional[str] = None
     domain: Optional[str] = None
     save_model: bool = False
+    # Force the drafted-plan lane (no recipe pin, no Router match) — used by
+    # delegation-dial D0/D1 specs so the rung doesn't depend on a launch flag.
+    disable_recipes: bool = False
 
 @app.on_event("startup")
 async def startup_event():
@@ -2390,7 +2393,7 @@ async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundT
     # Transactional Execution
     with Session(engine) as session:
         project_name = meta.name or f"Project {datetime.now().strftime('%m-%d %H:%M')} (from spec)"
-        project = Project(name=project_name, objective=objective, last_state_json={"fast_mode": req.fast_mode, "disable_recipes": req.disable_recipes, "spec_filename": req.filename})
+        project = Project(name=project_name, objective=objective, last_state_json={"fast_mode": req.fast_mode, "disable_recipes": meta.disable_recipes or req.disable_recipes, "spec_filename": req.filename})
         session.add(project)
         session.flush() # Get ID without fully committing yet
         

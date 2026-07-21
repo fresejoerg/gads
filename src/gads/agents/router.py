@@ -31,8 +31,12 @@ class DataScienceRouter(BaseAgent[RouterInput, RouterOutput]):
         recipes_str = json.dumps(input_data.available_recipes, indent=2)
         formatted_prompt = base_prompt.format(recipes_json=recipes_str)
 
-        # Router output is compact JSON (~200 tokens) — cap to fail fast on repetition loops
-        kwargs.setdefault("max_tokens", 1024)
+        # Router output is compact JSON (~200 tokens), but reasoning local models
+        # (gemma emits reasoning_content that counts against the completion budget)
+        # need headroom before the answer. 1024 guillotined legitimate routing CoT on
+        # dense objectives → finish_reason='length' → fatal halt in the drafted lane.
+        # 4096 fits reasoning + JSON while still failing fast on a true runaway (8192).
+        kwargs.setdefault("max_tokens", 4096)
         # Use super().run to get streaming support
         res = await super().run(
             f"OBJECTIVE: {input_data.objective}",
