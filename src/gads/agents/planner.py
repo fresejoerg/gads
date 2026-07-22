@@ -75,7 +75,7 @@ class PlannerTask(BaseModel):
     """Simplified task model for the Planner to output."""
     description: str
     assigned_to: str = Field(
-        description="MUST be an EXACT verbatim model ID from the AVAILABLE_MODELS_HIERARCHY (e.g. 'gemini-3.1-flash-lite-preview'). DO NOT hallucinate model names."
+        description="MUST be an EXACT verbatim model ID from the AVAILABLE_MODELS_HIERARCHY (e.g. 'gemini-3.5-flash-lite'). DO NOT hallucinate model names."
     )
     postcondition: Dict[str, Any] = Field(
         description="Structural contract for success. MUST be a valid JSON object with key:value pairs. E.g., {'output_type': 'dataframe', 'required_columns': ['name']}"

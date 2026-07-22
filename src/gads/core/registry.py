@@ -92,15 +92,20 @@ def resolve_stage_model(stage: str, tier_default: str) -> str:
         return "local_model"
     return tier_default
 
-# Hardcoded rules for mapping model names to Tiers
-# Gemini/Local are always index 0 to ensure they are the primary choice.
-# gpt-5.6 suite (sol/terra/luna) is primary for OpenAI slots; 5.4/5.5 retained
-# as same-tier fallbacks until the 5.6 rollout (GA 2026-07-08) reaches this
-# account — intra-tier escalation absorbs the interim 404s, then self-heals.
+# Hardcoded rules for mapping model names to Tiers. Latest generation per provider,
+# placed by capability; Gemini/Local are kept at index 0 so they are the primary
+# (cheapest-first) choice. Currency per provider (2026-07-22):
+#   OpenAI    — GPT-5.6 generation only (sol/terra/luna); 5.4/5.5 retired.
+#   Anthropic — Claude 5 line (Fable 5, Sonnet 5) + Opus 4.8 (T1) + Haiku 4.5 (T3).
+#   Gemini    — 3.6-flash (T2), 3.5-flash-lite (T3); Pro is 3.1-pro-preview (latest Pro).
+#   Kimi      — k3 flagship (T1) + k2.7-code / k2.7-code-highspeed (k2.x/2.6 sunset).
+# The live hierarchy intersects this with LiteLLM's served models, so any newer ID
+# must also be added to the MyLocalStack gateway to become reachable; until then
+# intra-tier fallback covers interim 404s and the mapping self-heals.
 TIER_MAPPING = {
-    "T1": ["gemini-3.1-pro-preview", "claude-opus-4.8", "claude-fable-5", "gpt-5.6-sol", "gpt-5.5", "kimi-k2.6"],
-    "T2": ["gemini-3.5-flash", "claude-sonnet-4.6", "gpt-5.6-terra", "gpt-5.4", "kimi-k2.6"],
-    "T3": ["gemini-3.1-flash-lite-preview", "claude-haiku-4.5", "gpt-5.6-luna", "gpt-5.4-mini", "kimi-k2.6"],
+    "T1": ["gemini-3.1-pro-preview", "claude-opus-4.8", "claude-fable-5", "gpt-5.6-sol", "kimi-k3"],
+    "T2": ["gemini-3.6-flash", "claude-sonnet-5", "gpt-5.6-terra", "kimi-k2.7-code"],
+    "T3": ["gemini-3.5-flash-lite", "claude-haiku-4.5", "gpt-5.6-luna", "kimi-k2.7-code-highspeed"],
     "T4": ["local_model"]
 }
 

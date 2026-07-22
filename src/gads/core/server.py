@@ -828,7 +828,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 disable_recipes = p_state.last_state_json.get("disable_recipes", False)
 
         # 1. ROUTING (Resilient & Resourced)
-        router_fallback = ["local_model"] if get_local_only() else ["gemini-3.1-flash-lite-preview"]
+        router_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash-lite"]
         router_model = resolve_stage_model("Router", hierarchy.get("T3", {}).get("models", router_fallback)[0])
 
         intent = None
@@ -1083,7 +1083,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             if await is_cancelled(): return
 
             # 3. PLANNING (Resilient Decomposition)
-            planner_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash"]
+            planner_fallback = ["local_model"] if get_local_only() else ["gemini-3.6-flash"]
             planner_model = resolve_stage_model("Planner", hierarchy.get("T2", {}).get("models", planner_fallback)[0])
             # planner_files and spec_hints are pre-computed above (outside this retry loop)
 
@@ -1296,7 +1296,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     session.add(pc_task)
                     session.commit()
 
-            plan_critique_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash"]
+            plan_critique_fallback = ["local_model"] if get_local_only() else ["gemini-3.6-flash"]
             plan_critique_model = resolve_stage_model("PlanCritique", hierarchy.get("T2", {}).get("models", plan_critique_fallback)[0])
 
             while plan_critique is None:
@@ -1845,7 +1845,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
             # (2) bypassed/handover tasks never executed but don't fail the workflow
             # Only fires when execution succeeded and a replan is still possible.
             if not (failed_tasks or pending_tasks) and workflow_attempt < MAX_WORKFLOW_ATTEMPTS:
-                cv_model_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash"]
+                cv_model_fallback = ["local_model"] if get_local_only() else ["gemini-3.6-flash"]
                 cv_model = resolve_stage_model("CompletenessVerifier", hierarchy.get("T2", {}).get("models", cv_model_fallback)[0])
 
                 with Session(engine) as session:
@@ -1970,10 +1970,10 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                         pass
 
             # 5. SYNTHESIS & CRITIQUE LOOP
-            synthesizer_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash"]
+            synthesizer_fallback = ["local_model"] if get_local_only() else ["gemini-3.6-flash"]
             synthesizer_model = resolve_stage_model("Synthesizer", hierarchy.get("T2", {}).get("models", synthesizer_fallback)[0])
 
-            critique_fallback = ["local_model"] if get_local_only() else ["gemini-3.5-flash"]
+            critique_fallback = ["local_model"] if get_local_only() else ["gemini-3.6-flash"]
             critique_model = resolve_stage_model("Critique", hierarchy.get("T2", {}).get("models", hierarchy.get("T3", {}).get("models", critique_fallback))[0])
 
             while True:
