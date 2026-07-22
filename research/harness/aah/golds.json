@@ -1,0 +1,297 @@
+{
+  "t1_value_moments_june": {
+    "tier": "lookup",
+    "question": "How many habit completions (value moments) were logged in June 2026?",
+    "grader": "numeric",
+    "tolerance": 0.02,
+    "gold": 16041.0,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t1_signups_june": {
+    "tier": "lookup",
+    "question": "How many new users signed up in June 2026?",
+    "grader": "numeric",
+    "tolerance": 0.02,
+    "gold": 553.0,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t1_total_habits": {
+    "tier": "lookup",
+    "question": "How many habits have been created in total?",
+    "grader": "numeric",
+    "tolerance": 0.01,
+    "gold": 7467.0,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t1_spend_june": {
+    "tier": "lookup",
+    "question": "What was our total marketing spend in June 2026?",
+    "grader": "numeric",
+    "tolerance": 0.02,
+    "gold": 21013.2,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t1_ios_value_moments_june": {
+    "tier": "lookup",
+    "question": "How many value moments came from the iOS platform in June 2026?",
+    "grader": "numeric",
+    "tolerance": 0.02,
+    "gold": 5648.0,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t2_web_value_moments_june": {
+    "tier": "filtered",
+    "question": "How many value moments came from the web platform in June 2026?",
+    "grader": "numeric",
+    "tolerance": 0.02,
+    "gold": 4812.0,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t2_referral_signups_q2": {
+    "tier": "filtered",
+    "question": "How many users signed up through the referral channel in the second quarter of 2026 (April\u2013June)?",
+    "grader": "numeric",
+    "tolerance": 0.02,
+    "gold": 243.0,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t2_paid_search_spend_q2": {
+    "tier": "filtered",
+    "question": "How much did we spend on paid search in the second quarter of 2026 (April\u2013June)?",
+    "grader": "numeric",
+    "tolerance": 0.02,
+    "gold": 36875.98,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t2_americas_value_moments_june": {
+    "tier": "filtered",
+    "question": "How many value moments came from users in the Americas region in June 2026?",
+    "grader": "numeric",
+    "tolerance": 0.02,
+    "gold": 5386.0,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t2_active_annual_subs": {
+    "tier": "filtered",
+    "question": "How many currently-active subscriptions are on the annual plan?",
+    "grader": "numeric",
+    "tolerance": 0.02,
+    "gold": 134.0,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t3_mrr": {
+    "tier": "metric",
+    "question": "What is our current MRR (monthly recurring revenue)?",
+    "grader": "numeric",
+    "tolerance": 0.02,
+    "gold": 2685.08,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t3_arpu": {
+    "tier": "metric",
+    "question": "What is our ARPU (average monthly recurring revenue per paying user)?",
+    "grader": "numeric",
+    "tolerance": 0.03,
+    "gold": 7.24,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t3_active_users_last_week": {
+    "tier": "metric",
+    "question": "How many active users did we have last week?",
+    "grader": "numeric",
+    "tolerance": 0.02,
+    "gold": 886.0,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t3_power_users": {
+    "tier": "metric",
+    "question": "How many power users did we have in June 2026?",
+    "grader": "numeric",
+    "tolerance": 0.05,
+    "gold": 151.0,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t3_activation_rate_june": {
+    "tier": "metric",
+    "question": "What was the activation rate for users who signed up in June 2026?",
+    "grader": "numeric",
+    "tolerance": 0.03,
+    "gold": 0.5322,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t4_apac_value_moments_q2": {
+    "tier": "knowledge",
+    "question": "How many value moments came from the APAC region in the second quarter of 2026 (April\u2013June)?",
+    "grader": "numeric",
+    "tolerance": 0.04,
+    "gold": 3852.0,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t4_real_signups_june": {
+    "tier": "knowledge",
+    "question": "How many signups came from real acquisition channels in June 2026?",
+    "grader": "numeric",
+    "tolerance": 0.03,
+    "gold": 453.0,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t4_real_acquisition_spend_june": {
+    "tier": "knowledge",
+    "question": "How much did we spend on real acquisition channels in June 2026?",
+    "grader": "numeric",
+    "tolerance": 0.03,
+    "gold": 18267.17,
+    "gold_keywords": null,
+    "gold_diagnostic": null
+  },
+  "t4_retention_trend": {
+    "tier": "knowledge",
+    "question": "How has our retention been trending over the last couple of months?",
+    "grader": "keywords",
+    "tolerance": null,
+    "gold": null,
+    "gold_keywords": [
+      "days per user",
+      "days/user",
+      "days_per_user",
+      "frequency",
+      "how often"
+    ],
+    "gold_diagnostic": null
+  },
+  "t4_business_health": {
+    "tier": "knowledge",
+    "question": "Is the app healthy right now \u2014 how would you tell?",
+    "grader": "keywords",
+    "tolerance": null,
+    "gold": null,
+    "gold_keywords": [
+      "value moments",
+      "north star",
+      "weekly value"
+    ],
+    "gold_diagnostic": null
+  },
+  "t5_why_drop": {
+    "tier": "diagnostic",
+    "question": "Weekly value moments dropped last week. What caused it?",
+    "grader": "diagnostic",
+    "tolerance": null,
+    "gold": null,
+    "gold_keywords": null,
+    "gold_diagnostic": {
+      "driver": [
+        "days per user",
+        "days/user",
+        "days_per_user",
+        "frequency",
+        "how often"
+      ],
+      "cause": [
+        "reminder",
+        "notification"
+      ]
+    }
+  },
+  "t5_engagement_drop": {
+    "tier": "diagnostic",
+    "question": "Engagement fell last week. Which part of the business is responsible?",
+    "grader": "diagnostic",
+    "tolerance": null,
+    "gold": null,
+    "gold_keywords": null,
+    "gold_diagnostic": {
+      "driver": [
+        "days per user",
+        "days/user",
+        "days_per_user",
+        "frequency",
+        "retention",
+        "how often"
+      ],
+      "cause": [
+        "reminder",
+        "notification"
+      ]
+    }
+  },
+  "t5_not_breadth": {
+    "tier": "diagnostic",
+    "question": "Did our active user base shrink last week, or is something else going on with value moments?",
+    "grader": "diagnostic",
+    "tolerance": null,
+    "gold": null,
+    "gold_keywords": null,
+    "gold_diagnostic": {
+      "driver": [
+        "days per user",
+        "days/user",
+        "days_per_user",
+        "frequency",
+        "how often"
+      ],
+      "cause": [
+        "reminder",
+        "notification"
+      ]
+    }
+  },
+  "t5_masked_by_growth": {
+    "tier": "diagnostic",
+    "question": "Value moments came in soft last week even though we added users. What happened?",
+    "grader": "diagnostic",
+    "tolerance": null,
+    "gold": null,
+    "gold_keywords": null,
+    "gold_diagnostic": {
+      "driver": [
+        "days per user",
+        "days/user",
+        "days_per_user",
+        "frequency",
+        "how often"
+      ],
+      "cause": [
+        "reminder",
+        "notification"
+      ]
+    }
+  },
+  "t5_which_lever": {
+    "tier": "diagnostic",
+    "question": "Which part of the North Star weakened last week \u2014 breadth, frequency, or depth?",
+    "grader": "diagnostic",
+    "tolerance": null,
+    "gold": null,
+    "gold_keywords": null,
+    "gold_diagnostic": {
+      "driver": [
+        "frequency",
+        "days per user",
+        "days/user",
+        "days_per_user"
+      ],
+      "cause": [
+        "reminder",
+        "notification"
+      ]
+    }
+  }
+}

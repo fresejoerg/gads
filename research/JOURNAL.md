@@ -417,6 +417,49 @@ corroboration: decisionspine's `ai-analytics-harness` (2026-07-20 review) indepe
 guidance that never improves accuracy while pattern-matchable *examples* do — both directly
 predict the 014 outcome (worked examples, not bare signatures, are the active ingredient of D4).
 
+## 2026-07-22 — `[method]` The grounding axis: replicating aah inside GADS (slice validated)
+
+Translated decisionspine's `ai-analytics-harness` (aah) — a 25-question business-analytics
+benchmark over a deterministic warehouse — into GADS as the **grounding axis**, orthogonal to the
+delegation dial (approach_docs/015). aah varies *grounding of the inputs* (raw → star → semantic →
+examples → KB → tree) with the agent fixed; GADS varies *delegation of the method*. The 2-D grid
+crosses them.
+
+**Design correction mid-build.** First attempt put rungs 1–2 on the drafted lane (dial-D0) — but the
+12B couldn't even write the 25-question answer-harness there (it assumed `aah_questions.json` handed
+it pre-written SQL: `q_data.get('sql')` on a string → uniform failure). That's a *delegation-floor*
+confound, not a grounding effect. Fix (with Jörg): a **constant harness** — one recipe family
+`analytics.answer_suite.{raw,star,metrics}` with identical loop scaffolding (load questions →
+per-question try/except → always-write, exact-id keys), all pinned at D3, grounding the only
+variable. This is aah's actual design (fixed agent, grounding varies).
+
+**Result (gemma-4-12b-qat, local, one run/rung):**
+
+| rung | grounding | accuracy | metric tier |
+|---|---|---|---|
+| 1 | messy raw | **0%** | 0/5 |
+| 2 | + star | **8%** | 0/5 |
+| 3 | + governed metrics | **28%** | **5/5 (100%)** |
+
+**The shape replicates aah** (flagship 41→46→66): monotone rise, the **semantic layer is the single
+biggest step** (+20 pts, aah's 46→66 signature), and the **metric tier hits 100% only with governed
+definitions** — deterministically (MRR 2685.08, active-users-last-week 886, power-users 151,
+activation 0.53, all validated pre-run without an LLM). The *absolute* gap is the local-model story:
+gemma scores **0% on raw data** (vs 41% flagship / 22% mini) — it can't wrangle the messy schema at
+all, degenerating to "2500 records" (the raw user-table count) for most questions. Grounding matters
+*more* for a weak engine, but the raw floor is unusable.
+
+**Iteration trail (each ~5 min on local):** import ergonomics (`from aah_metrics import layer`) →
+point-in-time crash (a period on ARPU aborting the whole task) → per-question robustness → answer
+re-keying (q1..q25 vs benchmark ids) → mapping/punting. Each was a real recipe/module defect the
+live 12B surfaced; the module was made forgiving (auto-built layer, lenient periods) and the recipe
+directive (exact ids, never-punt, apply-period, mapping table). The metric-tier 100% is the robust
+signal; lookup/filtered/knowledge tiers vary run-to-run (single-seed; aah uses 5 reps/cell).
+
+Artifacts: `research/harness/aah/` (MIT provenance), `research/benchmarks/aah_v1/` (25 golds +
+results.jsonl + scorer `scripts/grade_aah.py`), recipe family + `aah_star_schema` skill, 3 rung
+specs, datasets exported to `$GADS_DATASETS_ROOT/aah/`. Rungs 4–6 and reps pending.
+
 ---
 
 *Add entries above this line. Keep the evidence discipline: UUID or it didn't happen.*
