@@ -153,6 +153,11 @@ class RecipeContent(BaseModel):
 class PromptUpdate(BaseModel):
     content: str
 
+class KnowledgeValidateRequest(BaseModel):
+    type: str          # recipe | skill | native
+    content: str
+    filename: Optional[str] = None
+
 class ProjectSpecMetadata(BaseModel):
     name: Optional[str] = None
     datasets: List[str] = Field(default_factory=list)
@@ -191,6 +196,15 @@ def save_recipe_raw(filename: str, req: RecipeContent):
         return {"status": "success"}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/knowledge/validate")
+def knowledge_validate(req: KnowledgeValidateRequest):
+    """Dry-run deep validation of a knowledge item (recipe|skill|native) without
+    writing it — powers inline errors/warnings in the Knowledge Studio
+    (approach_docs/017 §3). Never mutates state."""
+    from gads.core.knowledge_validation import validate
+    result = validate(req.type, req.content, registry=registry, filename=req.filename)
+    return {"valid": not result["errors"], **result}
 
 @app.get("/prompts")
 def list_prompts():
