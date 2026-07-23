@@ -55,12 +55,26 @@ class Skill(BaseModel):
     content: str = ""
 
 class KnowledgeRegistry:
-    def __init__(self, recipes_dir: str):
+    TYPES = ("recipes", "skills", "native")
+
+    def __init__(self, recipes_dir: str, overlay_root: str = "gads_data/knowledge"):
+        # Shipped baseline (version-controlled IP, read-only in the studio).
         self.recipes_dir = recipes_dir
-        self.skills_dir = os.path.join(os.path.dirname(recipes_dir), "skills")
+        shipped_root = os.path.dirname(recipes_dir)
+        self.skills_dir = os.path.join(shipped_root, "skills")
+        self.native_dir = os.path.join(shipped_root, "native")
+        self._shipped = {"recipes": self.recipes_dir, "skills": self.skills_dir, "native": self.native_dir}
+        # Writable user overlay: shadows shipped by id/filename. gads_data/ is git-ignored,
+        # so user-authored/edited items never touch the shipped IP (approach_docs/017 §1).
+        self.overlay_root = overlay_root
+        self._overlay = {t: os.path.join(overlay_root, t) for t in self.TYPES}
+
         self.recipes: Dict[str, Recipe] = {}
         self.skills: Dict[str, Skill] = {}
         self._recipe_filepaths: Dict[str, str] = {}
+        # id -> "shipped" | "overlay" | "overridden", per type.
+        self._provenance: Dict[str, Dict[str, str]] = {t: {} for t in self.TYPES}
+
         # Lazy semantic index (embedding-based skill retrieval). Import is local so a
         # missing fastembed never breaks the registry — semantic lookups just return [].
         from gads.core.skill_semantics import SkillEmbeddingIndex
@@ -68,62 +82,108 @@ class KnowledgeRegistry:
         self.load_recipes()
         self.load_skills()
 
-    def load_recipes(self):
-        # ... rest of load_recipes logic ...
-        if not os.path.exists(self.recipes_dir):
-            print(f"  [Registry] Warning: Recipes directory not found: {self.recipes_dir}")
-            return
+    # ---- overlay-aware path helpers -------------------------------------- #
+    def _dirs(self, item_type: str):
+        """(shipped_dir, overlay_dir) for a knowledge type."""
+        return self._shipped[item_type], self._overlay[item_type]
 
-        for filename in os.listdir(self.recipes_dir):
-            if filename.endswith(".md"):
-                path = os.path.join(self.recipes_dir, filename)
+    def _resolve_path(self, item_type: str, filename: str) -> Optional[str]:
+        """Path to a file by name, overlay shadowing shipped."""
+        shp, ov = self._dirs(item_type)
+        for base in (ov, shp):
+            p = os.path.join(base, filename)
+            if os.path.exists(p):
+                return p
+        return None
+
+    def _list_files(self, item_type: str, ext: str = ".md") -> List[str]:
+        shp, ov = self._dirs(item_type)
+        names = set()
+        for base in (shp, ov):
+            if os.path.isdir(base):
+                names.update(f for f in os.listdir(base) if f.endswith(ext))
+        return sorted(names)
+
+    def _write_overlay(self, item_type: str, filename: str, content: str) -> str:
+        _, ov = self._dirs(item_type)
+        os.makedirs(ov, exist_ok=True)
+        path = os.path.join(ov, filename)
+        with open(path, "w") as f:
+            f.write(content)
+        return path
+
+    def provenance(self, item_type: str, item_id: Optional[str] = None):
+        prov = self._provenance.get(item_type, {})
+        return prov.get(item_id) if item_id is not None else dict(prov)
+
+    def reset_to_shipped(self, item_type: str, filename: str):
+        """Delete the overlay copy of a file, reverting to the shipped version."""
+        _, ov = self._dirs(item_type)
+        path = os.path.join(ov, filename)
+        if not os.path.exists(path):
+            raise ValueError("No overlay copy to reset (item is shipped or overlay-only).")
+        os.remove(path)
+        if item_type == "recipes":
+            self.load_recipes()
+        elif item_type == "skills":
+            self.load_skills()
+
+    def load_recipes(self):
+        """Load shipped recipes, then overlay (overlay shadows a shipped id -> 'overridden')."""
+        self.recipes = {}
+        self._recipe_filepaths = {}
+        self._provenance["recipes"] = {}
+        shp, ov = self._dirs("recipes")
+        for base, prov in ((shp, "shipped"), (ov, "overlay")):
+            if not os.path.isdir(base):
+                continue
+            for filename in sorted(os.listdir(base)):
+                if not filename.endswith(".md"):
+                    continue
+                path = os.path.join(base, filename)
                 try:
                     with open(path, "r") as f:
                         content = f.read()
-
-                    # Extract YAML frontmatter (between --- and ---)
                     match = re.search(r"^---\s*\n(.*?)\n---\s*\n(.*)", content, re.DOTALL)
-                    if match:
-                        yaml_str = match.group(1)
-                        body_str = match.group(2)
-
-                        data = yaml.safe_load(yaml_str)
-                        # Extract Rationale from body; preserve any frontmatter
-                        # `rationale:` rather than overwriting it with an empty match.
-                        data["rationale"] = _extract_rationale(body_str, data.get("rationale", ""))
-
-                        recipe = Recipe(**data)
-                        self.recipes[recipe.id] = recipe
-                        self._recipe_filepaths[recipe.id] = path
-                        print(f"  [Registry] Loaded recipe: {recipe.id} (v{recipe.version})")
+                    if not match:
+                        continue
+                    data = yaml.safe_load(match.group(1))
+                    # Preserve a frontmatter `rationale:` rather than clobbering with an empty match.
+                    data["rationale"] = _extract_rationale(match.group(2), data.get("rationale", ""))
+                    recipe = Recipe(**data)
+                    was_shipped = recipe.id in self.recipes
+                    self.recipes[recipe.id] = recipe
+                    self._recipe_filepaths[recipe.id] = path
+                    self._provenance["recipes"][recipe.id] = "overridden" if (prov == "overlay" and was_shipped) else prov
+                    print(f"  [Registry] Loaded recipe: {recipe.id} (v{recipe.version}) [{self._provenance['recipes'][recipe.id]}]")
                 except Exception as e:
                     print(f"  [Registry] Error loading {filename}: {e}")
 
     def load_skills(self):
-        """Parses all .md files in the skills directory and extracts YAML frontmatter."""
-        if not os.path.exists(self.skills_dir):
-            print(f"  [Registry] Warning: Skills directory not found: {self.skills_dir}")
-            return
-
+        """Load shipped skills, then overlay (overlay shadows a shipped id -> 'overridden')."""
         self.skills = {}
-        for filename in os.listdir(self.skills_dir):
-            if filename.endswith(".md"):
-                path = os.path.join(self.skills_dir, filename)
+        self._provenance["skills"] = {}
+        shp, ov = self._dirs("skills")
+        for base, prov in ((shp, "shipped"), (ov, "overlay")):
+            if not os.path.isdir(base):
+                continue
+            for filename in sorted(os.listdir(base)):
+                if not filename.endswith(".md"):
+                    continue
+                path = os.path.join(base, filename)
                 try:
                     with open(path, "r") as f:
                         content = f.read()
-                    
                     match = re.search(r"^---\s*\n(.*?)\n---\s*\n(.*)", content, re.DOTALL)
-                    if match:
-                        yaml_str = match.group(1)
-                        body_str = match.group(2).strip()
-                        
-                        data = yaml.safe_load(yaml_str)
-                        data["content"] = body_str
-                        
-                        skill = Skill(**data)
-                        self.skills[skill.id] = skill
-                        print(f"  [Registry] Loaded skill: {skill.id}")
+                    if not match:
+                        continue
+                    data = yaml.safe_load(match.group(1))
+                    data["content"] = match.group(2).strip()
+                    skill = Skill(**data)
+                    was_shipped = skill.id in self.skills
+                    self.skills[skill.id] = skill
+                    self._provenance["skills"][skill.id] = "overridden" if (prov == "overlay" and was_shipped) else prov
+                    print(f"  [Registry] Loaded skill: {skill.id} [{self._provenance['skills'][skill.id]}]")
                 except Exception as e:
                     print(f"  [Registry] Error loading skill {filename}: {e}")
         # Keep the semantic index in sync with the skill collection (hot-edits included).
@@ -139,77 +199,64 @@ class KnowledgeRegistry:
         return list(self.recipes.keys())
 
     def list_recipe_files(self) -> List[str]:
-        """Returns sorted list of .md filenames in the recipes directory."""
-        if not os.path.exists(self.recipes_dir): return []
-        return sorted([f for f in os.listdir(self.recipes_dir) if f.endswith(".md")])
+        """Sorted union of shipped + overlay recipe filenames."""
+        return self._list_files("recipes")
 
     def get_raw_recipe(self, filename: str) -> str:
-        """Returns the raw content of a recipe file."""
-        path = os.path.join(self.recipes_dir, filename)
-        if not os.path.exists(path): raise ValueError("Recipe file not found")
+        """Raw content of a recipe file (overlay shadows shipped)."""
+        path = self._resolve_path("recipes", filename)
+        if not path:
+            raise ValueError("Recipe file not found")
         with open(path, "r") as f:
             return f.read()
 
     def save_raw_recipe(self, filename: str, content: str):
-        """Validates and saves a raw recipe file."""
-        # 1. Validation
-        match = re.search(r"^---\s*\n(.*?)\n---\s*\n(.*)", content, re.DOTALL)
-        if not match:
-            raise ValueError("Invalid format: Missing YAML frontmatter (--- ... ---)")
-        
-        try:
-            yaml_str = match.group(1)
-            body_str = match.group(2)
-            data = yaml.safe_load(yaml_str)
-
-            # Extract Rationale for validation (preserve frontmatter fallback)
-            data["rationale"] = _extract_rationale(body_str, data.get("rationale", ""))
-
-            # Validate with Pydantic
-            Recipe(**data)
-        except Exception as e:
-            raise ValueError(f"Validation failed: {str(e)}")
-
-        # 2. Save
-        if not filename.endswith(".md"): filename += ".md"
-        path = os.path.join(self.recipes_dir, filename)
-        with open(path, "w") as f:
-            f.write(content)
-        
-        # 3. Reload
+        """Deep-validate and save a recipe to the OVERLAY (never mutates shipped IP)."""
+        if not filename.endswith(".md"):
+            filename += ".md"
+        self._deep_validate("recipe", content, filename)
+        self._write_overlay("recipes", filename, content)
         self.load_recipes()
 
     def list_skill_files(self) -> List[str]:
-        """Returns sorted list of .md filenames in the skills directory."""
-        if not os.path.exists(self.skills_dir): return []
-        return sorted([f for f in os.listdir(self.skills_dir) if f.endswith(".md")])
+        """Sorted union of shipped + overlay skill filenames."""
+        return self._list_files("skills")
 
     def get_raw_skill(self, filename: str) -> str:
-        """Returns the raw content of a skill file."""
-        path = os.path.join(self.skills_dir, filename)
-        if not os.path.exists(path): raise ValueError("Skill file not found")
+        """Raw content of a skill file (overlay shadows shipped)."""
+        path = self._resolve_path("skills", filename)
+        if not path:
+            raise ValueError("Skill file not found")
         with open(path, "r") as f:
             return f.read()
 
     def save_raw_skill(self, filename: str, content: str):
-        """Validates and saves a raw skill file."""
-        match = re.search(r"^---\s*\n(.*?)\n---\s*\n(.*)", content, re.DOTALL)
-        if not match:
-            raise ValueError("Invalid format: Missing YAML frontmatter (--- ... ---)")
-        
-        try:
-            yaml_str = match.group(1)
-            data = yaml.safe_load(yaml_str)
-            Skill(**data)
-        except Exception as e:
-            raise ValueError(f"Validation failed: {str(e)}")
-
-        if not filename.endswith(".md"): filename += ".md"
-        path = os.path.join(self.skills_dir, filename)
-        with open(path, "w") as f:
-            f.write(content)
-        
+        """Deep-validate and save a skill to the OVERLAY (never mutates shipped IP)."""
+        if not filename.endswith(".md"):
+            filename += ".md"
+        self._deep_validate("skill", content, filename)
+        self._write_overlay("skills", filename, content)
         self.load_skills()
+
+    # ---- native nodes (read; overlay-write lands in a later increment) ----- #
+    def list_native_files(self) -> List[str]:
+        """Sorted union of shipped + overlay native module filenames (.py, excl. dunder)."""
+        return [f for f in self._list_files("native", ".py") if not f.startswith("__")]
+
+    def get_raw_native(self, filename: str) -> str:
+        path = self._resolve_path("native", filename)
+        if not path:
+            raise ValueError("Native module not found")
+        with open(path, "r") as f:
+            return f.read()
+
+    def _deep_validate(self, item_type: str, content: str, filename: str):
+        """Run the shared deep validator (approach_docs/017 §3); raise on errors so every
+        write path — studio, legacy editor, CI — is protected uniformly."""
+        from gads.core.knowledge_validation import validate
+        result = validate(item_type, content, registry=self, filename=filename)
+        if result["errors"]:
+            raise ValueError("; ".join(result["errors"]))
 
     @staticmethod
     def _trigger_hits(triggers: List[str], desc_lower: str) -> int:
