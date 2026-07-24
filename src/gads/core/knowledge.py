@@ -224,6 +224,37 @@ class KnowledgeRegistry:
                 out.append({"type": "native", "id": fn, "filename": fn, "provenance": prov})
         return sorted(out, key=lambda i: (i["type"], i["id"]))
 
+    # ---- id/path resolution (studio insight endpoints) -------------------- #
+    _TYPE_ALIASES = {"recipe": "recipes", "recipes": "recipes",
+                     "skill": "skills", "skills": "skills", "native": "native"}
+
+    def norm_type(self, item_type: str) -> Optional[str]:
+        """Normalize singular/plural item-type spellings to the canonical plural."""
+        return self._TYPE_ALIASES.get((item_type or "").lower())
+
+    def resolve_filename(self, item_type: str, item_id: str) -> Optional[str]:
+        """Map an item id (recipes/skills) or filename (native) to its filename."""
+        t = self.norm_type(item_type)
+        if t == "recipes":
+            p = self._recipe_filepaths.get(item_id)
+            if p:
+                return os.path.basename(p)
+            return item_id if (item_id or "").endswith(".md") and self._resolve_path("recipes", item_id) else None
+        if t == "skills":
+            p = self._skill_filepaths.get(item_id)
+            if p:
+                return os.path.basename(p)
+            return item_id if (item_id or "").endswith(".md") and self._resolve_path("skills", item_id) else None
+        if t == "native":
+            return item_id if item_id in self.list_native_files() else None
+        return None
+
+    def shipped_path(self, item_type: str, filename: str) -> str:
+        """Absolute-ish path to the SHIPPED (git-tracked) copy of a file, used for git
+        history/diff — the overlay is git-ignored so history only exists for shipped."""
+        t = self.norm_type(item_type) or item_type
+        return os.path.join(self._shipped[t], filename)
+
     def get_recipe(self, recipe_id: str) -> Optional[Recipe]:
         return self.recipes.get(recipe_id)
 

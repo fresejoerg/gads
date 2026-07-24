@@ -234,6 +234,59 @@ def get_native_raw(filename: str):
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
+# --- Knowledge Studio insight endpoints (read-only; approach_docs/017 §2) ------ #
+@app.get("/knowledge/graph")
+def knowledge_graph():
+    """recipe→skill (attached) + recipe→native (mechanized) dependency graph."""
+    from gads.core import knowledge_insights as ki
+    return ki.build_graph(registry)
+
+@app.get("/knowledge/coverage")
+def knowledge_coverage():
+    """task_type × dial-rung matrix over the recipe library, plus orphan analysis."""
+    from gads.core import knowledge_insights as ki
+    return ki.build_coverage(registry)
+
+@app.get("/knowledge/{item_type}/{item_id}/history")
+def knowledge_history(item_type: str, item_id: str, limit: int = 50):
+    """Git commit history for a shipped item's file (overlay is git-ignored)."""
+    from gads.core import knowledge_insights as ki
+    if registry.norm_type(item_type) is None:
+        raise HTTPException(status_code=400, detail="item_type must be recipe(s)|skill(s)|native")
+    try:
+        return ki.item_history(registry, item_type, item_id, limit=limit)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.get("/knowledge/{item_type}/{item_id}/diff")
+def knowledge_diff(item_type: str, item_id: str,
+                   from_ref: Optional[str] = None, to_ref: Optional[str] = None):
+    """Diff a shipped item across commits (from_ref/to_ref) or vs working tree."""
+    from gads.core import knowledge_insights as ki
+    if registry.norm_type(item_type) is None:
+        raise HTTPException(status_code=400, detail="item_type must be recipe(s)|skill(s)|native")
+    try:
+        return ki.item_diff(registry, item_type, item_id, from_ref=from_ref, to_ref=to_ref)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.get("/knowledge/{item_type}/{item_id}/impact")
+def knowledge_impact(item_type: str, item_id: str):
+    """What references this id — specs that pin a recipe, recipes that attach a skill
+    or mechanize a native module (rename/deprecate guard)."""
+    from gads.core import knowledge_insights as ki
+    if registry.norm_type(item_type) is None:
+        raise HTTPException(status_code=400, detail="item_type must be recipe(s)|skill(s)|native")
+    return ki.item_impact(registry, item_type, item_id)
+
+@app.get("/knowledge/{item_type}/{item_id}/evidence")
+def knowledge_evidence(item_type: str, item_id: str):
+    """Per-engine benchmark pass rate from the dial ledger (recipes only)."""
+    from gads.core import knowledge_insights as ki
+    if registry.norm_type(item_type) != "recipes":
+        raise HTTPException(status_code=400, detail="evidence is available for recipes only")
+    return ki.item_evidence(registry, item_id)
+
 @app.get("/prompts")
 def list_prompts():
     return prompt_registry.list_prompts()
