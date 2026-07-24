@@ -72,6 +72,7 @@ class KnowledgeRegistry:
         self.recipes: Dict[str, Recipe] = {}
         self.skills: Dict[str, Skill] = {}
         self._recipe_filepaths: Dict[str, str] = {}
+        self._skill_filepaths: Dict[str, str] = {}
         # id -> "shipped" | "overlay" | "overridden", per type.
         self._provenance: Dict[str, Dict[str, str]] = {t: {} for t in self.TYPES}
 
@@ -162,6 +163,7 @@ class KnowledgeRegistry:
     def load_skills(self):
         """Load shipped skills, then overlay (overlay shadows a shipped id -> 'overridden')."""
         self.skills = {}
+        self._skill_filepaths = {}
         self._provenance["skills"] = {}
         shp, ov = self._dirs("skills")
         for base, prov in ((shp, "shipped"), (ov, "overlay")):
@@ -182,12 +184,45 @@ class KnowledgeRegistry:
                     skill = Skill(**data)
                     was_shipped = skill.id in self.skills
                     self.skills[skill.id] = skill
+                    self._skill_filepaths[skill.id] = path
                     self._provenance["skills"][skill.id] = "overridden" if (prov == "overlay" and was_shipped) else prov
                     print(f"  [Registry] Loaded skill: {skill.id} [{self._provenance['skills'][skill.id]}]")
                 except Exception as e:
                     print(f"  [Registry] Error loading skill {filename}: {e}")
         # Keep the semantic index in sync with the skill collection (hot-edits included).
         self.semantic_index.rebuild(list(self.skills.values()))
+
+    def list_items(self, item_type: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Unified library listing across types with metadata + provenance (studio)."""
+        out: List[Dict[str, Any]] = []
+        if item_type in (None, "recipe"):
+            for rid, rec in self.recipes.items():
+                aw = rec.applies_when or {}
+                out.append({
+                    "type": "recipe", "id": rid,
+                    "filename": os.path.basename(self._recipe_filepaths.get(rid, "")),
+                    "version": rec.version,
+                    "task_type": aw.get("task_type") or [],
+                    "data_modality": aw.get("data_modality") or [],
+                    "capabilities": (rec.requires or {}).get("capabilities", []) or [],
+                    "provenance": self._provenance["recipes"].get(rid),
+                })
+        if item_type in (None, "skill"):
+            for sid, sk in self.skills.items():
+                out.append({
+                    "type": "skill", "id": sid,
+                    "filename": os.path.basename(self._skill_filepaths.get(sid, "")),
+                    "description": sk.description, "triggers": sk.triggers,
+                    "provenance": self._provenance["skills"].get(sid),
+                })
+        if item_type in (None, "native"):
+            shp, ov = self._dirs("native")
+            for fn in self.list_native_files():
+                in_ov = os.path.exists(os.path.join(ov, fn))
+                in_shp = os.path.exists(os.path.join(shp, fn))
+                prov = "overridden" if (in_ov and in_shp) else ("overlay" if in_ov else "shipped")
+                out.append({"type": "native", "id": fn, "filename": fn, "provenance": prov})
+        return sorted(out, key=lambda i: (i["type"], i["id"]))
 
     def get_recipe(self, recipe_id: str) -> Optional[Recipe]:
         return self.recipes.get(recipe_id)

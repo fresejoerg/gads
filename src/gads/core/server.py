@@ -206,6 +206,34 @@ def knowledge_validate(req: KnowledgeValidateRequest):
     result = validate(req.type, req.content, registry=registry, filename=req.filename)
     return {"valid": not result["errors"], **result}
 
+@app.get("/knowledge/items")
+def knowledge_items(type: Optional[str] = None):
+    """Unified library listing (recipes + skills + native) with metadata + provenance
+    (shipped | overlay | overridden) — one call for the studio library view."""
+    return registry.list_items(type)
+
+@app.post("/knowledge/{item_type}/{filename}/reset")
+def knowledge_reset(item_type: str, filename: str):
+    """Revert an overridden item to its shipped version by deleting the overlay copy."""
+    if item_type not in ("recipes", "skills", "native"):
+        raise HTTPException(status_code=400, detail="item_type must be recipes|skills|native")
+    try:
+        registry.reset_to_shipped(item_type, filename)
+        return {"status": "reset", "provenance": "shipped"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+@app.get("/native", response_model=List[str])
+def list_native_files():
+    return registry.list_native_files()
+
+@app.get("/native/{filename}")
+def get_native_raw(filename: str):
+    try:
+        return {"content": registry.get_raw_native(filename)}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
 @app.get("/prompts")
 def list_prompts():
     return prompt_registry.list_prompts()
