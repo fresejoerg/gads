@@ -249,6 +249,33 @@ class KnowledgeRegistry:
             return item_id if item_id in self.list_native_files() else None
         return None
 
+    def native_provenance(self, filename: str) -> str:
+        shp, ov = self._dirs("native")
+        in_ov = os.path.exists(os.path.join(ov, filename))
+        in_shp = os.path.exists(os.path.join(shp, filename))
+        return "overridden" if (in_ov and in_shp) else ("overlay" if in_ov else "shipped")
+
+    def get_item_detail(self, item_type: str, item_id: str) -> Dict[str, Any]:
+        """Raw content + parsed frontmatter + provenance for one item (studio read view)."""
+        t = self.norm_type(item_type)
+        filename = self.resolve_filename(item_type, item_id)
+        if not t or not filename:
+            raise ValueError(f"Unknown {item_type} '{item_id}'.")
+        if t == "recipes":
+            raw = self.get_raw_recipe(filename)
+            parsed = self.recipes[item_id].model_dump() if item_id in self.recipes else None
+            prov = self.provenance("recipes", item_id)
+        elif t == "skills":
+            raw = self.get_raw_skill(filename)
+            parsed = self.skills[item_id].model_dump() if item_id in self.skills else None
+            prov = self.provenance("skills", item_id)
+        else:  # native
+            raw = self.get_raw_native(filename)
+            parsed = None
+            prov = self.native_provenance(filename)
+        return {"type": t, "id": item_id, "filename": filename,
+                "provenance": prov, "editable": t != "native", "raw": raw, "parsed": parsed}
+
     def shipped_path(self, item_type: str, filename: str) -> str:
         """Absolute-ish path to the SHIPPED (git-tracked) copy of a file, used for git
         history/diff — the overlay is git-ignored so history only exists for shipped."""

@@ -12,6 +12,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 import uuid
@@ -66,6 +67,15 @@ async def run_agent_workflow_wrapper(project_id: uuid.UUID, objective: str, inst
             ACTIVE_WORKFLOWS.remove(project_id)
 
 app = FastAPI(title="GADS Core API")
+
+# The Knowledge Studio SPA is served from its own origin (Vite dev server on :5173,
+# or a static bundle). Allow local origins so it can call the Knowledge API directly.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.middleware("http")
 async def catch_exceptions_middleware(request, call_next):
@@ -286,6 +296,16 @@ def knowledge_evidence(item_type: str, item_id: str):
     if registry.norm_type(item_type) != "recipes":
         raise HTTPException(status_code=400, detail="evidence is available for recipes only")
     return ki.item_evidence(registry, item_id)
+
+@app.get("/knowledge/{item_type}/{item_id}")
+def knowledge_item_detail(item_type: str, item_id: str):
+    """Raw content + parsed frontmatter + provenance for one item (studio read view)."""
+    if registry.norm_type(item_type) is None:
+        raise HTTPException(status_code=400, detail="item_type must be recipe(s)|skill(s)|native")
+    try:
+        return registry.get_item_detail(item_type, item_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 @app.get("/prompts")
 def list_prompts():
