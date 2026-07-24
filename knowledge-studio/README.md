@@ -21,6 +21,11 @@ to the backend, so the browser makes same-origin calls. Point the proxy elsewher
 Vite + React + TypeScript · **Monaco** editor · **React Flow** for the DAG diagram.
 `npm run build` emits a static bundle in `dist/`.
 
+Monaco is **bundled locally** (not loaded from a CDN) and **code-split** — it ships as a
+separate chunk that only loads when the Edit/Source tab opens, so the Library / Overview /
+Coverage views stay lean (~98 KB gzip) and the tool works fully air-gapped. See
+`src/monaco-setup.ts`.
+
 ## What's here (Phase 1)
 
 - **Library** — browse/filter/search all items by type; provenance badges (shipped /
@@ -37,8 +42,5 @@ Vite + React + TypeScript · **Monaco** editor · **React Flow** for the DAG dia
 
 ## Known follow-ups
 
-- **Monaco is loaded from a CDN** by `@monaco-editor/react`'s default loader. For a
-  strictly offline/air-gapped deployment, bundle `monaco-editor` locally (e.g.
-  `vite-plugin-monaco-editor`) — tracked for Phase 2.
 - Native-node editing (overlay write + AST/hazard guardrails + dynamic executor load).
 - Organize view: maturity field, git history/diff surface, recipe-pack export/import.

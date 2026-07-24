@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { api } from "../api";
 import type { ItemDetail as Detail, ParsedRecipe, ParsedSkill, Evidence, Impact } from "../types";
 import { DagDiagram } from "./DagDiagram";
-import { Editor } from "./Editor";
+
+// Monaco is heavy and only the Edit/Source tab needs it — load it on demand so the
+// Library / Overview / Coverage views stay lean.
+const Editor = lazy(() => import("./Editor").then((m) => ({ default: m.Editor })));
 
 type Sub = "overview" | "edit" | "evidence" | "impact";
 
@@ -48,16 +51,18 @@ export function ItemDetail({ type, id, onSaved }: { type: string; id: string; on
 
       {sub === "overview" && <Overview detail={detail} />}
       {sub === "edit" && (
-        <Editor
-          type={detail.type}
-          filename={detail.filename}
-          initial={detail.raw}
-          editable={detail.editable}
-          onSaved={() => {
-            api.detail(type, id).then(setDetail);
-            onSaved();
-          }}
-        />
+        <Suspense fallback={<div className="loading">Loading editor…</div>}>
+          <Editor
+            type={detail.type}
+            filename={detail.filename}
+            initial={detail.raw}
+            editable={detail.editable}
+            onSaved={() => {
+              api.detail(type, id).then(setDetail);
+              onSaved();
+            }}
+          />
+        </Suspense>
       )}
       {sub === "evidence" && isRecipe && <EvidencePanel id={id} />}
       {sub === "impact" && <ImpactPanel type={singular} id={id} />}

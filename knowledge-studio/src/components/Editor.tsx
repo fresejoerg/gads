@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import MonacoEditor from "@monaco-editor/react";
+import "../monaco-setup"; // pulls Monaco into THIS lazy chunk, not the initial bundle
 import { api } from "../api";
 import type { ValidationResult } from "../types";
 
