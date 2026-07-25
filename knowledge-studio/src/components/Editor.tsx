@@ -12,12 +12,14 @@ export function Editor({
   filename,
   initial,
   editable,
+  runtimePending,
   onSaved,
 }: {
   type: "recipes" | "skills" | "native";
   filename: string;
   initial: string;
   editable: boolean;
+  runtimePending?: boolean;
   onSaved: () => void;
 }) {
   const [content, setContent] = useState(initial);
@@ -42,12 +44,11 @@ export function Editor({
   }, [content, type, filename]);
 
   async function save() {
-    if (type === "native") return; // native write lands in a later increment
     setSaving(true);
     setSavedMsg(null);
     try {
       await api.save(type, filename, content);
-      setSavedMsg("Saved to overlay ✓");
+      setSavedMsg(runtimePending ? "Saved to overlay ✓ (not yet loaded by the executor)" : "Saved to overlay ✓");
       onSaved();
     } catch (e) {
       setSavedMsg(`Save failed: ${e}`);
@@ -60,10 +61,12 @@ export function Editor({
 
   return (
     <>
-      {!editable && (
+      {type === "native" && (
         <div className="readonly-note">
-          Native modules run Python inside the sandbox — editing them is not yet enabled in the Studio (a
-          later increment adds it with AST/hazard guardrails). Shown read-only.
+          ⚠ Native modules are <strong>Python injected into sandbox-executed code</strong>. Edits are
+          validated (syntax&nbsp;+ hazard scan) and saved to the git-ignored overlay — but the executor
+          does <strong>not yet</strong> load overlay native modules, so a running workflow still uses the
+          <strong> shipped</strong> version until the dynamic-load contract lands.
         </div>
       )}
       <div className="editor-bar">

@@ -273,8 +273,10 @@ class KnowledgeRegistry:
             raw = self.get_raw_native(filename)
             parsed = None
             prov = self.native_provenance(filename)
-        return {"type": t, "id": item_id, "filename": filename,
-                "provenance": prov, "editable": t != "native", "raw": raw, "parsed": parsed}
+        # All three types are editable-to-overlay now. Native carries a runtime caveat:
+        # the executor does not yet load overlay native modules (write-only increment).
+        return {"type": t, "id": item_id, "filename": filename, "provenance": prov,
+                "editable": True, "runtime_pending": t == "native", "raw": raw, "parsed": parsed}
 
     def shipped_path(self, item_type: str, filename: str) -> str:
         """Absolute-ish path to the SHIPPED (git-tracked) copy of a file, used for git
@@ -342,6 +344,16 @@ class KnowledgeRegistry:
             raise ValueError("Native module not found")
         with open(path, "r") as f:
             return f.read()
+
+    def save_raw_native(self, filename: str, content: str):
+        """Deep-validate (AST parse + sandbox-hazard scan) and save a native module to the
+        OVERLAY. NOTE: overlay native modules are NOT yet loaded by the executor — that
+        dynamic-load contract lands in a later increment; until then a running workflow
+        uses the SHIPPED module. The Studio surfaces this caveat to the editor."""
+        if not filename.endswith(".py"):
+            filename += ".py"
+        self._deep_validate("native", content, filename)
+        self._write_overlay("native", filename, content)
 
     def _deep_validate(self, item_type: str, content: str, filename: str):
         """Run the shared deep validator (approach_docs/017 §3); raise on errors so every

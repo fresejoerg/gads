@@ -244,6 +244,16 @@ def get_native_raw(filename: str):
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
+@app.post("/native/{filename}")
+def save_native_raw(filename: str, req: RecipeContent):
+    """Deep-validate (AST + hazard scan) and save a native module to the overlay. The
+    executor does not yet load overlay native modules — write-only for now (017 §4)."""
+    try:
+        registry.save_raw_native(filename, req.content)
+        return {"status": "success"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 # --- Knowledge Studio insight endpoints (read-only; approach_docs/017 §2) ------ #
 @app.get("/knowledge/graph")
 def knowledge_graph():

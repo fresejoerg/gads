@@ -57,6 +57,7 @@ export function ItemDetail({ type, id, onSaved }: { type: string; id: string; on
             filename={detail.filename}
             initial={detail.raw}
             editable={detail.editable}
+            runtimePending={detail.runtime_pending}
             onSaved={() => {
               api.detail(type, id).then(setDetail);
               onSaved();

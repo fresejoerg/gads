@@ -53,6 +53,7 @@ export interface ItemDetail {
   filename: string;
   provenance: Provenance;
   editable: boolean;
+  runtime_pending?: boolean; // native: saved to overlay but executor still uses shipped
   raw: string;
   parsed: ParsedRecipe | ParsedSkill | null;
 }

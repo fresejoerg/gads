@@ -20,8 +20,8 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return r.json() as Promise<T>;
 }
 
-// singular item type -> save path segment
-const SAVE_PATH: Record<string, string> = { recipes: "recipes", skills: "skills" };
+// item type -> save path segment
+const SAVE_PATH: Record<string, string> = { recipes: "recipes", skills: "skills", native: "native" };
 
 export const api = {
   items: () => get<ListItem[]>("/knowledge/items"),
@@ -35,7 +35,7 @@ export const api = {
     get<Impact>(`/knowledge/${type}/${encodeURIComponent(id)}/impact`),
   validate: (type: string, content: string, filename?: string) =>
     post<ValidationResult>("/knowledge/validate", { type, content, filename }),
-  save: (type: "recipes" | "skills", filename: string, content: string) =>
+  save: (type: "recipes" | "skills" | "native", filename: string, content: string) =>
     post<{ status: string }>(`/${SAVE_PATH[type]}/${filename}`, { content }),
 };
 

@@ -35,12 +35,17 @@ Coverage views stay lean (~98 KB gzip) and the tool works fully air-gapped. See
   skills chipped), invariants checklist, rationale; skill triggers + content.
 - **Item · Edit** — Monaco with **live server-side validation** (errors block save,
   warnings don't); writes go to the git-ignored overlay (`gads_data/knowledge/`), never
-  the shipped IP. Native modules are read-only pending the native-editing increment.
+  the shipped IP. Native modules are editable too (Python; AST + hazard validation), but
+  carry a caveat: overlay native edits are **not yet loaded by the executor** — a running
+  workflow uses the shipped version until the dynamic-load contract lands.
 - **Item · Evidence** (recipes) — per-engine benchmark pass rate from the dial ledger.
 - **Item · Impact** — specs/recipes referencing the item (rename/deprecate guard).
 - **Coverage** — task_type × delegation-rung matrix + orphan analysis.
 
 ## Known follow-ups
 
-- Native-node editing (overlay write + AST/hazard guardrails + dynamic executor load).
+- **Native dynamic-load contract** — make the executor resolve overlay native modules
+  (declare `id`/`preamble`/`triggers` per module; load overlay before shipped) so edits
+  saved here actually take effect at runtime. Overlay write + validation already ship;
+  this is the remaining execution-path half.
 - Organize view: maturity field, git history/diff surface, recipe-pack export/import.
