@@ -1,0 +1,172 @@
+# GADS Data-Science Project Taxonomy — controlled vocabularies (source of truth)
+# ---------------------------------------------------------------------------
+# A *faceted* taxonomy: a project is described by several orthogonal axes, not
+# one tree. Each facet below is a closed controlled vocabulary. Specs are tagged
+# with one or more values per facet (see `schema` at the bottom for cardinality).
+#
+# Design rationale and the full write-up live in
+# approach_docs/018_ds_project_taxonomy.md. This file is the machine-readable
+# source that validation / the Router / the Studio coverage view can load.
+#
+# Notation: dotted values (`classification.binary`) are `family.subtype`. Tagging
+# with the bare family (`classification`) is allowed when the subtype is unknown;
+# validators should accept either the family or any of its subtypes.
+version: 1
+
+# --------------------------------------------------------------------------- #
+# Facet A — INTENT  (the question class; single value, required)
+# Grounded in the Gartner analytics-maturity ladder, extended with the causal
+# and generative classes modern DS treats as first-class. This is the primary
+# "what kind of project is this" axis.
+# --------------------------------------------------------------------------- #
+intent:
+  descriptive:   "What happened — EDA, profiling, BI/KPI reporting, cohort & segmentation summaries."
+  diagnostic:    "Why it happened — driver/root-cause, attribution, variance decomposition, A/B readout."
+  predictive:    "What will happen — supervised scoring, forecasting, propensity."
+  causal:        "Effect of an intervention — treatment effects, uplift, policy evaluation, counterfactuals."
+  prescriptive:  "What to do — optimization, recommendation, allocation, decision policy."
+  generative:    "Produce new artifacts — text/image/code generation, summarization, synthetic data, simulation."
+  structure_discovery: "Uncover latent structure or hypotheses — clustering, causal discovery, association/pattern mining."
+
+# --------------------------------------------------------------------------- #
+# Facet B — TASK  (the ML/statistical formulation; >=1 value, required)
+# family: [subtypes]. Tag with a subtype when known, else the family.
+# --------------------------------------------------------------------------- #
+task:
+  classification: [binary, multiclass, multilabel, ordinal]
+  regression:     [linear, nonlinear, count, quantile, survival]
+  clustering:     [partitional, hierarchical, density]
+  dimensionality_reduction: [linear, manifold]
+  anomaly_detection: [tabular, timeseries, novelty]
+  association_mining: []
+  representation_learning: [embedding, pretraining]
+  forecasting:    [univariate, multivariate, hierarchical, probabilistic]
+  changepoint_detection: []
+  timeseries_classification: []
+  causal:         [effect_estimation, heterogeneous_effects, discovery, mediation, iv_panel, impact]
+  ranking:        [learning_to_rank]
+  recommendation: [collaborative, content, hybrid]
+  nlp:            [text_classification, ner_extraction, topic_modeling, sentiment, summarization, translation, qa, thematic]
+  retrieval:      [semantic_search, rag]
+  vision:         [image_classification, object_detection, segmentation, ocr]
+  generation:     [text, image, code, synthetic_data]
+  optimization:   [linear_program, combinatorial, heuristic]
+  sequential_decision: [reinforcement_learning, bandit]
+  simulation:     [monte_carlo, agent_based, discrete_event]
+  bayesian_inference: [parameter_estimation, hierarchical]
+  graph:          [node_classification, link_prediction, community_detection, centrality]
+  analytics:      [descriptive_stats, kpi_metrics, cohort, funnel, ab_test]
+
+# --------------------------------------------------------------------------- #
+# Facet C — MODALITY  (structure of the input data; >=1 value, required)
+# --------------------------------------------------------------------------- #
+modality:
+  tabular:     "Structured rows/columns, single table."
+  relational:  "Multi-table / warehouse / star schema."
+  time_series: "Timestamped sequential observations."
+  text:        "Natural-language text (short or document)."
+  image:       "Raster images."
+  audio:       "Speech / sound."
+  video:       "Video frames/clips."
+  graph:       "Nodes and edges / networks."
+  geospatial:  "Coordinates, geometries, rasters with a spatial CRS."
+  multimodal:  "Two or more modalities jointly."
+  streaming:   "Unbounded event / log streams."
+
+# --------------------------------------------------------------------------- #
+# Facet D — DOMAIN  (business vertical; single controlled value, required)
+# `general` for cross-domain / synthetic. Free-text nuance goes in `domain_detail`.
+# --------------------------------------------------------------------------- #
+domain:
+  finance:          "Risk, fraud, credit, trading, collections."
+  marketing:        "Growth, attribution, churn, CLV, campaigns."
+  operations:       "Supply chain, logistics, demand/inventory."
+  healthcare:       "Clinical, epidemiology, pharma, public health."
+  retail_ecommerce: "Merchandising, pricing, basket, recommendation."
+  product_analytics: "Engagement, funnels, UX, feature adoption."
+  hr_people:        "Hiring, attrition, workforce."
+  manufacturing_iot: "Sensors, quality, predictive maintenance."
+  energy_utilities: "Load, grid, consumption."
+  public_sector:    "Policy, census, civic, regulation."
+  security:         "Cyber, threat detection, abuse."
+  education:        "Learning outcomes, edtech."
+  science_research: "Scientific / academic datasets and benchmarks."
+  general:          "Cross-domain, synthetic, or benchmark-only."
+
+# --------------------------------------------------------------------------- #
+# Facet E — DELIVERABLE  (the output contract; >=1 value, required)
+# --------------------------------------------------------------------------- #
+deliverable:
+  model_artifact:  "A deployable fitted predictor (e.g. model.joblib)."
+  estimate:        "A scalar/interval estimate — ATE, elasticity, a KPI with CI."
+  forecast_series: "A projected time series with horizons/intervals."
+  segmentation:    "Cluster/label assignments over the population."
+  report_narrative: "Written analysis, findings, takeaways."
+  dashboard_viz:   "Charts / interactive dashboard."
+  dataset_pipeline: "Cleaned data / engineered features / a reusable pipeline."
+  decision_policy: "A ranked action set or decision rule."
+
+# --------------------------------------------------------------------------- #
+# Facet F — VALIDATION  (rigor regime; >=0 values, optional but recommended)
+# What "done well" means for this project type — used by CompletenessVerifier
+# and reviewers to judge methodological appropriateness (a core GADS metric).
+# --------------------------------------------------------------------------- #
+validation:
+  holdout_metric:        "Train/test or benchmark score (ROC-AUC, F1, RMSE...)."
+  cross_validation:      "K-fold / nested CV."
+  temporal_backtest:     "Rolling-origin / out-of-time evaluation."
+  statistical_inference: "Confidence intervals, hypothesis tests, assumption checks."
+  causal_identification: "DAG, identification strategy, refutation & sensitivity analysis."
+  calibration:           "Probability calibration / reliability."
+  qualitative_saturation: "Thematic saturation / inter-rater agreement."
+
+# --------------------------------------------------------------------------- #
+# NOT a taxonomy facet — recorded here to prevent conflation:
+# The DELEGATION RUNG (D0..D5) is an orthogonal *execution-posture* axis owned by
+# core/dial.py and encoded in the dial ledger, NOT a project-type descriptor. A
+# single project type can be run at any rung; do not add rung values to specs'
+# `taxonomy` block.
+# --------------------------------------------------------------------------- #
+
+# --------------------------------------------------------------------------- #
+# Tagging schema — cardinality & requiredness for a spec's `taxonomy:` block.
+# --------------------------------------------------------------------------- #
+schema:
+  intent:      {cardinality: one,  required: true}
+  task:        {cardinality: many, required: true,  min: 1}
+  modality:    {cardinality: many, required: true,  min: 1}
+  domain:      {cardinality: one,  required: true}
+  deliverable: {cardinality: many, required: true,  min: 1}
+  validation:  {cardinality: many, required: false}
+  domain_detail: {cardinality: one, required: false, free_text: true}
+
+# --------------------------------------------------------------------------- #
+# Crosswalk — legacy free-text task_type strings found across recipes/Router,
+# mapped to the canonical (intent, task) pair. Lets existing recipe `applies_when`
+# and Router output be normalized without a breaking rename.
+# --------------------------------------------------------------------------- #
+crosswalk:
+  binary_classification:      {intent: predictive, task: classification.binary}
+  classification:             {intent: predictive, task: classification}
+  multiclass_classification:  {intent: predictive, task: classification.multiclass}
+  ordinal_classification:     {intent: predictive, task: classification.ordinal}
+  regression:                 {intent: predictive, task: regression}
+  time_series:                {intent: predictive, task: forecasting}
+  time_series_forecasting:    {intent: predictive, task: forecasting}
+  forecasting:                {intent: predictive, task: forecasting}
+  eda:                        {intent: descriptive, task: analytics.descriptive_stats}
+  clustering:                 {intent: structure_discovery, task: clustering}
+  anomaly_detection:          {intent: predictive, task: anomaly_detection}
+  outlier_detection:          {intent: predictive, task: anomaly_detection}
+  causal_inference:           {intent: causal, task: causal.effect_estimation}
+  causal_impact:              {intent: causal, task: causal.impact}
+  causal_discovery:           {intent: structure_discovery, task: causal.discovery}
+  heterogeneous_treatment_effects: {intent: causal, task: causal.heterogeneous_effects}
+  text_classification:        {intent: predictive, task: nlp.text_classification}
+  nlp_classification:         {intent: predictive, task: nlp.text_classification}
+  thematic_analysis:          {intent: structure_discovery, task: nlp.thematic}
+  topic_modeling:             {intent: structure_discovery, task: nlp.topic_modeling}
+  text_mining:                {intent: structure_discovery, task: nlp.thematic}
+  sentiment_thematic:         {intent: structure_discovery, task: nlp.sentiment}
+  semantic_search:            {intent: predictive, task: retrieval.semantic_search}
+  kpi_metrics:                {intent: descriptive, task: analytics.kpi_metrics}

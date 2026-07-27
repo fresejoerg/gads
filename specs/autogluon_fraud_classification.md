@@ -6,6 +6,15 @@ target_column: Class
 domain: financial fraud detection
 recipe_id: tabular_automl.autogluon.standard
 sample_rows: 50000
+taxonomy:
+  intent: predictive
+  task: [classification.binary]
+  modality: [tabular]
+  domain: finance
+  domain_detail: "credit-card fraud, severely imbalanced"
+  deliverable: [model_artifact]
+  validation: [holdout_metric]
+
 ---
 Which credit card transactions are fraudulent?
 

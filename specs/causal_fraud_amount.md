@@ -5,6 +5,15 @@ datasets:
 target_column: Class
 domain: financial fraud
 recipe_id: causal_effect.observational.dowhy
+taxonomy:
+  intent: causal
+  task: [causal.effect_estimation]
+  modality: [tabular]
+  domain: finance
+  domain_detail: "effect on fraud amount (DoWhy)"
+  deliverable: [estimate]
+  validation: [causal_identification]
+
 ---
 Does the size of a credit card transaction causally increase the probability
 of fraud, after controlling for the cardholder's underlying behavioural patterns?

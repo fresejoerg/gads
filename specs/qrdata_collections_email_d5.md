@@ -5,6 +5,15 @@ datasets:
 target_column: payments
 domain: debt collections marketing
 recipe_id: causal_effect.observational.dowhy.mechanized
+taxonomy:
+  intent: causal
+  task: [causal.effect_estimation]
+  modality: [tabular]
+  domain: marketing
+  domain_detail: "debt-collections email treatment effect (QRData)"
+  deliverable: [estimate]
+  validation: [causal_identification]
+
 ---
 Did sending the collections email cause customers to pay more of their debt?
 

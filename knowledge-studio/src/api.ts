@@ -48,7 +48,35 @@ export const api = {
   },
   reset: (type: "recipes" | "skills" | "native", filename: string) =>
     post<{ status: string; provenance: string }>(`/knowledge/${type}/${filename}/reset`, {}),
+  taxonomyCoverage: () => get<TaxonomyCoverage>("/taxonomy/coverage"),
+  taxonomySpecs: () => get<SpecTag[]>("/taxonomy/specs"),
 };
+
+export interface TaxonomyCoverage {
+  intents: string[];
+  task_families: string[];
+  matrix: Record<string, Record<string, string[]>>;
+  distinct_projects: number;
+  total_specs: number;
+  intent_distribution: Record<string, number>;
+  modality_distribution: Record<string, number>;
+  domain_distribution: Record<string, number>;
+  populated_cells: Array<[string, string]>;
+}
+
+export interface SpecTag {
+  spec: string;
+  name: string | null;
+  recipe_id: string | null;
+  rung: string | null;
+  tagged: boolean;
+  intent: string | null;
+  task: string[];
+  modality: string[];
+  domain: string | null;
+  deliverable: string[];
+  validation: string[];
+}
 
 export interface GraphResp {
   nodes: Array<{ id: string; type: string; provenance?: string; triggers?: string[] }>;

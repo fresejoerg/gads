@@ -3,6 +3,15 @@ name: "QRData IHDP-0 (causal effect, semi-synthetic) [dial D0]"
 datasets:
   - qrdata/ihdp_0.csv
 disable_recipes: true
+taxonomy:
+  intent: causal
+  task: [causal.effect_estimation]
+  modality: [tabular]
+  domain: healthcare
+  domain_detail: "infant health & development program, replicate 0 (IHDP)"
+  deliverable: [estimate]
+  validation: [causal_identification]
+
 ---
 What is the average causal effect of the IHDP home-visit intervention on the child's
 cognitive test score?

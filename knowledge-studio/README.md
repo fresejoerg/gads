@@ -41,6 +41,10 @@ Coverage views stay lean (~98 KB gzip) and the tool works fully air-gapped. See
 - **Item · Evidence** (recipes) — per-engine benchmark pass rate from the dial ledger.
 - **Item · Impact** — specs/recipes referencing the item (rename/deprecate guard).
 - **Coverage** — task_type × delegation-rung matrix + orphan analysis.
+- **Taxonomy** — configured specs mapped across the DS project taxonomy
+  (`approach_docs/018`): an intent × task-family coverage grid with the empty cells (the
+  gaps) highlighted, click-to-drill spec lists, and by-intent/modality/domain
+  distributions. Backed by `GET /taxonomy/coverage` + `/taxonomy/specs`.
 - **Organize** — overlay-override management (list every overridden/overlay item and
   **reset it to the shipped baseline** in one click) plus a **git history + diff surface**:
   browse an item's commit log, view what any single commit changed, or diff two revisions

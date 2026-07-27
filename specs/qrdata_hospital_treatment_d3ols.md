@@ -5,6 +5,15 @@ datasets:
 target_column: days
 domain: healthcare
 recipe_id: causal_effect.observational.ols.directed
+taxonomy:
+  intent: causal
+  task: [causal.effect_estimation]
+  modality: [tabular]
+  domain: healthcare
+  domain_detail: "hospital treatment effect (QRData)"
+  deliverable: [estimate]
+  validation: [causal_identification]
+
 ---
 Does the new hospital treatment reduce the number of days until discharge?
 

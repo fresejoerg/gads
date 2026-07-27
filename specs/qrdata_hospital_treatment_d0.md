@@ -3,6 +3,15 @@ name: "QRData hospital treatment (causal effect, confounded by severity) [dial D
 datasets:
   - qrdata/hospital_treatment.csv
 disable_recipes: true
+taxonomy:
+  intent: causal
+  task: [causal.effect_estimation]
+  modality: [tabular]
+  domain: healthcare
+  domain_detail: "hospital treatment effect (QRData)"
+  deliverable: [estimate]
+  validation: [causal_identification]
+
 ---
 Does the new hospital treatment reduce the number of days until discharge?
 

@@ -3,6 +3,15 @@ name: "QRData collections email (causal effect with post-treatment traps) [dial 
 datasets:
   - qrdata/collections_email.csv
 disable_recipes: true
+taxonomy:
+  intent: causal
+  task: [causal.effect_estimation]
+  modality: [tabular]
+  domain: marketing
+  domain_detail: "debt-collections email treatment effect (QRData)"
+  deliverable: [estimate]
+  validation: [causal_identification]
+
 ---
 Did sending the collections email cause customers to pay more of their debt?
 

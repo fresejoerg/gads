@@ -5,6 +5,15 @@ datasets:
 target_column: class
 domain: image region classification
 recipe_id: tabular_automl.autogluon.deterministic
+taxonomy:
+  intent: predictive
+  task: [classification.multiclass]
+  modality: [image, tabular]
+  domain: science_research
+  domain_detail: "image-region features flattened to tabular (OpenML segment)"
+  deliverable: [model_artifact]
+  validation: [holdout_metric]
+
 ---
 Which image region type does each instance belong to?
 

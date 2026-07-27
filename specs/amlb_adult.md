@@ -5,6 +5,15 @@ datasets:
 target_column: class
 domain: census income prediction
 recipe_id: tabular_automl.autogluon.deterministic
+taxonomy:
+  intent: predictive
+  task: [classification.binary]
+  modality: [tabular]
+  domain: public_sector
+  domain_detail: "census income prediction (UCI Adult)"
+  deliverable: [model_artifact]
+  validation: [holdout_metric]
+
 ---
 Which adults earn more than $50K per year?
 

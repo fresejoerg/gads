@@ -12,6 +12,14 @@ datasets:
   - aah/aah_questions.json
 domain: consumer habit-tracking app analytics (business KPIs over a warehouse)
 recipe_id: analytics.answer_suite.star
+taxonomy:
+  intent: descriptive
+  task: [analytics.kpi_metrics]
+  modality: [relational]
+  domain: product_analytics
+  domain_detail: "habit-tracking app KPIs over a star schema"
+  deliverable: [report_narrative, dashboard_viz]
+
 ---
 
 You are a data analyst for a habit-tracking app. Today is 2026-07-16; data is complete

@@ -5,6 +5,15 @@ datasets:
 target_column: falsexam
 domain: education
 recipe_id: causal_effect.observational.dowhy.mechanized
+taxonomy:
+  intent: causal
+  task: [causal.effect_estimation]
+  modality: [tabular]
+  domain: education
+  domain_detail: "online classroom treatment effect (QRData)"
+  deliverable: [estimate]
+  validation: [causal_identification]
+
 ---
 Did moving students to an online-only classroom format change their final exam
 performance?

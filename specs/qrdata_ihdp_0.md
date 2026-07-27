@@ -5,6 +5,15 @@ datasets:
 target_column: y
 domain: infant health and development program
 recipe_id: causal_effect.observational.dowhy
+taxonomy:
+  intent: causal
+  task: [causal.effect_estimation]
+  modality: [tabular]
+  domain: healthcare
+  domain_detail: "infant health & development program, replicate 0 (IHDP)"
+  deliverable: [estimate]
+  validation: [causal_identification]
+
 ---
 What is the average causal effect of the IHDP home-visit intervention on the child's
 cognitive test score?

@@ -4,8 +4,9 @@ import type { ListItem } from "./types";
 import { Library } from "./components/Library";
 import { Coverage } from "./components/Coverage";
 import { Organize } from "./components/Organize";
+import { Taxonomy } from "./components/Taxonomy";
 
-type Tab = "library" | "coverage" | "organize";
+type Tab = "library" | "coverage" | "taxonomy" | "organize";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("library");
@@ -42,6 +43,9 @@ export default function App() {
           <button className={`tab ${tab === "coverage" ? "active" : ""}`} onClick={() => setTab("coverage")}>
             Coverage
           </button>
+          <button className={`tab ${tab === "taxonomy" ? "active" : ""}`} onClick={() => setTab("taxonomy")}>
+            Taxonomy
+          </button>
           <button className={`tab ${tab === "organize" ? "active" : ""}`} onClick={() => setTab("organize")}>
             Organize
           </button>
@@ -62,6 +66,7 @@ export default function App() {
       <div className="body">
         {tab === "library" && <Library items={items} onSaved={reload} />}
         {tab === "coverage" && <Coverage />}
+        {tab === "taxonomy" && <Taxonomy />}
         {tab === "organize" && <Organize items={items} onChanged={reload} />}
       </div>
     </div>

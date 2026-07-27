@@ -5,6 +5,15 @@ datasets:
 target_column: Class
 domain: financial fraud
 recipe_id: causal_effect.bayesian.pymc
+taxonomy:
+  intent: causal
+  task: [causal.effect_estimation]
+  modality: [tabular]
+  domain: finance
+  domain_detail: "financial fraud, Bayesian estimation (PyMC)"
+  deliverable: [estimate]
+  validation: [causal_identification, statistical_inference]
+
 ---
 Using Bayesian inference, estimate whether transaction amount causally affects
 fraud probability, with full uncertainty quantification.

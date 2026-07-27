@@ -11,7 +11,7 @@ import yaml
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -316,6 +316,33 @@ def knowledge_item_detail(item_type: str, item_id: str):
         return registry.get_item_detail(item_type, item_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+# --- Project taxonomy (approach_docs/018) -------------------------------------- #
+@app.get("/taxonomy")
+def taxonomy_vocab():
+    """The controlled vocabularies (facets, schema, crosswalk) — Studio tag pickers."""
+    from gads.core import taxonomy as tx
+    return tx.load_vocab()
+
+@app.post("/taxonomy/validate")
+def taxonomy_validate(block: Dict[str, Any] = Body(...)):
+    """Validate a spec's taxonomy block against the vocabulary. Never mutates state."""
+    from gads.core import taxonomy as tx
+    result = tx.validate_tags(block)
+    return {"valid": not result["errors"], **result}
+
+@app.get("/taxonomy/coverage")
+def taxonomy_coverage():
+    """Intent × task-family matrix over the tagged spec library, plus per-axis
+    distributions and populated cells — the coverage map (018 §6)."""
+    from gads.core import taxonomy as tx
+    return tx.coverage()
+
+@app.get("/taxonomy/specs")
+def taxonomy_specs():
+    """Per-spec taxonomy tags (untagged specs included so gaps are visible)."""
+    from gads.core import taxonomy as tx
+    return tx.spec_index()
 
 @app.get("/prompts")
 def list_prompts():
@@ -2500,6 +2527,18 @@ async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundT
         meta = ProjectSpecMetadata(**yaml_data)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Schema validation failed: {e}")
+
+    # Taxonomy tags (018) — fail-soft: log problems, don't block the launch.
+    if isinstance(yaml_data.get("taxonomy"), dict):
+        try:
+            from gads.core import taxonomy as tx
+            tax_result = tx.validate_tags(yaml_data["taxonomy"])
+            for msg in tax_result["errors"]:
+                print(f"[taxonomy] spec '{req.filename}': ERROR {msg}")
+            for msg in tax_result["warnings"]:
+                print(f"[taxonomy] spec '{req.filename}': warning {msg}")
+        except Exception as e:
+            print(f"[taxonomy] validation skipped for '{req.filename}': {e}")
 
     # Pre-flight validation
     # 1. Datasets

@@ -4,6 +4,15 @@ datasets:
   - llm-classification-finetuning/train.csv
   - llm-classification-finetuning/semantic_similarity.parquet
 save_model: true
+taxonomy:
+  intent: predictive
+  task: [classification.multiclass]
+  modality: [text]
+  domain: general
+  domain_detail: "LLM response preference (Chatbot Arena)"
+  deliverable: [model_artifact]
+  validation: [holdout_metric]
+
 ---
 Predict which of two LLM responses (response_a or response_b) a human prefers, or whether
 they tie. The dataset contains 57,477 human preference judgments from Chatbot Arena. Each row
