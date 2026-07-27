@@ -246,6 +246,9 @@ crosswalk:
   classification:             {intent: predictive, task: classification}
   multiclass_classification:  {intent: predictive, task: classification.multiclass}
   ordinal_classification:     {intent: predictive, task: classification.ordinal}
+  ordered_multiclass:         {intent: predictive, task: classification.ordinal}
+  likert_scale_prediction:    {intent: predictive, task: classification.ordinal}
+  rating_prediction:          {intent: predictive, task: classification.ordinal}
   regression:                 {intent: predictive, task: regression}
   time_series:                {intent: predictive, task: forecasting}
   time_series_forecasting:    {intent: predictive, task: forecasting}
@@ -266,3 +269,6 @@ crosswalk:
   sentiment_thematic:         {intent: structure_discovery, task: nlp.sentiment}
   semantic_search:            {intent: predictive, task: retrieval.semantic_search}
   kpi_metrics:                {intent: descriptive, task: analytics.kpi_metrics}
+  business_analytics:         {intent: descriptive, task: analytics.kpi_metrics}
+  bi:                         {intent: descriptive, task: analytics.kpi_metrics}
+  reporting:                  {intent: descriptive, task: analytics.descriptive_stats}

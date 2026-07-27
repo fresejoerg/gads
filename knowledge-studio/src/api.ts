@@ -51,7 +51,20 @@ export const api = {
   taxonomyCoverage: () => get<TaxonomyCoverage>("/taxonomy/coverage"),
   taxonomySpecs: () => get<SpecTag[]>("/taxonomy/specs"),
   taxonomyRuns: (limit = 100) => get<RunTag[]>(`/taxonomy/runs?limit=${limit}`),
+  taxonomyRecipes: () => get<RecipeCoverage>("/taxonomy/recipes"),
 };
+
+export interface RecipeCoverage {
+  intents: string[];
+  task_families: string[];
+  matrix: Record<string, Record<string, string[]>>;
+  total_recipes: number;
+  intent_distribution: Record<string, number>;
+  family_distribution: Record<string, number>;
+  modality_distribution: Record<string, number>;
+  unmapped: Array<{ id: string; declared: string[] }>;
+  populated_cells: Array<[string, string]>;
+}
 
 export interface RunTag {
   project_id: string;

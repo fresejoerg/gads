@@ -330,3 +330,82 @@ def coverage() -> Dict[str, Any]:
         "domain_distribution": domain_dist,
         "populated_cells": [list(c) for c in sorted(populated)],
     }
+
+
+def recipe_index(registry) -> List[Dict[str, Any]]:
+    """Derive each recipe's taxonomy from its ``applies_when`` (task_type via the
+    crosswalk, modality via aliases). A recipe declares no explicit taxonomy block, so
+    this is a projection. ``unmapped_task_types`` flags declarations the crosswalk
+    doesn't cover (a data-quality signal)."""
+    vocab = load_vocab()
+    mod_alias = vocab.get("modality_aliases", {})
+    out: List[Dict[str, Any]] = []
+    for r in registry.recipes.values():
+        aw = r.applies_when or {}
+        tts = _as_list(aw.get("task_type"))
+        mods = _as_list(aw.get("data_modality"))
+        intents, tasks, unmapped = set(), set(), []
+        for tt in tts:
+            c = canonicalize(str(tt))
+            if c:
+                intents.add(c["intent"]); tasks.add(c["task"])
+            else:
+                unmapped.append(tt)
+        modset = [m for m in (mod_alias.get(str(x).strip().lower()) for x in mods) if m]
+        try:
+            prov = registry.provenance("recipes", r.id)
+        except Exception:
+            prov = None
+        out.append({
+            "id": r.id,
+            "provenance": prov,
+            "intents": sorted(intents),
+            "tasks": sorted(tasks),
+            "task_families": sorted({_task_family(t) for t in tasks}),
+            "modality": sorted(set(modset)),
+            "declared_task_type": tts,
+            "unmapped_task_types": unmapped,
+        })
+    return sorted(out, key=lambda x: x["id"])
+
+
+def recipe_coverage(registry) -> Dict[str, Any]:
+    """Intent × task-family matrix over the recipe library + per-axis distributions,
+    mirroring ``coverage()`` for specs. Recipe primary intent = first sorted intent."""
+    vocab = load_vocab()
+    intents = list(vocab["intent"].keys())
+    families = list(vocab["task"].keys())
+    recs = recipe_index(registry)
+
+    matrix: Dict[str, Dict[str, List[str]]] = {i: {f: [] for f in families} for i in intents}
+    intent_dist: Dict[str, int] = {}
+    family_dist: Dict[str, int] = {}
+    modality_dist: Dict[str, int] = {}
+    unmapped: List[Dict[str, Any]] = []
+
+    for r in recs:
+        if r["unmapped_task_types"]:
+            unmapped.append({"id": r["id"], "declared": r["unmapped_task_types"]})
+        primary = r["intents"][0] if r["intents"] else None
+        if primary:
+            intent_dist[primary] = intent_dist.get(primary, 0) + 1
+        for fam in r["task_families"]:
+            family_dist[fam] = family_dist.get(fam, 0) + 1
+            for i in r["intents"]:
+                if i in matrix and fam in matrix[i]:
+                    matrix[i][fam].append(r["id"])
+        for m in r["modality"]:
+            modality_dist[m] = modality_dist.get(m, 0) + 1
+
+    populated = {(i, f) for i in intents for f in families if matrix[i][f]}
+    return {
+        "intents": intents,
+        "task_families": families,
+        "matrix": matrix,
+        "total_recipes": len(recs),
+        "intent_distribution": intent_dist,
+        "family_distribution": family_dist,
+        "modality_distribution": modality_dist,
+        "unmapped": unmapped,
+        "populated_cells": [list(c) for c in sorted(populated)],
+    }

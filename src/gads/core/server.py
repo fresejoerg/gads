@@ -344,6 +344,14 @@ def taxonomy_specs():
     from gads.core import taxonomy as tx
     return tx.spec_index()
 
+@app.get("/taxonomy/recipes")
+def taxonomy_recipes():
+    """Recipe library projected onto the taxonomy — intent × task-family matrix +
+    per-axis distributions, derived from each recipe's applies_when via the crosswalk.
+    `unmapped` flags recipes whose declared task_type the crosswalk doesn't cover."""
+    from gads.core import taxonomy as tx
+    return tx.recipe_coverage(registry)
+
 @app.get("/taxonomy/runs")
 def taxonomy_runs(limit: int = 100):
     """Per-run taxonomy classification (every launched project that has been routed),

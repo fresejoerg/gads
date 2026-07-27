@@ -269,3 +269,11 @@ table.cov.taxo td { min-width: 30px; padding: 5px; }
 .bar > span { display: block; height: 100%; background: var(--accent-dim); border-radius: 5px; }
 
 @media (max-width: 900px) { .dist-row { grid-template-columns: 1fr; } }
+
+/* taxonomy specs/recipes toggle */
+.grid-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+.seg button { background: var(--bg-elev); color: var(--text-dim); border: none; padding: 5px 14px; font-size: 12.5px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button:hover { color: var(--text); }
+.seg button.on { background: var(--accent-dim); color: #fff; }

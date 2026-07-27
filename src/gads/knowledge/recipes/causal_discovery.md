@@ -6,7 +6,7 @@ author: gads-core
 
 # ——— ROUTING METADATA ———
 applies_when:
-  task_type: [causal_inference]
+  task_type: [causal_discovery]
   data_modality: [tabular]
   signals:
     - causal_structure_unknown: true

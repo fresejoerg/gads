@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type TaxonomyCoverage, type SpecTag, type RunTag } from "../api";
+import { api, type TaxonomyCoverage, type SpecTag, type RunTag, type RecipeCoverage } from "../api";
 
 // Short human labels for the intent axis (facet A, approach_docs/018 §3).
 const INTENT_LABEL: Record<string, string> = {
@@ -12,27 +12,35 @@ const INTENT_LABEL: Record<string, string> = {
   structure_discovery: "Structure discovery",
 };
 
+type View = "specs" | "recipes";
+
 export function Taxonomy() {
   const [cov, setCov] = useState<TaxonomyCoverage | null>(null);
+  const [recipeCov, setRecipeCov] = useState<RecipeCoverage | null>(null);
   const [specs, setSpecs] = useState<SpecTag[]>([]);
   const [runs, setRuns] = useState<RunTag[]>([]);
+  const [view, setView] = useState<View>("specs");
   const [err, setErr] = useState<string | null>(null);
-  const [cell, setCell] = useState<{ intent: string; family: string; specs: string[] } | null>(null);
+  const [cell, setCell] = useState<{ intent: string; family: string; items: string[] } | null>(null);
 
   useEffect(() => {
-    Promise.all([api.taxonomyCoverage(), api.taxonomySpecs(), api.taxonomyRuns()])
-      .then(([c, s, r]) => {
+    Promise.all([api.taxonomyCoverage(), api.taxonomySpecs(), api.taxonomyRuns(), api.taxonomyRecipes()])
+      .then(([c, s, r, rc]) => {
         setCov(c);
         setSpecs(s);
         setRuns(r);
+        setRecipeCov(rc);
       })
       .catch((e) => setErr(String(e)));
   }, []);
 
   if (err) return <div className="error-banner">{err}</div>;
-  if (!cov) return <div className="loading">Loading taxonomy coverage…</div>;
+  if (!cov || !recipeCov) return <div className="loading">Loading taxonomy coverage…</div>;
 
   const untagged = specs.filter((s) => !s.tagged);
+  const isRecipes = view === "recipes";
+  const grid = isRecipes ? recipeCov : cov;
+  const noun = isRecipes ? "recipe" : "spec";
 
   return (
     <div className="main">
@@ -41,19 +49,39 @@ export function Taxonomy() {
           <h1>Taxonomy coverage</h1>
         </div>
         <div className="detail-sub">
-          Configured specs across the data-science project taxonomy (approach_docs/018).
-          <strong> {cov.distinct_projects}</strong> distinct project types over {cov.total_specs} specs
-          (dial variants folded). Empty cells are the gaps.
+          {isRecipes ? (
+            <>
+              Recipe library projected onto the taxonomy (approach_docs/018) via each recipe's{" "}
+              <code>applies_when</code>. <strong>{recipeCov.total_recipes}</strong> recipes. Empty cells
+              are methodologies the library doesn't encode.
+            </>
+          ) : (
+            <>
+              Configured specs across the data-science project taxonomy (approach_docs/018).
+              <strong> {cov.distinct_projects}</strong> distinct project types over {cov.total_specs} specs
+              (dial variants folded). Empty cells are the gaps.
+            </>
+          )}
         </div>
 
         <div className="card">
-          <h3>Intent × task family</h3>
+          <div className="grid-head">
+            <h3>Intent × task family</h3>
+            <div className="seg">
+              <button className={!isRecipes ? "on" : ""} onClick={() => { setView("specs"); setCell(null); }}>
+                Specs
+              </button>
+              <button className={isRecipes ? "on" : ""} onClick={() => { setView("recipes"); setCell(null); }}>
+                Recipes
+              </button>
+            </div>
+          </div>
           <div className="cov-grid">
             <table className="cov taxo">
               <thead>
                 <tr>
                   <th>intent \ task</th>
-                  {cov.task_families.map((f) => (
+                  {grid.task_families.map((f) => (
                     <th key={f} className="rot">
                       <span>{f}</span>
                     </th>
@@ -61,20 +89,20 @@ export function Taxonomy() {
                 </tr>
               </thead>
               <tbody>
-                {cov.intents.map((intent) => (
+                {grid.intents.map((intent) => (
                   <tr key={intent}>
                     <td className="tt">{INTENT_LABEL[intent] || intent}</td>
-                    {cov.task_families.map((f) => {
-                      const cellSpecs = cov.matrix[intent]?.[f] || [];
-                      const has = cellSpecs.length > 0;
+                    {grid.task_families.map((f) => {
+                      const items = grid.matrix[intent]?.[f] || [];
+                      const has = items.length > 0;
                       return (
                         <td
                           key={f}
-                          title={has ? cellSpecs.join("\n") : "no spec"}
-                          onClick={() => has && setCell({ intent, family: f, specs: cellSpecs })}
+                          title={has ? items.join("\n") : `no ${noun}`}
+                          onClick={() => has && setCell({ intent, family: f, items })}
                           style={{ cursor: has ? "pointer" : "default" }}
                         >
-                          <span className={`cnt ${has ? "has" : "none"}`}>{cellSpecs.length || "·"}</span>
+                          <span className={`cnt ${has ? "has" : "none"}`}>{items.length || "·"}</span>
                         </td>
                       );
                     })}
@@ -84,23 +112,34 @@ export function Taxonomy() {
             </table>
           </div>
           <div className="rung-note">
-            Coverage sits in just <strong>{cov.populated_cells.length}</strong> of{" "}
-            {cov.intents.length * cov.task_families.length} cells. Every "·" is a project type the lab
-            has no spec for — high-value empties include <em>predictive · forecasting</em>,{" "}
-            <em>structure_discovery · clustering</em>, and <em>predictive · anomaly_detection</em>
-            {" "}(recipes exist, no spec exercises them).
+            {isRecipes ? (
+              <>
+                The library encodes methodologies in <strong>{recipeCov.populated_cells.length}</strong> of{" "}
+                {grid.intents.length * grid.task_families.length} cells — heavily{" "}
+                <em>causal</em> and <em>predictive · classification</em>. No recipe exists for clustering,
+                recommendation, ranking, optimization, generative, vision, graph, or geospatial work.
+              </>
+            ) : (
+              <>
+                Coverage sits in just <strong>{cov.populated_cells.length}</strong> of{" "}
+                {grid.intents.length * grid.task_families.length} cells. Every "·" is a project type the lab
+                has no spec for — high-value empties include <em>predictive · forecasting</em>,{" "}
+                <em>structure_discovery · clustering</em>, and <em>predictive · anomaly_detection</em>
+                {" "}(recipes exist, no spec exercises them).
+              </>
+            )}
           </div>
           {cell && (
             <div className="cell-drill">
               <div className="cell-drill-head">
-                {INTENT_LABEL[cell.intent] || cell.intent} · {cell.family} — {cell.specs.length} spec
-                {cell.specs.length === 1 ? "" : "s"}
+                {INTENT_LABEL[cell.intent] || cell.intent} · {cell.family} — {cell.items.length} {noun}
+                {cell.items.length === 1 ? "" : "s"}
                 <button className="btn sm" onClick={() => setCell(null)}>
                   close
                 </button>
               </div>
               <div>
-                {cell.specs.map((s) => (
+                {cell.items.map((s) => (
                   <span className="chip" key={s}>
                     {s}
                   </span>
@@ -111,9 +150,13 @@ export function Taxonomy() {
         </div>
 
         <div className="dist-row">
-          <Dist title="By intent" data={cov.intent_distribution} />
-          <Dist title="By modality" data={cov.modality_distribution} />
-          <Dist title="By domain" data={cov.domain_distribution} />
+          <Dist title="By intent" data={grid.intent_distribution} />
+          <Dist title="By modality" data={grid.modality_distribution} />
+          {isRecipes ? (
+            <Dist title="By task family" data={recipeCov.family_distribution} />
+          ) : (
+            <Dist title="By domain" data={cov.domain_distribution} />
+          )}
         </div>
 
         {untagged.length > 0 && (
