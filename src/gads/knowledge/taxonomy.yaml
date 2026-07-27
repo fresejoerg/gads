@@ -145,6 +145,102 @@ schema:
 # mapped to the canonical (intent, task) pair. Lets existing recipe `applies_when`
 # and Router output be normalized without a breaking rename.
 # --------------------------------------------------------------------------- #
+# --------------------------------------------------------------------------- #
+# Deterministic derivation — used to classify a RUN that has no explicit taxonomy
+# block (ad-hoc launches). Given the Router's task_type/data_modality + a domain
+# hint, these tables fill the remaining facets so every run gets a classification.
+# --------------------------------------------------------------------------- #
+# task family -> default intent + deliverable + validation
+family_defaults:
+  classification:           {intent: predictive, deliverable: [model_artifact], validation: [holdout_metric]}
+  regression:               {intent: predictive, deliverable: [model_artifact], validation: [holdout_metric]}
+  clustering:               {intent: structure_discovery, deliverable: [segmentation], validation: []}
+  dimensionality_reduction: {intent: structure_discovery, deliverable: [dataset_pipeline], validation: []}
+  anomaly_detection:        {intent: predictive, deliverable: [model_artifact], validation: [holdout_metric]}
+  association_mining:       {intent: structure_discovery, deliverable: [report_narrative], validation: []}
+  representation_learning:  {intent: structure_discovery, deliverable: [dataset_pipeline], validation: []}
+  forecasting:              {intent: predictive, deliverable: [forecast_series], validation: [temporal_backtest]}
+  changepoint_detection:    {intent: structure_discovery, deliverable: [estimate], validation: []}
+  timeseries_classification: {intent: predictive, deliverable: [model_artifact], validation: [holdout_metric]}
+  causal:                   {intent: causal, deliverable: [estimate], validation: [causal_identification]}
+  ranking:                  {intent: predictive, deliverable: [model_artifact], validation: [holdout_metric]}
+  recommendation:           {intent: prescriptive, deliverable: [decision_policy], validation: [holdout_metric]}
+  nlp:                      {intent: predictive, deliverable: [model_artifact], validation: [holdout_metric]}
+  retrieval:                {intent: predictive, deliverable: [decision_policy], validation: []}
+  vision:                   {intent: predictive, deliverable: [model_artifact], validation: [holdout_metric]}
+  generation:               {intent: generative, deliverable: [report_narrative], validation: []}
+  optimization:             {intent: prescriptive, deliverable: [decision_policy], validation: []}
+  sequential_decision:      {intent: prescriptive, deliverable: [decision_policy], validation: []}
+  simulation:               {intent: predictive, deliverable: [estimate], validation: []}
+  bayesian_inference:       {intent: causal, deliverable: [estimate], validation: [statistical_inference]}
+  graph:                    {intent: structure_discovery, deliverable: [report_narrative], validation: []}
+  analytics:                {intent: descriptive, deliverable: [report_narrative, dashboard_viz], validation: []}
+
+# Router data_modality string -> controlled modality value
+modality_aliases:
+  tabular: tabular
+  relational: relational
+  time_series: time_series
+  timeseries: time_series
+  text: text
+  nlp: text
+  unstructured_text: text
+  tabular_text: text
+  image: image
+  audio: audio
+  video: video
+  graph: graph
+  geospatial: geospatial
+  multimodal: multimodal
+  streaming: streaming
+
+# substring found in a free-text domain hint -> controlled domain value (first match wins)
+domain_aliases:
+  fraud: finance
+  financ: finance
+  credit: finance
+  banking: finance
+  trading: finance
+  collection: finance
+  marketing: marketing
+  churn: marketing
+  campaign: marketing
+  supply: operations
+  logistic: operations
+  inventory: operations
+  demand: operations
+  health: healthcare
+  clinic: healthcare
+  medical: healthcare
+  patient: healthcare
+  hospital: healthcare
+  pharma: healthcare
+  retail: retail_ecommerce
+  ecommerce: retail_ecommerce
+  e-commerce: retail_ecommerce
+  product: product_analytics
+  engagement: product_analytics
+  funnel: product_analytics
+  employee: hr_people
+  attrition: hr_people
+  workforce: hr_people
+  manufactur: manufacturing_iot
+  sensor: manufacturing_iot
+  iot: manufacturing_iot
+  maintenance: manufacturing_iot
+  energy: energy_utilities
+  utilit: energy_utilities
+  census: public_sector
+  civic: public_sector
+  government: public_sector
+  cyber: security
+  threat: security
+  classroom: education
+  student: education
+  education: education
+  research: science_research
+  benchmark: science_research
+
 crosswalk:
   binary_classification:      {intent: predictive, task: classification.binary}
   classification:             {intent: predictive, task: classification}

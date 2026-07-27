@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type TaxonomyCoverage, type SpecTag } from "../api";
+import { api, type TaxonomyCoverage, type SpecTag, type RunTag } from "../api";
 
 // Short human labels for the intent axis (facet A, approach_docs/018 §3).
 const INTENT_LABEL: Record<string, string> = {
@@ -15,14 +15,16 @@ const INTENT_LABEL: Record<string, string> = {
 export function Taxonomy() {
   const [cov, setCov] = useState<TaxonomyCoverage | null>(null);
   const [specs, setSpecs] = useState<SpecTag[]>([]);
+  const [runs, setRuns] = useState<RunTag[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [cell, setCell] = useState<{ intent: string; family: string; specs: string[] } | null>(null);
 
   useEffect(() => {
-    Promise.all([api.taxonomyCoverage(), api.taxonomySpecs()])
-      .then(([c, s]) => {
+    Promise.all([api.taxonomyCoverage(), api.taxonomySpecs(), api.taxonomyRuns()])
+      .then(([c, s, r]) => {
         setCov(c);
         setSpecs(s);
+        setRuns(r);
       })
       .catch((e) => setErr(String(e)));
   }, []);
@@ -126,6 +128,48 @@ export function Taxonomy() {
             </div>
           </div>
         )}
+
+        <div className="card">
+          <h3>Classified runs · {runs.length}</h3>
+          <div className="detail-sub" style={{ margin: "0 0 10px" }}>
+            Every launched run is classified — spec-launched runs keep their block, ad-hoc runs
+            are derived from the Router's intent + a domain hint (<code>source</code> shows which).
+          </div>
+          {runs.length === 0 ? (
+            <div style={{ color: "var(--text-faint)", fontSize: 12.5 }}>
+              No classified runs yet — launch a project and it will appear here.
+            </div>
+          ) : (
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Run</th>
+                  <th>Intent</th>
+                  <th>Task</th>
+                  <th>Modality</th>
+                  <th>Domain</th>
+                  <th>Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                {runs.map((r) => (
+                  <tr key={r.project_id}>
+                    <td>{r.created_at?.slice(0, 10)}</td>
+                    <td>{r.name}</td>
+                    <td>{INTENT_LABEL[r.taxonomy.intent] || r.taxonomy.intent}</td>
+                    <td>{r.taxonomy.task.join(", ")}</td>
+                    <td>{r.taxonomy.modality.join(", ")}</td>
+                    <td>{r.taxonomy.domain}</td>
+                    <td>
+                      <span className={`badge ${r.source === "spec" ? "shipped" : "overlay"}`}>{r.source || "?"}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   );

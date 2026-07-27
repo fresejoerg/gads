@@ -50,7 +50,24 @@ export const api = {
     post<{ status: string; provenance: string }>(`/knowledge/${type}/${filename}/reset`, {}),
   taxonomyCoverage: () => get<TaxonomyCoverage>("/taxonomy/coverage"),
   taxonomySpecs: () => get<SpecTag[]>("/taxonomy/specs"),
+  taxonomyRuns: (limit = 100) => get<RunTag[]>(`/taxonomy/runs?limit=${limit}`),
 };
+
+export interface RunTag {
+  project_id: string;
+  name: string;
+  created_at: string | null;
+  source: string | null;
+  taxonomy: {
+    intent: string;
+    task: string[];
+    modality: string[];
+    domain: string;
+    domain_detail?: string;
+    deliverable: string[];
+    validation?: string[];
+  };
+}
 
 export interface TaxonomyCoverage {
   intents: string[];

@@ -108,6 +108,141 @@ def canonicalize(task_type: str) -> Optional[Dict[str, str]]:
     return (load_vocab().get("crosswalk") or {}).get(task_type.strip().lower())
 
 
+def _as_list(v: Any) -> List[str]:
+    if v is None:
+        return []
+    return list(v) if isinstance(v, list) else [v]
+
+
+def _task_family(task_val: str) -> str:
+    return task_val.split(".", 1)[0] if "." in task_val else task_val
+
+
+def _repair(tax: Dict[str, Any], vocab: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
+    """Drop any values not in the vocab (rather than fail); return cleaned block."""
+    warns: List[str] = []
+    out: Dict[str, Any] = {}
+    for facet in _FACETS_ONE:
+        val = tax.get(facet)
+        if val is None:
+            continue
+        if _value_ok(facet, str(val), vocab):
+            out[facet] = val
+        else:
+            warns.append(f"dropped unknown {facet}={val!r}")
+    for facet in _FACETS_MANY:
+        if facet not in tax:
+            continue
+        kept = [v for v in _as_list(tax[facet]) if _value_ok(facet, str(v), vocab)]
+        dropped = [v for v in _as_list(tax[facet]) if not _value_ok(facet, str(v), vocab)]
+        for d in dropped:
+            warns.append(f"dropped unknown {facet} value {d!r}")
+        if kept:
+            out[facet] = kept
+    if tax.get("domain_detail"):
+        out["domain_detail"] = tax["domain_detail"]
+    return out, warns
+
+
+def derive_run_taxonomy(existing: Any = None, task_type: Optional[str] = None,
+                        data_modality: Optional[str] = None,
+                        domain_text: Optional[str] = None) -> Dict[str, Any]:
+    """Resolve a *run's* taxonomy so every run — ad-hoc included — is classified.
+
+    If ``existing`` is a valid block (spec-launched run) it is honored and repaired.
+    Otherwise facets are derived deterministically: intent/task from the Router's
+    ``task_type`` (via the crosswalk), modality from ``data_modality``, domain from a
+    substring match on ``domain_text``, and deliverable/validation from per-family
+    defaults. Returns ``{"taxonomy", "warnings", "source"}``. Never raises for content."""
+    vocab = load_vocab()
+    fam_defaults = vocab.get("family_defaults", {})
+    mod_alias = vocab.get("modality_aliases", {})
+    dom_alias = vocab.get("domain_aliases", {})
+    warnings: List[str] = []
+
+    tax: Dict[str, Any] = dict(existing) if isinstance(existing, dict) and existing else {}
+    source = "spec" if tax else "derived"
+
+    canon = canonicalize(task_type) if task_type else None
+    if not tax.get("task") and canon:
+        tax["task"] = [canon["task"]]
+    if not tax.get("intent") and canon:
+        tax["intent"] = canon["intent"]
+
+    tasks = _as_list(tax.get("task"))
+    if not tasks:
+        tax["task"] = ["analytics.descriptive_stats"]
+        tasks = tax["task"]
+        if source == "derived":
+            warnings.append(f"could not classify task from task_type={task_type!r}; "
+                            "defaulted to descriptive analytics")
+    fam = _task_family(tasks[0])
+    fd = fam_defaults.get(fam, {})
+
+    if not tax.get("intent"):
+        tax["intent"] = fd.get("intent") or "descriptive"
+
+    if not tax.get("modality"):
+        m = mod_alias.get((data_modality or "").strip().lower())
+        tax["modality"] = [m] if m else ["tabular"]
+
+    if not tax.get("domain"):
+        dt = (domain_text or "").lower()
+        dom = next((v for k, v in dom_alias.items() if k in dt), None)
+        tax["domain"] = dom or "general"
+    if domain_text and not tax.get("domain_detail"):
+        tax["domain_detail"] = domain_text
+
+    if not tax.get("deliverable"):
+        tax["deliverable"] = list(fd.get("deliverable") or ["report_narrative"])
+    if "validation" not in tax:
+        v = fd.get("validation")
+        if v:
+            tax["validation"] = list(v)
+
+    tax, repaired = _repair(tax, vocab)
+    warnings += repaired
+    # guarantee required facets survive the repair
+    if not tax.get("intent"):
+        tax["intent"] = "descriptive"
+    if not tax.get("task"):
+        tax["task"] = ["analytics.descriptive_stats"]
+    if not tax.get("modality"):
+        tax["modality"] = ["tabular"]
+    if not tax.get("domain"):
+        tax["domain"] = "general"
+    if not tax.get("deliverable"):
+        tax["deliverable"] = ["report_narrative"]
+    return {"taxonomy": tax, "warnings": warnings, "source": source}
+
+
+def render_block(tax: Dict[str, Any]) -> str:
+    """Render a resolved taxonomy dict as a frontmatter ``taxonomy:`` block."""
+    def flow(seq: List[str]) -> str:
+        return "[" + ", ".join(seq) + "]"
+    lines = ["taxonomy:"]
+    lines.append(f"  intent: {tax['intent']}")
+    lines.append(f"  task: {flow(_as_list(tax['task']))}")
+    lines.append(f"  modality: {flow(_as_list(tax['modality']))}")
+    lines.append(f"  domain: {tax['domain']}")
+    if tax.get("domain_detail"):
+        lines.append(f'  domain_detail: "{tax["domain_detail"]}"')
+    lines.append(f"  deliverable: {flow(_as_list(tax['deliverable']))}")
+    if tax.get("validation"):
+        lines.append(f"  validation: {flow(_as_list(tax['validation']))}")
+    return "\n".join(lines) + "\n"
+
+
+def inject_into_frontmatter(spec_md: str, tax: Dict[str, Any]) -> str:
+    """Insert a ``taxonomy:`` block into a spec's frontmatter (before the closing
+    fence). No-op if a taxonomy block is already present or there is no frontmatter."""
+    m = _FM.match(spec_md)
+    if not m or "taxonomy:" in m.group(1):
+        return spec_md
+    new_fm = "---\n" + m.group(1).rstrip("\n") + "\n" + render_block(tax) + "---\n"
+    return new_fm + spec_md[m.end():]
+
+
 def _parse_frontmatter(text: str) -> Optional[Dict[str, Any]]:
     m = _FM.match(text)
     if not m:
@@ -147,10 +282,6 @@ def spec_index() -> List[Dict[str, Any]]:
         }
         out.append(rec)
     return out
-
-
-def _task_family(task_val: str) -> str:
-    return task_val.split(".", 1)[0] if "." in task_val else task_val
 
 
 def coverage() -> Dict[str, Any]:

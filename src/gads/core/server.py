@@ -344,6 +344,26 @@ def taxonomy_specs():
     from gads.core import taxonomy as tx
     return tx.spec_index()
 
+@app.get("/taxonomy/runs")
+def taxonomy_runs(limit: int = 100):
+    """Per-run taxonomy classification (every launched project that has been routed),
+    newest first — the classification for any run, ad-hoc included (018)."""
+    with Session(engine) as session:
+        projects = session.exec(select(Project).order_by(Project.created_at.desc()).limit(limit)).all()
+        out = []
+        for p in projects:
+            tax = (p.last_state_json or {}).get("taxonomy")
+            if not tax:
+                continue
+            out.append({
+                "project_id": str(p.id),
+                "name": p.name,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "source": (p.last_state_json or {}).get("taxonomy_source"),
+                "taxonomy": tax,
+            })
+        return out
+
 @app.get("/prompts")
 def list_prompts():
     return prompt_registry.list_prompts()
@@ -861,7 +881,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         if fo:
                             formalized_objective = fo
                 # Pull hints from YAML frontmatter
-                for key in ("target_column", "feature_columns", "filters", "domain", "recipe_id", "save_model", "sample_rows"):
+                for key in ("target_column", "feature_columns", "filters", "domain", "recipe_id", "save_model", "sample_rows", "taxonomy"):
                     if key in yaml_data:
                         spec_hints[key] = yaml_data[key]
                 spec_pinned_recipe = spec_hints.get("recipe_id")
@@ -1151,6 +1171,45 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         print(f"  [Router] Intent: {intent.task_type} (Recipe: {intent.matched_recipe_id})", flush=True)
 
         if await is_cancelled(): return
+
+        # --- RUN TAXONOMY (approach_docs/018) — classify EVERY run, ad-hoc included ---
+        # Spec-launched runs carry a `taxonomy:` block; ad-hoc runs are classified
+        # deterministically from the Router's task_type/data_modality + domain hint.
+        # Persisted on the project so any run has a viewable classification.
+        try:
+            from gads.core import taxonomy as _tx
+            _existing = spec_hints.get("taxonomy")
+            run_tax = _tx.derive_run_taxonomy(
+                existing=_existing if isinstance(_existing, dict) else None,
+                task_type=intent.task_type,
+                data_modality=intent.data_modality,
+                domain_text=spec_hints.get("domain"),
+            )
+            with Session(engine) as session:
+                proj = session.get(Project, project_id)
+                if proj:
+                    st = dict(proj.last_state_json or {})
+                    st["taxonomy"] = run_tax["taxonomy"]
+                    st["taxonomy_source"] = run_tax["source"]
+                    proj.last_state_json = st
+                    session.add(proj)
+                    session.commit()
+            # Tag the generated spec file too, so the ad-hoc spec is itself classified.
+            try:
+                if workflow_spec_path.exists():
+                    _txt = workflow_spec_path.read_text(encoding="utf-8")
+                    _new = _tx.inject_into_frontmatter(_txt, run_tax["taxonomy"])
+                    if _new != _txt:
+                        workflow_spec_path.write_text(_new, encoding="utf-8")
+            except Exception as _e:
+                print(f"  [taxonomy] could not tag workflow_spec.md: {_e}", flush=True)
+            _t = run_tax["taxonomy"]
+            print(f"  [taxonomy] run classified: {_t.get('intent')} / {_t.get('task')} / "
+                  f"{_t.get('domain')} (source={run_tax['source']})", flush=True)
+            for _w in run_tax["warnings"]:
+                print(f"  [taxonomy] warning: {_w}", flush=True)
+        except Exception as _e:
+            print(f"  [taxonomy] run classification skipped: {_e}", flush=True)
 
         # --- SAMPLE BUDGET ADVISOR (deterministic, no LLM) ---
         # Checks dataset row count against task type and injects a sampling hint into
@@ -2643,9 +2702,11 @@ async def get_project_details(project_id: uuid.UUID):
 
         return {
             "project": p_data,
-            "tasks": tasks, 
+            "tasks": tasks,
             "artifacts": artifacts,
-            "instructions": instructions
+            "instructions": instructions,
+            "taxonomy": (project.last_state_json or {}).get("taxonomy"),
+            "taxonomy_source": (project.last_state_json or {}).get("taxonomy_source"),
         }
 
 @app.get("/projects", response_model=List[ProjectRead])
