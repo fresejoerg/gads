@@ -41,6 +41,11 @@ Coverage views stay lean (~98 KB gzip) and the tool works fully air-gapped. See
 - **Item · Evidence** (recipes) — per-engine benchmark pass rate from the dial ledger.
 - **Item · Impact** — specs/recipes referencing the item (rename/deprecate guard).
 - **Coverage** — task_type × delegation-rung matrix + orphan analysis.
+- **Organize** — overlay-override management (list every overridden/overlay item and
+  **reset it to the shipped baseline** in one click) plus a **git history + diff surface**:
+  browse an item's commit log, view what any single commit changed, or diff two revisions
+  (or a revision vs the working tree). Diffs track the *shipped* file only — the overlay is
+  git-ignored, so uncommitted overlay edits are managed via Reset, not shown as a git diff.
 
 ## Known follow-ups
 
@@ -48,4 +53,7 @@ Coverage views stay lean (~98 KB gzip) and the tool works fully air-gapped. See
   (declare `id`/`preamble`/`triggers` per module; load overlay before shipped) so edits
   saved here actually take effect at runtime. Overlay write + validation already ship;
   this is the remaining execution-path half.
-- Organize view: maturity field, git history/diff surface, recipe-pack export/import.
+- **Organize · P2** — a `maturity` field (`draft | battle-tested | deprecated`) and
+  recipe-pack export/import. Both need backend schema/endpoint work first (the current
+  Organize view is scoped to what the read/write API already backs: provenance, reset,
+  history, diff).

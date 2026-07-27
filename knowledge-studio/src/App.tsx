@@ -3,8 +3,9 @@ import { api } from "./api";
 import type { ListItem } from "./types";
 import { Library } from "./components/Library";
 import { Coverage } from "./components/Coverage";
+import { Organize } from "./components/Organize";
 
-type Tab = "library" | "coverage";
+type Tab = "library" | "coverage" | "organize";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("library");
@@ -41,6 +42,9 @@ export default function App() {
           <button className={`tab ${tab === "coverage" ? "active" : ""}`} onClick={() => setTab("coverage")}>
             Coverage
           </button>
+          <button className={`tab ${tab === "organize" ? "active" : ""}`} onClick={() => setTab("organize")}>
+            Organize
+          </button>
         </div>
         <div className="spacer" />
         <div className="status">
@@ -56,7 +60,9 @@ export default function App() {
       )}
 
       <div className="body">
-        {tab === "library" ? <Library items={items} onSaved={reload} /> : <Coverage />}
+        {tab === "library" && <Library items={items} onSaved={reload} />}
+        {tab === "coverage" && <Coverage />}
+        {tab === "organize" && <Organize items={items} onChanged={reload} />}
       </div>
     </div>
   );

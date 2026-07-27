@@ -1,4 +1,4 @@
-import type { ListItem, ItemDetail, ValidationResult, Evidence, Impact } from "./types";
+import type { ListItem, ItemDetail, ValidationResult, Evidence, Impact, History, Diff } from "./types";
 
 // Vite proxies these paths to the GADS backend (see vite.config.ts), so calls are
 // same-origin in dev. In a static deployment, set VITE_API_BASE at build time.
@@ -37,6 +37,17 @@ export const api = {
     post<ValidationResult>("/knowledge/validate", { type, content, filename }),
   save: (type: "recipes" | "skills" | "native", filename: string, content: string) =>
     post<{ status: string }>(`/${SAVE_PATH[type]}/${filename}`, { content }),
+  history: (type: string, id: string, limit = 50) =>
+    get<History>(`/knowledge/${type}/${encodeURIComponent(id)}/history?limit=${limit}`),
+  diff: (type: string, id: string, fromRef?: string, toRef?: string) => {
+    const q = new URLSearchParams();
+    if (fromRef) q.set("from_ref", fromRef);
+    if (toRef) q.set("to_ref", toRef);
+    const qs = q.toString();
+    return get<Diff>(`/knowledge/${type}/${encodeURIComponent(id)}/diff${qs ? `?${qs}` : ""}`);
+  },
+  reset: (type: "recipes" | "skills" | "native", filename: string) =>
+    post<{ status: string; provenance: string }>(`/knowledge/${type}/${filename}/reset`, {}),
 };
 
 export interface GraphResp {

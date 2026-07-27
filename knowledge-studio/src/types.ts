@@ -83,3 +83,29 @@ export interface Impact {
     total: number;
   };
 }
+
+export interface Commit {
+  sha: string;
+  short: string;
+  author: string;
+  date: string;
+  subject: string;
+}
+
+export interface History {
+  item_type: string;
+  id: string;
+  file: string;
+  tracked: boolean;
+  has_overlay_edits: boolean;
+  commits: Commit[];
+}
+
+export interface Diff {
+  item_type: string;
+  id: string;
+  file: string;
+  from: string | null;
+  to: string | null;
+  diff: string;
+}
