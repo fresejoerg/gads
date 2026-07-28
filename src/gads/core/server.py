@@ -2144,8 +2144,27 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                             session.add(ct)
                             session.commit()
 
-                    # Guard: only replan if there are concrete named gaps (not just is_complete=False)
-                    if not cv_out.is_complete and cv_out.missing_analyses:
+                    # Materially-complete guard: if the recipe declared required_metrics
+                    # and metrics.json contains them ALL, the quantitative objective is
+                    # demonstrably met. Do NOT let a local verifier's soft "missing_analyses"
+                    # discard a complete run and gamble on a replan — an over-eager gap on
+                    # gemma-4-12b threw away a successful attempt and the replan regressed
+                    # into buggy code. Hard metric evidence outranks a fuzzy interpretive gap.
+                    required_metrics: set = set()
+                    if knowledge_report is not None:
+                        for _n in (getattr(knowledge_report, "recommended_dag_nodes", None) or []):
+                            _rm = _n.get("required_metrics") if isinstance(_n, dict) else getattr(_n, "required_metrics", None)
+                            if _rm:
+                                required_metrics.update(_rm)
+                    metrics_satisfied = (
+                        bool(required_metrics)
+                        and isinstance(metrics_data, dict)
+                        and required_metrics.issubset(set(metrics_data.keys()))
+                    )
+
+                    # Guard: only replan if there are concrete named gaps AND the run's
+                    # required metrics are not already all present.
+                    if not cv_out.is_complete and cv_out.missing_analyses and not metrics_satisfied:
                         missing_str = "; ".join(cv_out.missing_analyses)
                         critique_feedback = (
                             f"COMPLETENESS GAPS (attempt {workflow_attempt}):\n{missing_str}\n\n"
@@ -2158,6 +2177,12 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                             flush=True
                         )
                         continue  # → back to Planning with enriched critique_feedback
+                    elif metrics_satisfied and not cv_out.is_complete:
+                        print(
+                            f"  [CompletenessVerifier] Soft gaps flagged but all required metrics "
+                            f"{sorted(required_metrics)} are present — accepting the run, skipping replan.",
+                            flush=True
+                        )
                     else:
                         print(f"  [CompletenessVerifier] ✅ Execution is analytically complete.", flush=True)
 
