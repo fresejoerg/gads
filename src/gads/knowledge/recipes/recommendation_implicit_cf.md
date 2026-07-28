@@ -44,7 +44,7 @@ dag:
       - "len(test_holdout) > 0"
 
   - id: fit_and_recommend
-    intent: "Fit an implicit-feedback collaborative-filtering model on the training matrix. DEFAULT: item-item cosine similarity (sklearn.metrics.pairwise.cosine_similarity on the item vectors, or a truncated top-k neighbourhood for scale); ALTERNATIVE for large catalogues: TruncatedSVD latent factors — state which you used and why. Generate the top-20 recommended items for each evaluable user, EXCLUDING items already seen in training. Store recommendations {user: [item,...]}."
+    intent: "Fit an implicit-feedback collaborative-filtering model on the training matrix. PREFER implicit.als.AlternatingLeastSquares (factors=64, regularization=0.05, iterations=15, random_state=42) — the industry-standard implicit matrix factorization — when the `implicit` library is importable; otherwise fall back to item-item cosine similarity (sklearn) or TruncatedSVD latent factors. State which model you used and why. Generate the top-20 recommended items for each evaluable user, EXCLUDING items already seen in training. Store recommendations {user: [item,...]}."
     worker_tier: T2
     depends_on: [temporal_leave_one_out_split]
     attached_skills: [implicit_cf_recommender]
@@ -99,10 +99,11 @@ Not to be confused with:
 ## Key mechanics
 - **Matrix.** CSR sparse user × item; implicit confidence weighting optional.
 - **Split.** Temporal leave-one-out (most recent interaction per user held out).
-- **Model.** Item-item cosine kNN (default) or TruncatedSVD latent factors (scale).
+- **Model.** ALS (`implicit`, preferred) — the standard implicit MF — with item-item
+  cosine kNN / TruncatedSVD as the dependency-free fallback.
 - **Metrics.** Recall@K, NDCG@K, HitRate@K vs a **most-popular baseline**.
 
 ## Alternatives
-- **ALS / BPR** (the `implicit` library) are the standard implicit MF methods where available.
+- **BPR** (also in the `implicit` library) is the pairwise-ranking implicit MF variant.
 - **Two-tower / neural retrieval** is the modern deep approach at large scale.
 - **Content-based / hybrid** helps the cold-start users this CF baseline filters out.

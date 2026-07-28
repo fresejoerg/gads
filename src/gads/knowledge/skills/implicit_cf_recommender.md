@@ -1,12 +1,12 @@
 ---
 id: implicit_cf_recommender
-description: "Implicit-feedback collaborative filtering with scipy/sklearn: sparse user-item matrix, item-item cosine, temporal leave-one-out, Recall@K/NDCG@K vs popularity"
+description: "Implicit-feedback collaborative filtering: prefer implicit-ALS, fall back to scipy/sklearn item-item cosine. Sparse user-item matrix, temporal leave-one-out, Recall@K/NDCG@K vs popularity"
 triggers: ["recommendation", "recommender", "collaborative filtering", "implicit feedback", "top-n", "top-k recommendation", "recall@k", "ndcg@k", "hit rate", "user-item matrix", "cosine similarity", "recommend items", "als", "matrix factorization"]
 ---
-# Implicit-Feedback Collaborative Filtering (scipy / sklearn)
+# Implicit-Feedback Collaborative Filtering
 
-No `implicit`/`surprise`/`lightfm` in the sandbox — build the CF baseline from scipy
-sparse + sklearn. Item-item cosine is the robust default; TruncatedSVD is the MF option.
+Prefer **ALS** from the `implicit` library (the industry-standard implicit MF); fall back
+to scipy-sparse + sklearn **item-item cosine** (or TruncatedSVD) when it isn't installed.
 
 ## Build the sparse user × item matrix (with cold-start filtering)
 ```python
@@ -35,15 +35,29 @@ train = d[~d.index.isin(last.index)]
 Mtr = csr_matrix((np.ones(len(train)), (train["u"], train["i"])), shape=M.shape)
 ```
 
-## Item-item cosine → top-N (excluding seen)
+## Preferred: ALS via `implicit`; fall back to item-item cosine
+`implicit` expects an **item × user** matrix and confidence weights; wrap the import so
+the pipeline still runs if it isn't installed yet.
 ```python
-from sklearn.metrics.pairwise import cosine_similarity
-S = cosine_similarity(Mtr.T, dense_output=False)               # item × item
-scores = Mtr @ S                                               # user × item preference
-scores = scores.toarray()
-scores[Mtr.nonzero()] = -np.inf                                # exclude already-seen
-topN = np.argsort(-scores, axis=1)[:, :10]                     # per-user top-10
-# MF alternative: TruncatedSVD(n_components=64).fit_transform(Mtr) @ components_
+import numpy as np
+try:
+    from implicit.als import AlternatingLeastSquares
+    model = AlternatingLeastSquares(factors=64, regularization=0.05,
+                                    iterations=15, random_state=42)
+    model.fit((Mtr * 40).astype("float32"))                    # confidence = 1 + alpha*count
+    ids, _ = model.recommend(np.arange(Mtr.shape[0]), Mtr, N=10,
+                             filter_already_liked_items=True)   # excludes seen
+    topN = ids                                                 # (n_users, 10)
+    used = "implicit-ALS"
+except ImportError:
+    from sklearn.metrics.pairwise import cosine_similarity
+    S = cosine_similarity(Mtr.T, dense_output=False)           # item × item
+    scores = (Mtr @ S).toarray()                               # user × item preference
+    scores[Mtr.nonzero()] = -np.inf                            # exclude already-seen
+    topN = np.argsort(-scores, axis=1)[:, :10]
+    used = "item-item cosine (implicit not installed)"
+print("recommender:", used)
+# MF fallback (no implicit, large catalogue): TruncatedSVD(n_components=64) on Mtr
 ```
 
 ## Evaluate vs a popularity baseline
