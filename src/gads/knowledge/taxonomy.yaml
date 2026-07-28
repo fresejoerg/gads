@@ -260,6 +260,14 @@ crosswalk:
   causal_inference:           {intent: causal, task: causal.effect_estimation}
   causal_impact:              {intent: causal, task: causal.impact}
   causal_discovery:           {intent: structure_discovery, task: causal.discovery}
+  learning_to_rank:           {intent: predictive, task: ranking.learning_to_rank}
+  ranking:                    {intent: predictive, task: ranking}
+  search_ranking:             {intent: predictive, task: ranking.learning_to_rank}
+  recommendation:             {intent: prescriptive, task: recommendation}
+  collaborative_filtering:    {intent: prescriptive, task: recommendation.collaborative}
+  top_n_recommendation:       {intent: prescriptive, task: recommendation}
+  customer_segmentation:      {intent: structure_discovery, task: clustering.partitional}
+  segmentation:               {intent: structure_discovery, task: clustering}
   heterogeneous_treatment_effects: {intent: causal, task: causal.heterogeneous_effects}
   text_classification:        {intent: predictive, task: nlp.text_classification}
   nlp_classification:         {intent: predictive, task: nlp.text_classification}
