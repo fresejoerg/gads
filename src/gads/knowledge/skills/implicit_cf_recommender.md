@@ -35,9 +35,10 @@ train = d[~d.index.isin(last.index)]
 Mtr = csr_matrix((np.ones(len(train)), (train["u"], train["i"])), shape=M.shape)
 ```
 
-## Preferred: ALS via `implicit`; fall back to item-item cosine
-`implicit` expects an **item × user** matrix and confidence weights; wrap the import so
-the pipeline still runs if it isn't installed yet.
+## Default model: ALS via `implicit` (fall back to cosine only on ImportError)
+`implicit` (≥0.4) takes a **user × item** CSR of confidence weights (`1 + alpha*count`).
+`implicit` is installed here — ALS is the default; wrap the import in try/except only so
+the pipeline still runs in an environment where it's missing.
 ```python
 import numpy as np
 try:

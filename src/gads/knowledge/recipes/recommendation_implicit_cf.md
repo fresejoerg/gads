@@ -44,7 +44,7 @@ dag:
       - "len(test_holdout) > 0"
 
   - id: fit_and_recommend
-    intent: "Fit an implicit-feedback collaborative-filtering model on the training matrix. PREFER implicit.als.AlternatingLeastSquares (factors=64, regularization=0.05, iterations=15, random_state=42) — the industry-standard implicit matrix factorization — when the `implicit` library is importable; otherwise fall back to item-item cosine similarity (sklearn) or TruncatedSVD latent factors. State which model you used and why. Generate the top-20 recommended items for each evaluable user, EXCLUDING items already seen in training. Store recommendations {user: [item,...]}."
+    intent: "Fit an implicit-feedback collaborative-filtering model on the training matrix. The DEFAULT and required model is implicit.als.AlternatingLeastSquares (factors=64, regularization=0.05, iterations=15, random_state=42) — the industry-standard implicit matrix factorization; the `implicit` library IS installed in this environment. Write `from implicit.als import AlternatingLeastSquares` inside a try/except and fall back to item-item cosine similarity (sklearn) ONLY if that import raises ImportError. Print a line stating which model actually ran ('implicit-ALS' or 'cosine-fallback'). Note the `implicit` API: fit takes a user×item CSR of confidence weights, and `model.recommend(user_ids, train_matrix, N=20, filter_already_liked_items=True)` already excludes seen items. Generate the top-20 recommended items for each evaluable user, EXCLUDING items already seen in training. Store recommendations {user: [item,...]}."
     worker_tier: T2
     depends_on: [temporal_leave_one_out_split]
     attached_skills: [implicit_cf_recommender]
@@ -70,6 +70,7 @@ dag:
 
 # ——— GLOBAL INVARIANTS ———
 invariants:
+  - "DEFAULT MODEL IS ALS: use implicit.als.AlternatingLeastSquares as the recommender; the `implicit` library is installed. Fall back to item-item cosine ONLY when `import implicit` raises ImportError, and print which model ran."
   - "IMPLICIT FEEDBACK: an interaction is a positive signal; absence is NOT a confirmed negative. Do not train as if unobserved user-item pairs are labelled negatives."
   - "TEMPORAL LEAVE-ONE-OUT: hold out each user's most recent interaction. Never let a user's future interaction leak into their training profile."
   - "Exclude already-seen (training) items from a user's recommendation list — re-recommending known items is not a hit."
