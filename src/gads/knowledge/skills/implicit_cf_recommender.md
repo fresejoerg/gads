@@ -73,12 +73,26 @@ def recall_ndcg_at_k(topN, holdout, k=10):
     n = len(holdout)
     return hits / n, ndcgs / n                                 # recall@k == hitrate@k for 1 held-out
 
-recall10, ndcg10 = recall_ndcg_at_k(topN, holdout, 10)
+# Bind the metrics as TOP-LEVEL scalars named exactly as the recipe's required_metrics —
+# the execution contract probes the kernel for `recall_at_10` / `ndcg_at_10` by name.
+# A dict entry (results['recall_at_10']) or a metrics.json file alone does NOT satisfy it.
+recall_at_10, ndcg_at_10 = recall_ndcg_at_k(topN, holdout, 10)
+recall_at_20, ndcg_at_20 = recall_ndcg_at_k(topN, holdout, 20)
+hit_rate_at_10 = recall_at_10                                  # 1 held-out item per user
 pop = np.argsort(-np.asarray(Mtr.sum(0)).ravel())             # most-popular items
-pop_hits = np.mean([pop[:10].tolist().count(t) > 0 or t in pop[:10] for t in holdout.values()])
+popular_top10 = set(pop[:10].tolist())
+popularity_recall_at_10 = float(np.mean([t in popular_top10 for t in holdout.values()]))
+
+import json
+json.dump({"recall_at_10": recall_at_10, "ndcg_at_10": ndcg_at_10,
+           "recall_at_20": recall_at_20, "hit_rate_at_10": hit_rate_at_10,
+           "popularity_recall_at_10": popularity_recall_at_10}, open("metrics.json", "w"))
+print(f"Recall@10={recall_at_10:.4f} NDCG@10={ndcg_at_10:.4f} "
+      f"popularity={popularity_recall_at_10:.4f} lift={recall_at_10/max(popularity_recall_at_10,1e-9):.2f}x")
 ```
-Report Recall@10, NDCG@10, and the lift over the popularity baseline. A CF model that
-does not beat most-popular has added no personalization.
+The bare names `recall_at_10` / `ndcg_at_10` must exist at top level (not just inside a
+dict or metrics.json), or the contract fails even when the numbers are correct. A CF model
+that does not beat most-popular has added no personalization.
 
 ## Pitfalls
 - Random (non-temporal) splits leak the future and inflate scores.

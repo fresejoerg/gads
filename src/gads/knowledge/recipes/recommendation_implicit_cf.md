@@ -53,7 +53,7 @@ dag:
       - "recommendations is not None"
 
   - id: evaluate_topn
-    intent: "Evaluate the held-out items against the top-N lists: compute Recall@10, NDCG@10, and HitRate@10 (K=10; also report @20). Compute a POPULARITY baseline (recommend the globally most-popular unseen items) and report the lift of CF over it. Write metrics.json with recall_at_10, ndcg_at_10, hit_rate_at_10, popularity_recall_at_10. Emit an insight stating Recall@10 and the lift over popularity."
+    intent: "Evaluate the held-out items against the top-N lists: compute Recall@10, NDCG@10, and HitRate@10 (K=10; also report @20). Compute a POPULARITY baseline (recommend the globally most-popular unseen items) and report the lift of CF over it. IMPORTANT: bind `recall_at_10` and `ndcg_at_10` as TOP-LEVEL float variables of exactly those names (the execution contract probes the kernel for them by name — a dict entry or metrics.json alone does NOT satisfy it). Also write metrics.json with recall_at_10, ndcg_at_10, hit_rate_at_10, popularity_recall_at_10. Emit an insight stating Recall@10 and the lift over popularity."
     worker_tier: T2
     depends_on: [fit_and_recommend]
     attached_skills: [implicit_cf_recommender]
