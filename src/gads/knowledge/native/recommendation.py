@@ -1,0 +1,167 @@
+"""
+GADS Native Recommendation Nodes
+
+Reusable, general-purpose collaborative-filtering primitives injected into the sandbox
+preamble. They mechanize the parts LLMs re-author (and get wrong) run-to-run — sparse
+matrix construction, temporal leave-one-out, ALS fit, top-N recommend, and top-N
+evaluation with CORRECT index alignment (the recommend-output ↔ holdout ↔ item-index
+bookkeeping that drove 0.129-vs-0.035 variance).
+
+Design: general primitives parameterized by column names / method / K, plus one
+orchestrator. Nothing here is dataset-specific or a patch for a single error case.
+
+Functions are annotation-free and self-contained (imports inside) so their source can be
+injected verbatim into the sandbox kernel via the preamble.
+"""
+
+
+def gads_build_interaction_matrix(df, user_col, item_col, rating_col=None, min_interactions=5):
+    """Build a sparse user x item CSR from an interaction log.
+
+    Iterative k-core filtering to `min_interactions` on both users and items, contiguous
+    index maps, binary implicit signal. Returns a `bundle` dict the other native rec
+    functions extend. General: works for any user-item interaction table.
+    """
+    import numpy as np
+    from scipy.sparse import csr_matrix
+
+    d = df.dropna(subset=[user_col, item_col]).copy()
+    d = d.drop_duplicates([user_col, item_col], keep="last")
+    while True:  # iterative k-core
+        n0 = len(d)
+        uc = d[user_col].value_counts()
+        d = d[d[user_col].isin(uc[uc >= min_interactions].index)]
+        ic = d[item_col].value_counts()
+        d = d[d[item_col].isin(ic[ic >= min_interactions].index)]
+        if len(d) == n0 or len(d) == 0:
+            break
+    if len(d) == 0:
+        raise ValueError(
+            f"[gads_build_interaction_matrix] empty {min_interactions}-core — the data is too "
+            f"sparse for collaborative filtering (try a denser dataset or lower min_interactions)."
+        )
+    users = {u: i for i, u in enumerate(d[user_col].unique())}
+    items = {it: j for j, it in enumerate(d[item_col].unique())}
+    d = d.assign(_u=d[user_col].map(users), _i=d[item_col].map(items))
+    matrix = csr_matrix((np.ones(len(d)), (d["_u"], d["_i"])), shape=(len(users), len(items)))
+    print(f"[gads_build_interaction_matrix] {len(d):,} interactions, {len(users):,} users x "
+          f"{len(items):,} items, density {len(d)/(len(users)*len(items)):.4%}")
+    return {"matrix": matrix, "user_index": users, "item_index": items, "df": d,
+            "user_col": user_col, "item_col": item_col, "rating_col": rating_col,
+            "n_users": len(users), "n_items": len(items)}
+
+
+def gads_temporal_loo_split(bundle, time_col=None, random_state=42):
+    """Temporal leave-one-out: hold out each user's most recent interaction (by
+    `time_col`; random if absent) for users with >= 2 interactions. Adds `train_matrix`
+    (binary) and `holdout` {user_idx: item_idx} to the bundle."""
+    import numpy as np
+    from scipy.sparse import csr_matrix
+
+    d = bundle["df"]
+    d = d.sort_values(time_col) if (time_col and time_col in d.columns) else d.sample(frac=1, random_state=random_state)
+    cnt = d.groupby("_u").size()
+    evaluable = cnt[cnt >= 2].index
+    last = d[d["_u"].isin(evaluable)].groupby("_u").tail(1)
+    holdout = {int(u): int(i) for u, i in zip(last["_u"], last["_i"])}
+    train = d.drop(last.index)
+    train_matrix = csr_matrix((np.ones(len(train)), (train["_u"], train["_i"])),
+                              shape=(bundle["n_users"], bundle["n_items"]))
+    print(f"[gads_temporal_loo_split] {len(holdout):,} evaluable users; train nnz={train_matrix.nnz:,}")
+    out = dict(bundle); out["train_matrix"] = train_matrix; out["holdout"] = holdout
+    return out
+
+
+def gads_fit_and_recommend(bundle, method="als", factors=64, iterations=15,
+                           regularization=0.05, alpha=40, N=20, random_state=42):
+    """Fit an implicit recommender and generate top-N per holdout user, excluding seen
+    items. `method='als'` uses implicit ALS (falls back to item-item cosine on
+    ImportError); `method='cosine'` forces cosine. Recommendations are index-aligned by
+    construction: recommend is called for np.arange(n_users) against the full train
+    matrix, so row u is user u's list. Adds `recommendations` + `model_name`."""
+    import numpy as np
+
+    train = bundle["train_matrix"]
+    n_users = bundle["n_users"]
+    holdout_users = list(bundle["holdout"].keys())
+    topn = None
+    model_name = None
+
+    if method == "als":
+        try:
+            from implicit.als import AlternatingLeastSquares
+            model = AlternatingLeastSquares(factors=factors, regularization=regularization,
+                                            iterations=iterations, random_state=random_state)
+            model.fit((train * alpha).astype("float32"), show_progress=False)  # confidence-weighted
+            ids, _ = model.recommend(np.arange(n_users), train, N=N, filter_already_liked_items=True)
+            topn = {u: [int(x) for x in ids[u]] for u in holdout_users}
+            model_name = "implicit-ALS"
+        except ImportError:
+            print("[gads_fit_and_recommend] `implicit` not installed — falling back to item-item cosine")
+            method = "cosine"
+
+    if topn is None:
+        from sklearn.metrics.pairwise import cosine_similarity
+        sim = cosine_similarity(train.T, dense_output=False)     # item x item
+        scores = (train @ sim).toarray()                         # user x item
+        scores[train.nonzero()] = -np.inf                        # exclude seen
+        order = np.argsort(-scores, axis=1)[:, :N]
+        topn = {u: [int(x) for x in order[u]] for u in holdout_users}
+        model_name = "item-item-cosine"
+
+    print(f"[gads_fit_and_recommend] model={model_name}, top-{N} for {len(topn):,} users")
+    out = dict(bundle); out["recommendations"] = topn; out["model_name"] = model_name
+    return out
+
+
+def gads_evaluate_topn(bundle, k_values=(10, 20), write_metrics=True):
+    """Recall@K / NDCG@K / HitRate@K over the held-out items vs a most-popular baseline.
+    Correct alignment: recommendations and holdout are both in the item-index space.
+    Writes metrics.json and returns a flat metrics dict (recall_at_10, ndcg_at_10, ...)."""
+    import numpy as np, json
+
+    holdout = bundle["holdout"]
+    topn = bundle["recommendations"]
+    train = bundle["train_matrix"]
+    n = len(holdout)
+    pop = np.asarray(train.sum(axis=0)).ravel().argsort()[::-1]  # most-popular item indices
+
+    metrics = {}
+    for k in k_values:
+        hits = 0
+        ndcg = 0.0
+        for u, true_i in holdout.items():
+            rec = topn.get(u, [])[:k]
+            if true_i in rec:
+                hits += 1
+                ndcg += 1.0 / np.log2(rec.index(true_i) + 2)
+        pop_k = set(int(x) for x in pop[:k])
+        metrics[f"recall_at_{k}"] = hits / n if n else 0.0
+        metrics[f"ndcg_at_{k}"] = ndcg / n if n else 0.0
+        metrics[f"hit_rate_at_{k}"] = hits / n if n else 0.0
+        metrics[f"popularity_recall_at_{k}"] = float(np.mean([i in pop_k for i in holdout.values()])) if n else 0.0
+
+    r10, p10 = metrics.get("recall_at_10"), metrics.get("popularity_recall_at_10")
+    if r10 is not None and p10 is not None:
+        metrics["lift_over_popularity"] = (r10 / p10) if p10 > 0 else float("inf")
+    metrics["n_users_evaluated"] = n
+
+    if write_metrics:
+        with open("metrics.json", "w") as f:
+            json.dump({k: v for k, v in metrics.items() if isinstance(v, (int, float))}, f, indent=2)
+    print("[gads_evaluate_topn] " + "  ".join(
+        f"{k}={v:.4f}" for k, v in metrics.items() if isinstance(v, float)))
+    return metrics
+
+
+def gads_recommend_and_evaluate(df, user_col, item_col, rating_col=None, time_col=None,
+                                method="als", N=20, k_values=(10, 20), min_interactions=5):
+    """One-call CF pipeline: build -> temporal LOO -> fit+recommend -> evaluate. Returns
+    {metrics, recommendations, bundle}. The mechanical core (esp. index alignment) is
+    deterministic, so the result no longer varies with how the surrounding code is written."""
+    b = gads_build_interaction_matrix(df, user_col, item_col, rating_col=rating_col,
+                                      min_interactions=min_interactions)
+    b = gads_temporal_loo_split(b, time_col=time_col)
+    b = gads_fit_and_recommend(b, method=method, N=N)
+    metrics = gads_evaluate_topn(b, k_values=k_values)
+    return {"metrics": metrics, "recommendations": b["recommendations"], "bundle": b}

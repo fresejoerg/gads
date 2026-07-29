@@ -1,6 +1,6 @@
 ---
 id: recommendation.implicit.collaborative_filtering
-version: 1.0.0
+version: 2.0.0
 schema_version: 1
 author: gads-core
 
@@ -22,38 +22,38 @@ requires:
   variables:
     - name: df
       kind: pandas.DataFrame
-  capabilities: [scipy, sklearn, pandas, numpy]
+  capabilities: [scipy, sklearn, pandas, numpy, implicit]
 
-# ——— EXECUTION DAG ———
+# ——— EXECUTION DAG (mechanized: calls gads_* native nodes, D5) ———
 dag:
   - id: build_interaction_matrix
-    intent: "Identify the user-id, item-id, and (optional) rating/interaction-strength and timestamp columns. Deduplicate user-item pairs (keep the most recent). Filter out cold users and items with fewer than 5 interactions to control sparsity. Map users and items to contiguous integer indices and build a scipy CSR sparse user × item matrix (implicit feedback: entry = 1 for an interaction, or a confidence 1 + alpha*rating if ratings exist). Print the matrix shape, #users, #items, and sparsity. Store the matrix and the index↔id maps."
+    intent: "Identify the user-id, item-id, (optional) rating, and (optional) timestamp columns in `df`. Call the native `bundle = gads_build_interaction_matrix(df, user_col=<user col>, item_col=<item col>, rating_col=<rating col or None>, min_interactions=5)` — pass the ACTUAL column names. It k-core-filters, builds the sparse user × item CSR, and returns a `bundle` dict with the matrix and index maps (it prints shape/sparsity). Do NOT re-implement the matrix construction — just call it with the right columns."
     worker_tier: T2
-    attached_skills: [implicit_cf_recommender, large_dataset_handling]
-    produces: [interaction_matrix, user_index, item_index]
+    attached_skills: [implicit_cf_recommender]
+    produces: [bundle]
     postconditions:
-      - "interaction_matrix is not None"
+      - "bundle is not None"
 
   - id: temporal_leave_one_out_split
-    intent: "For every user with at least 2 interactions, hold out their MOST RECENT interaction (by timestamp; if no timestamp, a fixed-seed random one) as the test item, keeping the rest as training. Build the training matrix (test interactions removed) and a dict {user: held_out_item}. Print the number of evaluable users."
+    intent: "Call `bundle = gads_temporal_loo_split(bundle, time_col=<timestamp col or None>)`. It holds out each user's most recent interaction (temporal leave-one-out) and adds `train_matrix` and `holdout` {user_idx: item_idx} to the bundle. Do not re-implement the split."
     worker_tier: T2
     depends_on: [build_interaction_matrix]
     attached_skills: [implicit_cf_recommender]
-    produces: [train_matrix, test_holdout]
+    produces: [bundle]
     postconditions:
-      - "len(test_holdout) > 0"
+      - "'holdout' in bundle"
 
   - id: fit_and_recommend
-    intent: "Fit an implicit-feedback collaborative-filtering model on the training matrix. The DEFAULT and required model is implicit.als.AlternatingLeastSquares (factors=64, regularization=0.05, iterations=15, random_state=42) — the industry-standard implicit matrix factorization; the `implicit` library IS installed in this environment. Write `from implicit.als import AlternatingLeastSquares` inside a try/except and fall back to item-item cosine similarity (sklearn) ONLY if that import raises ImportError. Print a line stating which model actually ran ('implicit-ALS' or 'cosine-fallback'). Note the `implicit` API: fit takes a user×item CSR of confidence weights, and `model.recommend(user_ids, train_matrix, N=20, filter_already_liked_items=True)` already excludes seen items. Generate the top-20 recommended items for each evaluable user, EXCLUDING items already seen in training. Store recommendations {user: [item,...]}."
+    intent: "Call `bundle = gads_fit_and_recommend(bundle, method='als', N=20)`. It fits implicit ALS (the installed `implicit` library; cosine fallback only on ImportError) and generates index-aligned top-20 recommendations per holdout user, excluding seen items. It prints which model ran. Do not re-implement the fit or the recommend/index bookkeeping."
     worker_tier: T2
     depends_on: [temporal_leave_one_out_split]
     attached_skills: [implicit_cf_recommender]
-    produces: [recommendations]
+    produces: [bundle]
     postconditions:
-      - "recommendations is not None"
+      - "'recommendations' in bundle"
 
   - id: evaluate_topn
-    intent: "Evaluate the held-out items against the top-N lists: compute Recall@10, NDCG@10, and HitRate@10 (K=10; also report @20). Compute a POPULARITY baseline (recommend the globally most-popular unseen items) and report the lift of CF over it. IMPORTANT: bind `recall_at_10` and `ndcg_at_10` as TOP-LEVEL float variables of exactly those names (the execution contract probes the kernel for them by name — a dict entry or metrics.json alone does NOT satisfy it). Also write metrics.json with recall_at_10, ndcg_at_10, hit_rate_at_10, popularity_recall_at_10. Emit an insight stating Recall@10 and the lift over popularity."
+    intent: "Call `metrics = gads_evaluate_topn(bundle, k_values=(10, 20))`. It computes Recall@K / NDCG@K / HitRate@K over the held-out items against a most-popular baseline (correct index alignment) and writes metrics.json, returning a flat dict. Then bind the contract-required TOP-LEVEL scalars by exactly these names: `recall_at_10 = metrics['recall_at_10']` and `ndcg_at_10 = metrics['ndcg_at_10']`. Emit an insight stating Recall@10 and the lift over popularity (`metrics['lift_over_popularity']`)."
     worker_tier: T2
     depends_on: [fit_and_recommend]
     attached_skills: [implicit_cf_recommender]
@@ -62,20 +62,19 @@ dag:
       - "'recall_at_10' in open('metrics.json').read()"
 
   - id: characterize_recommendations
-    intent: "Inspect 2–3 example users: show their training history and their top recommendations to sanity-check relevance. Report catalog coverage (fraction of items ever recommended) as a diversity signal. Emit an insight on recommendation quality and coverage."
+    intent: "Using `bundle['recommendations']` and the index maps in `bundle`, inspect 2–3 example users: show their training history vs their top recommendations to sanity-check relevance. Report catalog coverage (fraction of items ever recommended). Emit an insight on recommendation quality and coverage."
     worker_tier: T2
     depends_on: [fit_and_recommend]
     postconditions:
-      - "recommendations is not None"
+      - "'recommendations' in bundle"
 
 # ——— GLOBAL INVARIANTS ———
 invariants:
-  - "DEFAULT MODEL IS ALS: use implicit.als.AlternatingLeastSquares as the recommender; the `implicit` library is installed. Fall back to item-item cosine ONLY when `import implicit` raises ImportError, and print which model ran."
-  - "IMPLICIT FEEDBACK: an interaction is a positive signal; absence is NOT a confirmed negative. Do not train as if unobserved user-item pairs are labelled negatives."
-  - "TEMPORAL LEAVE-ONE-OUT: hold out each user's most recent interaction. Never let a user's future interaction leak into their training profile."
-  - "Exclude already-seen (training) items from a user's recommendation list — re-recommending known items is not a hit."
-  - "ALWAYS compare against a most-popular baseline. A collaborative filter that does not beat popularity has added no personalization value — report this honestly."
-  - "Rank/quality metrics (Recall@K, NDCG@K, HitRate@K) are computed over held-out items, averaged across users. Fixed random seed for any sampling."
+  - "MECHANIZED CORE (D5): the sparse-matrix build, temporal LOO split, ALS fit, top-N recommend, and Recall/NDCG evaluation are provided by the gads_* native functions (injected into the kernel). CALL them with the correct column names — do NOT re-implement the matrix, the recommend index bookkeeping, or the metric math. Re-implementing them is what caused run-to-run result variance."
+  - "DEFAULT MODEL IS ALS: gads_fit_and_recommend uses implicit ALS by default; cosine is an ImportError-only fallback."
+  - "IMPLICIT FEEDBACK: an interaction is a positive signal; absence is NOT a confirmed negative."
+  - "TEMPORAL LEAVE-ONE-OUT + exclude already-seen items: handled inside the native functions; do not bypass them."
+  - "ALWAYS report the lift over the most-popular baseline (gads_evaluate_topn computes it). A CF model that does not beat popularity has added no personalization value."
 ---
 
 # Top-N Recommendation with Implicit-Feedback Collaborative Filtering

@@ -633,8 +633,21 @@ class ExecutionManager:
                     except Exception as _e:
                         print(f"    [Executor] Warning: Could not load causal preamble: {_e}", flush=True)
 
+                # Inject recommendation native node preamble when CF/recommender APIs are referenced
+                _rec_preamble = ""
+                if any(kw in current_code for kw in ["gads_recommend_and_evaluate", "gads_build_interaction_matrix",
+                                                       "gads_fit_and_recommend", "gads_evaluate_topn",
+                                                       "gads_temporal_loo_split", "AlternatingLeastSquares",
+                                                       "implicit.als"]):
+                    try:
+                        from gads.knowledge.native import RECOMMENDATION_PREAMBLE
+                        _rec_preamble = RECOMMENDATION_PREAMBLE + "\n"
+                        print(f"    [Executor] Injecting recommendation native node preamble", flush=True)
+                    except Exception as _e:
+                        print(f"    [Executor] Warning: Could not load recommendation preamble: {_e}", flush=True)
+
                 # Wrap code with telemetry hooks
-                telemetry_preamble = _autogluon_preamble + _causal_preamble + """
+                telemetry_preamble = _autogluon_preamble + _causal_preamble + _rec_preamble + """
 if '_gads_insights' not in globals(): _gads_insights = []
 def gads_emit_insight(artifact, insight, evidence=""):
     _gads_insights.append({"artifact": artifact, "insight": insight, "evidence": evidence})

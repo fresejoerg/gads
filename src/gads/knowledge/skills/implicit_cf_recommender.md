@@ -5,6 +5,33 @@ triggers: ["recommendation", "recommender", "collaborative filtering", "implicit
 ---
 # Implicit-Feedback Collaborative Filtering
 
+## Preferred: call the native functions (deterministic, index-correct)
+The mechanical core is injected into the kernel as `gads_*` functions — **call them**
+instead of hand-writing the sparse matrix, ALS fit, `recommend`, or the Recall/NDCG
+index bookkeeping (re-implementing those is what makes results vary run to run).
+
+```python
+result = gads_recommend_and_evaluate(
+    df, user_col="user_id", item_col="item_id",
+    rating_col="rating", time_col="timestamp",   # None if absent
+    method="als", N=20, k_values=(10, 20), min_interactions=5)
+metrics = result["metrics"]                       # writes metrics.json for you
+recall_at_10 = metrics["recall_at_10"]            # bind top-level scalars (contract)
+ndcg_at_10 = metrics["ndcg_at_10"]
+```
+
+Or step-by-step (same functions, when you need the intermediate `bundle`):
+`bundle = gads_build_interaction_matrix(df, user_col, item_col, rating_col=..., min_interactions=5)`
+→ `bundle = gads_temporal_loo_split(bundle, time_col=...)`
+→ `bundle = gads_fit_and_recommend(bundle, method="als", N=20)`
+→ `metrics = gads_evaluate_topn(bundle, k_values=(10,20))`.
+`bundle["recommendations"]` (`{user_idx: [item_idx,...]}`) drives the characterization step.
+
+The reference implementation below is what those functions do — use it only if the native
+helpers are unavailable.
+
+---
+
 Prefer **ALS** from the `implicit` library (the industry-standard implicit MF); fall back
 to scipy-sparse + sklearn **item-item cosine** (or TruncatedSVD) when it isn't installed.
 

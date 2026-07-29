@@ -17,6 +17,8 @@ from typing import Callable, Dict
 # Import all native modules — functions are registered at module level
 from .ml import gads_automl_fit, gads_automl_predict, gads_timeseries_fit, gads_timeseries_predict, gads_calibrate_threshold
 from .causal import gads_causal_estimate_ate, gads_causal_bayesian_ate
+from .recommendation import (gads_build_interaction_matrix, gads_temporal_loo_split,
+                             gads_fit_and_recommend, gads_evaluate_topn, gads_recommend_and_evaluate)
 
 NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_automl_fit": gads_automl_fit,
@@ -26,6 +28,11 @@ NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_calibrate_threshold": gads_calibrate_threshold,
     "gads_causal_estimate_ate": gads_causal_estimate_ate,
     "gads_causal_bayesian_ate": gads_causal_bayesian_ate,
+    "gads_build_interaction_matrix": gads_build_interaction_matrix,
+    "gads_temporal_loo_split": gads_temporal_loo_split,
+    "gads_fit_and_recommend": gads_fit_and_recommend,
+    "gads_evaluate_topn": gads_evaluate_topn,
+    "gads_recommend_and_evaluate": gads_recommend_and_evaluate,
 }
 
 # Preamble injected into every sandbox execution when AutoGluon recipes are active.
@@ -392,3 +399,21 @@ def gads_causal_bayesian_ate(df, treatment_col, outcome_col, confounder_cols, ma
     return {"ate": ate, "hdi_lower": hdi_lower, "hdi_upper": hdi_upper,
             "p_positive": p_positive, "idata": idata, "treatment_col": actual_treatment_col}
 '''
+
+
+# Preamble injected when recommendation / collaborative-filtering keywords are detected.
+# Built from the recommendation module source (single source of truth — no duplicated copy)
+# so the injected functions can never drift from the importable/testable definitions.
+import inspect as _inspect
+from . import recommendation as _rec_mod
+
+RECOMMENDATION_PREAMBLE = (
+    "import warnings as _w_rec\n_w_rec.filterwarnings('ignore')\n\n"
+    + "\n\n".join(_inspect.getsource(_fn) for _fn in (
+        _rec_mod.gads_build_interaction_matrix,
+        _rec_mod.gads_temporal_loo_split,
+        _rec_mod.gads_fit_and_recommend,
+        _rec_mod.gads_evaluate_topn,
+        _rec_mod.gads_recommend_and_evaluate,
+    ))
+)
