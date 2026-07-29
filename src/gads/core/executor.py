@@ -646,8 +646,18 @@ class ExecutionManager:
                     except Exception as _e:
                         print(f"    [Executor] Warning: Could not load recommendation preamble: {_e}", flush=True)
 
+                # Inject model-audit native node preamble when the skore audit is referenced
+                _audit_preamble = ""
+                if any(kw in current_code for kw in ["gads_audit_model", "EstimatorReport", "skore"]):
+                    try:
+                        from gads.knowledge.native import MODEL_AUDIT_PREAMBLE
+                        _audit_preamble = MODEL_AUDIT_PREAMBLE + "\n"
+                        print(f"    [Executor] Injecting model-audit native node preamble", flush=True)
+                    except Exception as _e:
+                        print(f"    [Executor] Warning: Could not load model-audit preamble: {_e}", flush=True)
+
                 # Wrap code with telemetry hooks
-                telemetry_preamble = _autogluon_preamble + _causal_preamble + _rec_preamble + """
+                telemetry_preamble = _autogluon_preamble + _causal_preamble + _rec_preamble + _audit_preamble + """
 if '_gads_insights' not in globals(): _gads_insights = []
 def gads_emit_insight(artifact, insight, evidence=""):
     _gads_insights.append({"artifact": artifact, "insight": insight, "evidence": evidence})

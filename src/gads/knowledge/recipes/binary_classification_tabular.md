@@ -1,6 +1,6 @@
 ---
 id: binary_classification.tabular.standard
-version: 1.1.0
+version: 1.2.0
 schema_version: 1
 author: gads-core
 
@@ -19,7 +19,7 @@ requires:
   variables:
     - name: df
       kind: pandas.DataFrame
-  capabilities: [sklearn, pandas, matplotlib]
+  capabilities: [sklearn, pandas, matplotlib, skore]
 
 # ——— DAG TEMPLATE ———
 dag:
@@ -57,6 +57,15 @@ dag:
     postconditions:
       - "baseline_auc > 0.5"
 
+  - id: methodological_audit
+    intent: "Run the native methodological-soundness audit on the fitted baseline: `audit = gads_audit_model(baseline_model, X_train=X_train, y_train=y_train, X_test=X_test, y_test=y_test)`. This wraps skore's EstimatorReport to check for leakage, over/under-fitting, class imbalance, worse-than-baseline performance, and low-value features; it writes `model_checks.json` and emits one insight per flagged issue. Do NOT re-implement these checks — just call the native function on the model already trained. Report the number of issues found and summarize each issue in an insight."
+    depends_on: [train_baseline_model]
+    worker_tier: T2
+    produces: [audit]
+    attached_skills: [model_audit]
+    postconditions:
+      - "'issues' in audit"
+
   - id: confusion_matrix_plot
     intent: "Apply the calibrated threshold to produce label-dtype-safe predictions on the test split, then generate and save a confusion-matrix figure plus a short plain-language reading of the error trade-off."
     depends_on: [train_baseline_model]
@@ -72,6 +81,7 @@ invariants:
   - "CLASS WEIGHTS: always set class_weight='balanced' in sklearn classifiers (LogisticRegression, RandomForestClassifier, HistGradientBoostingClassifier) to safeguard against class imbalance."
   - "THRESHOLD CALIBRATION: always calibrate the decision threshold with gads_calibrate_threshold(y_true, y_prob, metric='f1') before generating predictions, confusion matrices, or F1/accuracy metrics."
   - "BASELINE FIRST: establish and report the logistic-regression baseline before any more complex model is considered."
+  - "METHODOLOGICAL AUDIT (native): the fitted model must be passed through gads_audit_model (skore EstimatorReport) — do NOT hand-roll leakage/overfit/baseline checks. The audit writes model_checks.json; its issue-severity findings are ground-truth evidence for whether the analysis is methodologically sound."
 ---
 
 # Standard Binary Classification for Tabular Data (interpretable baseline)
