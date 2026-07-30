@@ -70,7 +70,10 @@ def gads_audit_model(estimator, X_train=None, y_train=None, X_test=None, y_test=
 
         report = EstimatorReport(estimator, X_train=X_train, y_train=y_train,
                                  X_test=X_test, y_test=y_test)
-        result["ml_task"] = str(getattr(report, "ml_task", None))
+        try:
+            result["ml_task"] = str(report.ml_task)
+        except Exception:
+            result["ml_task"] = None
 
         # --- Automated methodological checks ---
         cf = report.checks.summarize().frame()

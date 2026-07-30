@@ -43,10 +43,13 @@ class CodeValidator:
                 if node.module and node.module.split('.')[0] in CodeValidator.BLACKLISTED_MODULES:
                     return f"Security Error: From-Import of '{node.module}' is not allowed."
             
-            # 2. Security: Block dangerous calls (Allow 'open' for DS work)
+            # 2. Security: Block code-execution primitives. NOTE: getattr/setattr are
+            # deliberately allowed — attribute access (e.g. getattr(model, 'coef_')) is
+            # idiomatic in sklearn/DS code and blocking it spuriously fails local-model
+            # ML tasks. eval/exec/compile remain blocked. 'open' is allowed for DS work.
             if isinstance(node, ast.Call):
                 if isinstance(node.func, ast.Name):
-                    if node.func.id in {"eval", "exec", "compile", "getattr", "setattr"}:
+                    if node.func.id in {"eval", "exec", "compile"}:
                         return f"Security Error: Use of '{node.func.id}' is not allowed."
                 elif isinstance(node.func, ast.Attribute):
                     if node.func.attr in {"system", "popen"}:
