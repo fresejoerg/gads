@@ -49,7 +49,7 @@ dag:
       - "abs(pd.Series(y_train).value_counts(normalize=True).max() - pd.Series(y_test).value_counts(normalize=True).max()) < 0.05"
 
   - id: train_baseline_model
-    intent: "Train a Logistic Regression baseline with class_weight='balanced' on the training split. Evaluate on the test split with ROC-AUC (store as `baseline_auc`). Calibrate the decision threshold on the test probabilities with gads_calibrate_threshold(y_test, y_prob) and store `best_threshold`. Report the top coefficients by absolute value — interpretability is the reason this recipe exists."
+    intent: "Train a Logistic Regression baseline with class_weight='balanced' on the training split. Evaluate on the test split with ROC-AUC (store as `baseline_auc`). Calibrate the decision threshold on the test probabilities with gads_calibrate_threshold(y_test, y_prob) and store `best_threshold`. Report the top coefficients by absolute value — interpretability is the reason this recipe exists. IMPORTANT: `predict_proba` returns a NumPy array, not a DataFrame — take the positive-class column positionally with `y_prob = model.predict_proba(X_test)[:, 1]` (NEVER `.iloc[:, 1]`, which raises 'numpy.ndarray object has no attribute iloc')."
     depends_on: [stratified_split]
     worker_tier: T2
     produces: [baseline_model, baseline_auc, best_threshold]

@@ -50,3 +50,18 @@ log_loss = _log_loss_fn(y_test, y_proba, labels=model.classes_)
 Alias the `log_loss` import when the contract requires a variable named `log_loss`.
 Do NOT wrap metric computation in try/except — errors must propagate so the task can retry.
 Use `random_state=42` everywhere.
+
+## sklearn returns numpy arrays, not DataFrames — never call `.iloc` on them
+
+`model.predict_proba(...)`, `model.predict(...)`, and any `ColumnTransformer` /
+`Pipeline` / scaler `.fit_transform(...)` return **numpy arrays** (or scipy sparse
+matrices), which have NO `.iloc`. Index them positionally:
+
+```python
+proba = model.predict_proba(X_test)     # numpy array (n, k)
+y_prob = proba[:, 1]                     # positive-class column — NOT proba.iloc[:, 1]
+```
+
+`X_train`/`X_test` are also arrays after `fit_transform`; if you need column names for
+coefficient interpretation, capture them BEFORE transforming (e.g.
+`preprocessor.get_feature_names_out()`) rather than assuming a DataFrame survives.
