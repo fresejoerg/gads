@@ -1827,7 +1827,8 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                             stdout_callback=stream_stdout_callback,
                             stream_callback=stream_reasoning_callback,
                             cancel_check=is_cancelled,
-                            state_summary=state_summary_str
+                            state_summary=state_summary_str,
+                            recipe_id=(knowledge_report.recipe_id if knowledge_report else None),
                         )
                     finally:
                         _hb_task.cancel()

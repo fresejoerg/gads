@@ -16,6 +16,7 @@ class CoderInput(BaseModel):
     authoritative_state: Dict[str, Any] = {} # Ground truth from the kernel
     previous_code: Optional[str] = None
     error_feedback: Optional[str] = None
+    common_pitfalls: Optional[str] = None  # recurring errors this recipe step hit in past runs
     skills_context: Optional[str] = None
     task_id: Optional[str] = None
     postcondition_contract: Optional[Dict[str, Any]] = None
@@ -90,6 +91,35 @@ class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
                 "KERNEL MEMORY — these DataFrames are ALREADY LOADED. "
                 "Use them directly. DO NOT call pd.read_csv() or reload from disk:\n"
                 + "\n".join(kernel_warnings) + "\n\n"
+            )
+
+        # RETRY FEEDBACK: on a re-attempt, show the model its own failed code and the
+        # exact error so it can CORRECT the mistake instead of blindly re-generating.
+        # (The executor supplies previous_code/error_feedback; without this block they
+        # were silently discarded, so local-model retries repeated the same error.)
+        # First-attempt prior from the cross-run error ledger: recurring structural errors
+        # this exact recipe step has produced in the past. Surface them up front so the
+        # model can avoid a known dead end on its FIRST try (not just react after failing).
+        if input_data.common_pitfalls:
+            user_content += (
+                "## COMMON PITFALLS FOR THIS STEP (from past runs — avoid these)\n"
+                "This recipe step has repeatedly failed in earlier runs with the error(s) "
+                "below. Write code that does NOT hit them:\n\n"
+                f"{input_data.common_pitfalls}\n\n"
+            )
+
+        if input_data.error_feedback:
+            # Feed back the ERROR(S) only — not the previous code. The error is the signal
+            # that nudges the model toward a different approach; re-showing its own failed
+            # code tends to anchor it on the same structure. The executor accumulates every
+            # prior attempt's error here (most recent last), so the model can steer clear of
+            # all the dead ends it has already hit.
+            user_content += (
+                "## PREVIOUS ATTEMPTS FOR THIS TASK FAILED\n"
+                "Your earlier code for THIS task raised the error(s) below (most recent last). "
+                "Diagnose the root cause and take a genuinely DIFFERENT approach — do not repeat "
+                "what has already failed:\n\n"
+                f"{input_data.error_feedback}\n\n"
             )
 
         # RAW CODE MODE for local models: forcing a small model to escape an

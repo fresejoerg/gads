@@ -12,6 +12,9 @@ from gads.core.database import engine
 from gads.core.bus import bus
 from gads.core.runtime_oracle import RuntimeOracle
 from gads.core.handover import HandoverManager
+from gads.core.error_ledger import (
+    normalize_error_reason, record_error, record_resolution, common_pitfalls,
+)
 from sqlmodel import Session
 
 def _sanitize_code(code: str) -> str:
@@ -443,16 +446,34 @@ class ExecutionManager:
         stdout_callback = None,
         stream_callback = None,
         cancel_check = None,
-        state_summary: Optional[str] = None
+        state_summary: Optional[str] = None,
+        recipe_id: Optional[str] = None,
+        recipe_version: Optional[str] = None
     ) -> Tuple[ExecutionResult, str]:
         """
         Runs the full loop with State Introspection. 
         Does NOT handle DB persistence (caller must do that).
         """
-        max_retries = 2
+        # Adaptive retry policy: keep retrying (up to `max_attempts`) as long as each
+        # failure is for a DIFFERENT reason — evidence the model is self-correcting on the
+        # accumulated error feedback. Stop as soon as the SAME reason recurs: a repeated
+        # error means the model is stuck, not progressing, so further re-rolls only waste
+        # time. ALL prior errors are fed back each attempt (the error text alone, not the
+        # code — the error is the signal that nudges a different approach).
+        max_attempts = 10
         retry_count = 0
         error_feedback = None
         previous_code = ""
+        error_history = []           # one human-readable error string per failed attempt
+        error_reason_counts = {}     # normalized reason -> count (a reason seen twice => stop)
+
+        # First-attempt prior: recurring structural failures this recipe step has hit in
+        # PAST runs (from the cross-run error ledger), injected so the model can preempt
+        # known dead ends before it makes them. None if off-recipe or nothing recurs yet.
+        pitfalls_prior = common_pitfalls(recipe_id, task_description)
+        if pitfalls_prior:
+            print(f"    [Executor] Injecting {pitfalls_prior.count(chr(10)) + 1} known "
+                  f"pitfall(s) for this recipe step (from error ledger)", flush=True)
 
         # Buffer for reasoning debouncing
         reasoning_buffer = []
@@ -502,7 +523,7 @@ class ExecutionManager:
                         
                         await stdout_callback(cleaned_text)
 
-        while retry_count <= max_retries:
+        while retry_count < max_attempts:
             print(f"    [Executor] --- Step {retry_count + 1} for: {task_description[:30]}... ---", flush=True)
             
             try:
@@ -546,6 +567,7 @@ class ExecutionManager:
                         authoritative_state=self.authoritative_state,
                         previous_code=previous_code,
                         error_feedback=error_feedback,
+                        common_pitfalls=(pitfalls_prior if retry_count == 0 else None),
                         skills_context=skills_context,
                         task_id=str(task_id) if task_id else None,
                         postcondition_contract=contract,
@@ -739,13 +761,18 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                     if exec_result.kernel_state:
                         self.authoritative_state.update(exec_result.kernel_state)
                         print(f"    [Executor] Memory updated. Total variables: {len(self.authoritative_state)}", flush=True)
+                    # Step succeeded after ≥1 failure → record that its prior errors were
+                    # recoverable (distinguishes recurring-but-fixable from hard dead ends).
+                    if error_history:
+                        record_resolution(recipe_id, recipe_version, task_description,
+                                           coder_res.model_used)
                     return exec_result, coder_res.model_used
                 else:
                     ename = exec_result.error.get("ename", "Error")
                     evalue = exec_result.error.get("evalue", "Unknown error")
                     print(f"    [Executor] ❌ Failure: {ename} - {evalue}", flush=True)
 
-                    error_feedback = f"{ename}: {evalue}"
+                    attempt_msg = f"{ename}: {evalue}"
 
                     # Enrich KeyError feedback with schema hints when columns are missing
                     # from the DataFrame being operated on but exist in a known parquet file.
@@ -758,7 +785,7 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                             if found:
                                 hints.append(f"  - '{fname}' contains columns: {found}")
                         if hints:
-                            error_feedback += (
+                            attempt_msg += (
                                 "\n\nHINT: The missing columns exist in separate parquet files. "
                                 "You MUST load each parquet file and merge on 'id' before selecting these columns:\n"
                                 + "\n".join(hints)
@@ -766,7 +793,28 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                             )
                             print(f"    [Executor] Added schema hints for {len(hints)} parquet file(s)", flush=True)
 
+                    # Record this attempt and rebuild the cumulative feedback: the Coder
+                    # sees EVERY prior error (most recent last), so it can avoid all the
+                    # dead ends it has already hit, not just the latest one.
+                    error_history.append(attempt_msg)
+                    error_feedback = "\n".join(
+                        f"  Attempt {i + 1} — {m}" for i, m in enumerate(error_history)
+                    )
                     previous_code = current_code
+
+                    # Persist to the cross-run error ledger (recipe-scoped, structural only)
+                    # so this failure informs future first-attempt priors + hardening.
+                    record_error(recipe_id, recipe_version, task_description, ename, evalue,
+                                 self.coder.model)
+
+                    # Same-reason guard: if this failure reason has now occurred twice, the
+                    # model is looping rather than progressing — stop retrying this task.
+                    reason = normalize_error_reason(ename, evalue)
+                    error_reason_counts[reason] = error_reason_counts.get(reason, 0) + 1
+                    if error_reason_counts[reason] >= 2:
+                        print(f"    [Executor] 🛑 Same failure reason twice ({ename}) — "
+                              f"stopping retries after {retry_count + 1} attempt(s); no progress.", flush=True)
+                        break
                     retry_count += 1
 
             except asyncio.TimeoutError:
