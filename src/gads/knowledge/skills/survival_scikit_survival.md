@@ -51,6 +51,13 @@ from sksurv.linear_model import CoxPHSurvivalAnalysis     # linear, interpretabl
 `model.predict(X)` → a **risk score** (higher = higher risk / earlier event).
 `model.predict_survival_function(X)` → per-row step functions (`fn(t)` = P(survive past t)).
 
+To visualize representative risk profiles, PREFER the native (it picks low/median/high-risk
+subjects, plots their survival curves, saves the figure + `risk_profiles.json`, and emits an
+insight — no manual time grid needed):
+```python
+profiles = gads_plot_survival_curves(surv_model, X_test, n_profiles=3)
+```
+
 ## 5. Evaluate with the native `gads_evaluate_survival` — DO NOT hand-roll metrics
 ```python
 metrics = gads_evaluate_survival(model, X_train, y_train, X_test, y_test)

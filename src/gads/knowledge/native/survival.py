@@ -320,6 +320,89 @@ def gads_evaluate_survival(model, X_train, y_train, X_test, y_test, times=None,
         return result
 
 
+def gads_plot_survival_curves(model, X_test, n_profiles=3, fig_path="survival_curves.png",
+                              write_path="risk_profiles.json", emit_insights=True):
+    """Plot predicted survival curves for representative risk profiles, deterministically.
+
+    Ranks the test subjects by the model's risk score, selects `n_profiles` spread evenly
+    across that ranking (lowest → highest risk), and plots each one's predicted survival
+    curve on a single axis. Saves the figure + `risk_profiles.json`, prints a digest, and
+    emits a risk-spread insight. Returns {profiles, risk_min, risk_max, fig_path}. Fail-open.
+
+    Exists because assembling predict_survival_function + a time grid + a multi-series plot
+    is a reliable codegen failure on small models (undefined time grids, StepFunction
+    misuse, plotting-boilerplate typos); one primitive removes that whole class of error.
+    """
+    import json
+    import numpy as np
+
+    result = {"profiles": [], "risk_min": None, "risk_max": None,
+              "fig_path": fig_path, "profiles_path": write_path}
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except Exception as e:
+        print(f"[gads_plot_survival_curves] matplotlib unavailable ({e}); skipping")
+        result["error"] = f"matplotlib unavailable: {e}"
+        return result
+
+    try:
+        risk = np.asarray(model.predict(X_test))
+        n = len(risk)
+        order = np.argsort(risk)  # ascending: lowest risk first
+        k = int(min(max(1, n_profiles), n))
+        picks = np.unique(np.linspace(0, n - 1, k).astype(int))
+        pct = np.linspace(0, 100, len(picks)).astype(int)
+
+        surv_fns = model.predict_survival_function(X_test)
+        fig, ax = plt.subplots(figsize=(8, 5))
+        for rank_pos, p in zip(picks, pct):
+            idx = int(order[rank_pos])
+            fn = surv_fns[idx]
+            label = f"{p}th pct risk (score={risk[idx]:.2f})"
+            try:
+                ax.step(fn.x, fn.y, where="post", label=label)
+            except Exception:
+                # Fallback: sample the callable over the observed domain.
+                xs = np.linspace(float(np.min(fn.x)), float(np.max(fn.x)), 100)
+                ax.step(xs, [float(fn(t)) for t in xs], where="post", label=label)
+            result["profiles"].append({"risk_percentile": int(p),
+                                       "risk_score": float(risk[idx])})
+        ax.set_xlabel("time")
+        ax.set_ylabel("predicted survival probability")
+        ax.set_ylim(0, 1.02)
+        ax.set_title("Predicted survival curves by risk profile")
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(fig_path, dpi=110, bbox_inches="tight")
+        plt.close(fig)
+
+        result["risk_min"] = float(risk.min())
+        result["risk_max"] = float(risk.max())
+        with open(write_path, "w") as f:
+            json.dump({k2: v for k2, v in result.items()
+                       if k2 not in ("fig_path", "profiles_path")}, f, indent=2)
+
+        print(f"[gads_plot_survival_curves] plotted {len(result['profiles'])} profiles; "
+              f"risk range [{result['risk_min']:.3f}, {result['risk_max']:.3f}] -> {fig_path}")
+        if emit_insights:
+            emit = globals().get("gads_emit_insight")
+            if callable(emit):
+                try:
+                    emit("Predicted survival curves separate low- vs high-risk subjects "
+                         f"(risk score range {result['risk_min']:.2f}–{result['risk_max']:.2f}); "
+                         "a wider spread means stronger risk stratification.")
+                except Exception:
+                    pass
+        return result
+    except Exception as e:
+        print(f"[gads_plot_survival_curves] plotting failed ({type(e).__name__}: {e}); continuing")
+        result["error"] = f"{type(e).__name__}: {e}"
+        return result
+
+
 def gads_cox_ph_report(df, duration_col, event_col, covariates=None, penalizer=0.0,
                        ph_p_threshold=0.05, write_path="cox_report.json", emit_insights=True):
     """Fit a lifelines Cox proportional-hazards model and TEST its core assumption.

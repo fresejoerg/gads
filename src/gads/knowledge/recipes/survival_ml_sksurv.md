@@ -1,6 +1,6 @@
 ---
 id: survival_analysis.ml
-version: 1.0.0
+version: 1.1.0
 schema_version: 1
 author: gads-core
 
@@ -70,7 +70,7 @@ dag:
       - "'harrell_cindex' in surv_metrics or 'ipcw_cindex' in surv_metrics"
 
   - id: risk_profiles_report
-    intent: "Make the model's predictions concrete. Select a few representative subjects (e.g. lowest-, median-, highest-risk by surv_model.predict), plot their predicted survival curves via surv_model.predict_survival_function, and save the figure. Optionally report permutation feature importance for the risk score. In plain language, explain what the discrimination metrics mean for using this model to rank subjects by risk, and state the model's overall predictive quality honestly."
+    intent: "Make the model's predictions concrete with the native node — do NOT hand-roll the survival-curve plotting (undefined time grids and plotting boilerplate reliably break here). Write EXACTLY this one statement and NOTHING else (the native selects low/median/high-risk subjects, plots their predicted survival curves, saves the figure, and emits an insight):\n\nprofiles = gads_plot_survival_curves(surv_model, X_test, n_profiles=3)\n\nThat is the entire task. Do not add any print statements or other code after it."
     depends_on: [evaluate_survival]
     worker_tier: T2
     attached_skills: [survival_scikit_survival, visualization_best_practices]
