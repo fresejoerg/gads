@@ -2074,6 +2074,18 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                                 "code": res.code,
                                 "orchestrator_summary": orchestrator_summary # Persist ground truth
                             })
+
+                            # Fallback observability: when a node completed via a fallback
+                            # (not the assigned model), emit a distinct event so the UI can
+                            # surface it and pass@model reporting can count it.
+                            if str(model_used).startswith(("native_fallback:", "cloud_fallback:")):
+                                _fb_kind, _, _fb_model = str(model_used).partition(":")
+                                hub.create_outbox_event("TASK_FALLBACK", {
+                                    "task_id": str(task_id), "description": desc[:120],
+                                    "fallback_kind": _fb_kind, "model": _fb_model,
+                                })
+                                print(f"  [Workflow] 📎 Fallback recorded: {_fb_kind} via "
+                                      f"'{_fb_model}' for '{desc[:50]}'", flush=True)
                             files_after = new_files_after
 
                             project = session.get(Project, project_id)
@@ -2593,6 +2605,31 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                 ).all()
                 if t.assigned_to not in _advisory_agents
             ])
+            # pass@model vs pass@model+fallback (approach_docs/019): how much of the run the
+            # assigned model did itself vs. what a fallback (native/cloud) had to rescue.
+            # Keep the two SEPARATE — a fallback-assisted pass must never read as a model pass,
+            # or the delegation-dial measurement is contaminated. Deduped per recipe node
+            # (last completed instance wins across attempts).
+            _by_node: Dict[str, str] = {}
+            for t in session.exec(
+                select(Task).where(Task.project_id == project_id, Task.status == "completed")
+                .order_by(Task.created_at)
+            ).all():
+                _rj = t.result_json or {}
+                _mu = str(_rj.get("model_used", ""))
+                if _rj.get("code") or _mu.startswith(("native_fallback:", "cloud_fallback:")):
+                    _by_node[t.description] = _mu
+            _n_exec = len(_by_node)
+            _n_native_fb = sum(1 for m in _by_node.values() if m.startswith("native_fallback:"))
+            _n_cloud_fb = sum(1 for m in _by_node.values() if m.startswith("cloud_fallback:"))
+            _n_fb = _n_native_fb + _n_cloud_fb
+            _n_model = _n_exec - _n_fb
+            _pass_at_model = round(_n_model / _n_exec, 3) if _n_exec else None
+            if _n_exec:
+                print(f"  [Dial] pass@model={_n_model}/{_n_exec} ({_pass_at_model}) | "
+                      f"fallback-assisted: {_n_fb} ({_n_native_fb} native, {_n_cloud_fb} cloud)",
+                      flush=True)
+
             append_ledger({
                 "project_id": str(project_id),
                 "spec": ((proj.last_state_json or {}).get("spec_filename") if proj else None),
@@ -2606,6 +2643,13 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                 "workflow_succeeded": workflow_succeeded,
                 "failed_tasks": failed_count,
                 "workflow_attempts": workflow_attempt,
+                # pass@model reporting — model-only vs fallback-assisted (never collapsed).
+                "exec_nodes": _n_exec,
+                "model_pass": _n_model,
+                "fallback_pass": _n_fb,
+                "native_fallback": _n_native_fb,
+                "cloud_fallback": _n_cloud_fb,
+                "pass_at_model": _pass_at_model,
             })
 
     except Exception as e:
