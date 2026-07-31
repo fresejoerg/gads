@@ -9,35 +9,35 @@ triggers: ["lifelines", "coxphfitter", "kaplanmeierfitter", "kaplan-meier", "kap
 column and an event column — **no structured array** (that is scikit-survival; do not mix
 the two APIs).
 
-## Kaplan-Meier + log-rank — PREFER the native `gads_kaplan_meier`
-It fits the overall KM estimator, saves the curve figure, fits per-group curves, and runs
-the multivariate log-rank test in one call (handles the `median_survival_time_` attribute
-and the plotting that small models get wrong):
+## Kaplan-Meier + log-rank (describe before you model)
 ```python
-km = gads_kaplan_meier(df, time_col="time", event_col="event", group_col="horTh")
-km["overall_median"]     # median survival time (None = "not reached")
-km["group_medians"]      # {group_value: median}
-km["logrank_p"]          # < 0.05 → survival curves differ significantly across groups
-```
-It writes `km_summary.json` + `km_curve.png` and emits insights. `group_col` is optional
-(a low-cardinality categorical is auto-detected).
-
-### Doing it directly (only if you need the fitter object)
-```python
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 from lifelines import KaplanMeierFitter
-from lifelines.statistics import logrank_test
+from lifelines.statistics import multivariate_logrank_test
 
+# Overall curve + median survival.
 kmf = KaplanMeierFitter()
 kmf.fit(df["time"], event_observed=df["event"], label="all")
-kmf.plot_survival_function()          # median survival: kmf.median_survival_time_  (NOTE the trailing underscore)
+km_median = kmf.median_survival_time_   # NOTE the trailing underscore (attribute, not method)
 
-# Compare two groups (e.g. treated vs control):
-mask = df["group"] == "treated"
-res = logrank_test(df.loc[mask, "time"], df.loc[~mask, "time"],
-                   event_observed_A=df.loc[mask, "event"],
-                   event_observed_B=df.loc[~mask, "event"])
-print(res.p_value)                    # < 0.05 → survival curves differ
+# Per-group curves on one axis + a log-rank test across the groups.
+fig, ax = plt.subplots(figsize=(8, 5))
+for g, sub in df.groupby("horTh"):
+    k = KaplanMeierFitter().fit(sub["time"], event_observed=sub["event"], label=f"horTh={g}")
+    k.plot_survival_function(ax=ax)
+lr = multivariate_logrank_test(df["time"], df["horTh"], df["event"])
+print("log-rank p:", lr.p_value)        # < 0.05 → survival curves differ significantly
+fig.savefig("km_curve.png", bbox_inches="tight")
 ```
+Two-group shortcut: `from lifelines.statistics import logrank_test` then
+`logrank_test(t_A, t_B, event_observed_A=e_A, event_observed_B=e_B).p_value`.
+
+> A native fallback `gads_kaplan_meier(df, time_col, event_col, group_col=None)` exists for
+> the local-fallback path (it does the above deterministically and returns
+> `{overall_median, group_medians, logrank_p}`). It is NOT auto-injected — write the code
+> yourself unless a fallback is explicitly invoked.
 
 ## Cox proportional hazards — PREFER the native `gads_cox_ph_report`
 It fits the Cox model AND runs the proportional-hazards assumption test in one call,

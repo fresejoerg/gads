@@ -51,12 +51,29 @@ from sksurv.linear_model import CoxPHSurvivalAnalysis     # linear, interpretabl
 `model.predict(X)` → a **risk score** (higher = higher risk / earlier event).
 `model.predict_survival_function(X)` → per-row step functions (`fn(t)` = P(survive past t)).
 
-To visualize representative risk profiles, PREFER the native (it picks low/median/high-risk
-subjects, plots their survival curves, saves the figure + `risk_profiles.json`, and emits an
-insight — no manual time grid needed):
+To visualize representative risk profiles, rank subjects by risk and plot a few survival
+curves. Each `StepFunction` exposes `.x` (times) and `.y` (survival probs) — use them
+directly, no manual time grid needed:
 ```python
-profiles = gads_plot_survival_curves(surv_model, X_test, n_profiles=3)
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np
+
+risk = surv_model.predict(X_test)                     # higher = higher risk
+order = np.argsort(risk)                               # ascending
+picks = [order[0], order[len(order)//2], order[-1]]   # low / median / high risk
+fns = surv_model.predict_survival_function(X_test)
+fig, ax = plt.subplots(figsize=(8, 5))
+for idx, lab in zip(picks, ["low risk", "median risk", "high risk"]):
+    ax.step(fns[idx].x, fns[idx].y, where="post", label=lab)
+ax.set_ylim(0, 1.02); ax.legend(); ax.set_xlabel("time"); ax.set_ylabel("survival probability")
+fig.savefig("survival_curves.png", bbox_inches="tight")
 ```
+
+> A native fallback `gads_plot_survival_curves(surv_model, X_test, n_profiles=3)` exists for
+> the local-fallback path (it does the above deterministically). It is NOT auto-injected —
+> write the code yourself unless a fallback is explicitly invoked.
 
 ## 5. Evaluate with the native `gads_evaluate_survival` — DO NOT hand-roll metrics
 ```python

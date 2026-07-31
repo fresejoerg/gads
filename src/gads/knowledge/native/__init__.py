@@ -440,15 +440,23 @@ MODEL_AUDIT_PREAMBLE = (
 
 # Preamble injected when survival-analysis keywords are detected. Built from the survival
 # module source (single source of truth) so the injected functions track the tested ones.
+# NOTE: only the "correctness" natives are auto-injected here — the structured-target build,
+# the censoring-aware evaluation, and the Cox PH-assumption gate, i.e. operations with one
+# right answer. The PLOTTING natives (gads_kaplan_meier, gads_plot_survival_curves) are
+# deliberately NOT in the always-on preamble: those nodes are model-generated (capability
+# stays measured) and the natives serve only as an opt-in fallback (see NATIVE_REGISTRY and
+# the local-fallback design). They remain importable/registered for that fallback path.
 from . import survival as _surv_mod
 
 SURVIVAL_PREAMBLE = (
     "import warnings as _w_surv\n_w_surv.filterwarnings('ignore')\n\n"
     + "\n\n".join(_inspect.getsource(_fn) for _fn in (
         _surv_mod.gads_make_surv_target,
-        _surv_mod.gads_kaplan_meier,
         _surv_mod.gads_evaluate_survival,
-        _surv_mod.gads_plot_survival_curves,
         _surv_mod.gads_cox_ph_report,
     ))
 )
+
+# Per-native source, for the opt-in local-fallback path (invoke ONE native on demand rather
+# than injecting the always-on preamble). Includes the demoted plotting natives.
+NATIVE_SOURCE = {name: _inspect.getsource(fn) for name, fn in NATIVE_REGISTRY.items()}

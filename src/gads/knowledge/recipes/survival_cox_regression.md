@@ -1,6 +1,6 @@
 ---
 id: survival_analysis.cox_regression
-version: 1.1.0
+version: 1.2.0
 schema_version: 1
 author: gads-core
 
@@ -33,11 +33,12 @@ dag:
       - "df[event_col].nunique() == 2"
 
   - id: kaplan_meier_logrank
-    intent: "Describe survival before modeling with the native node. Write EXACTLY these two statements and NOTHING else — no extra print() calls, no manual reporting (the native already prints a digest, saves the KM figure, and emits insights):\n\nkm = gads_kaplan_meier(df, time_col=time_col, event_col=event_col, group_col='horTh')\nkm_median = km['overall_median']\n\nThat is the entire task. Do not add any code after those two lines."
+    intent: "Describe survival before modeling. Using lifelines (see the survival_lifelines skill): fit a KaplanMeierFitter on df[time_col] with event_observed=df[event_col]; read the overall median survival from `kmf.median_survival_time_` (note the trailing underscore) and store it as `km_median`. Save the survival-curve figure. Then pick one meaningful categorical covariate (e.g. horTh), plot KM curves per group on one axis, and run a log-rank test across the groups (multivariate_logrank_test) — report its p-value and whether the curves differ significantly."
     depends_on: [prepare_survival_data]
     worker_tier: T2
     produces: [km_median]
     attached_skills: [survival_lifelines, visualization_best_practices]
+    fallback_native: gads_kaplan_meier
     postconditions:
       - "km_median is not None"
 

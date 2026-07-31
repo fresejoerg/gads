@@ -52,9 +52,6 @@ Related traps:
 
 ## GADS native nodes — prefer them over hand-rolled code
 These are pre-injected; call them directly (do not re-implement, do not import them):
-- `gads_kaplan_meier(df, time_col, event_col, group_col=None)` → overall + per-group
-  Kaplan-Meier curves, median survival, and the log-rank test; saves the figure and
-  `km_summary.json`. Use for the descriptive step instead of hand-rolling KaplanMeierFitter.
 - `gads_make_surv_target(df, time_col, event_col)` → the scikit-survival structured
   target array `(event: bool, time: float)`, with the boolean cast and censored-row
   handling done correctly. Building this array by hand is the #1 sksurv failure.
