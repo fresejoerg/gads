@@ -156,9 +156,14 @@ async def get_available_models() -> List[str]:
         resp.raise_for_status()
         return [m["id"] for m in resp.json()["data"]]
 
-async def get_model_hierarchy() -> Dict[str, Any]:
-    """Fetches models from LiteLLM and organizes them into capability tiers."""
-    if get_routing_mode() == "local":
+async def get_model_hierarchy(force_cloud: bool = False) -> Dict[str, Any]:
+    """Fetches models from LiteLLM and organizes them into capability tiers.
+
+    `force_cloud=True` builds the real cloud tiers even in local mode — used ONLY by the
+    opt-in local retry-exhaustion cloud fallback (approach_docs/019), which needs a cloud
+    model to escalate to after the local model has exhausted its retries.
+    """
+    if get_routing_mode() == "local" and not force_cloud:
         print("  [Registry] 🏠 LOCAL ONLY MODE ENABLED. Overriding all tiers to 'local_model'.")
         # In local mode, everything is pinned to the local model.
         # No escalation path exists because all tiers lead to the same model.

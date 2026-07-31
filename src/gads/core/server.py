@@ -611,6 +611,19 @@ async def _cleanup_stale_sessions(sandbox, current_project_id: uuid.UUID, reset_
         print(f"  [SessionCleanup] Preserving current session {current_project_id} (resume mode).", flush=True)
 
 
+def _resolve_cloud_fallback_model(hierarchy: Dict[str, Any]) -> Optional[str]:
+    """Pick a cloud model for the local retry-exhaustion cloud fallback (approach_docs/019).
+
+    Prefers the cheapest tier first (T3 → T2 → T1) and never returns local_model. Used only
+    when the operator opted into cloud fallback and the local model has exhausted its retries.
+    """
+    for tier in ("T3", "T2", "T1"):
+        for m in ((hierarchy.get(tier, {}) or {}).get("models", []) or []):
+            if m and m != "local_model":
+                return m
+    return None
+
+
 async def _probe_kernel_for_metrics(sandbox, project_id: uuid.UUID, session_id: str, required_metrics: List[str]) -> Dict[str, Any]:
     """Probe the IPython kernel for named scalar metric variables. Returns found {name: value} pairs."""
     probe_code = f"""
@@ -1906,6 +1919,55 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                         _hb_task.cancel()
                         with contextlib.suppress(asyncio.CancelledError):
                             await _hb_task
+
+                    # CLOUD FALLBACK (opt-in, post-exhaustion): the local model exhausted its
+                    # retries and any native fallback did not satisfy the node. Escalate this
+                    # ONE task to a cloud model for a SINGLE attempt (max_attempts=1) — a
+                    # deliberate, gated exception to the "local never escalates" mandate,
+                    # reached only after the local model provably could not do it. See
+                    # approach_docs/019.
+                    if (res.error and _fb_mode in ("cloud", "native_then_cloud")
+                            and not str(model_used).startswith("native_fallback")
+                            and get_local_only()):
+                        try:
+                            _cloud_hier = await get_model_hierarchy(force_cloud=True)
+                        except Exception as _che:
+                            _cloud_hier = {}
+                            print(f"  [Workflow] ⚠ Cloud fallback: could not fetch cloud hierarchy: {_che}", flush=True)
+                        _cloud_model = _resolve_cloud_fallback_model(_cloud_hier)
+                        if _cloud_model:
+                            print(f"  [Workflow] ☁ Cloud fallback: local exhausted — one attempt "
+                                  f"on '{_cloud_model}'.", flush=True)
+                            _prev_model, _prev_str = executor.coder.model, executor.coder.model_str
+                            executor.coder.model = _cloud_model
+                            executor.coder.model_str = _cloud_model
+                            _hb2 = asyncio.create_task(_heartbeat_loop(task_id))
+                            try:
+                                res2, model_used2 = await executor.run_task(
+                                    desc,
+                                    project_id=project_id,
+                                    session_id=str(project_id),
+                                    skills_context=skills_ctx,
+                                    task_id=task_id,
+                                    stdout_callback=stream_stdout_callback,
+                                    stream_callback=stream_reasoning_callback,
+                                    cancel_check=is_cancelled,
+                                    state_summary=state_summary_str,
+                                    recipe_id=(knowledge_report.recipe_id if knowledge_report else None),
+                                    fallback_mode="none",
+                                    max_attempts=1,
+                                )
+                                if res2.error is None:
+                                    res, model_used = res2, f"cloud_fallback:{model_used2}"
+                                    print(f"  [Workflow] ✅ Cloud fallback succeeded on '{model_used2}'.", flush=True)
+                                else:
+                                    print(f"  [Workflow] ⚠ Cloud fallback also failed: "
+                                          f"{res2.error.get('evalue', '')[:120]}", flush=True)
+                            finally:
+                                _hb2.cancel()
+                                with contextlib.suppress(asyncio.CancelledError):
+                                    await _hb2
+                                executor.coder.model, executor.coder.model_str = _prev_model, _prev_str
 
                     # Update task span with result details
                     task_span.update(output={"model": model_used, "code_len": len(res.code) if res.code else 0})
