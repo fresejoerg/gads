@@ -33,7 +33,8 @@ from gads.tools.sandbox import SandboxClient
 from gads.core.registry import (
     get_model_hierarchy, get_local_only, set_local_only, get_random_routing,
     set_random_routing, get_next_model_dynamic, get_routing_mode, set_routing_mode,
-    get_pinned_model, resolve_stage_model, get_available_models, VALID_ROUTING_MODES
+    get_pinned_model, resolve_stage_model, get_available_models, VALID_ROUTING_MODES,
+    get_local_fallback, set_local_fallback, VALID_LOCAL_FALLBACKS
 )
 from gads.core.knowledge import KnowledgeRegistry
 from gads.core.dial import compiled_plan_dial, drafted_plan_dial, append_ledger
@@ -138,6 +139,8 @@ class ConfigUpdate(BaseModel):
     # New-style routing: cloud | local | hybrid | cloud_pinned
     routing_mode: Optional[str] = None
     pinned_model: Optional[str] = None
+    # Local retry-exhaustion fallback: none | native | cloud | native_then_cloud
+    local_fallback: Optional[str] = None
 
 class FileUpload(BaseModel):
     name: str
@@ -432,6 +435,8 @@ def _config_payload() -> Dict[str, Any]:
         "routing_mode": get_routing_mode(),
         "pinned_model": get_pinned_model(),
         "valid_routing_modes": list(VALID_ROUTING_MODES),
+        "local_fallback": get_local_fallback(),
+        "valid_local_fallbacks": list(VALID_LOCAL_FALLBACKS),
     }
 
 @app.get("/config")
@@ -451,6 +456,8 @@ def update_config(req: ConfigUpdate):
             set_routing_mode(req.routing_mode, pinned_model=req.pinned_model)
         elif req.local_only is not None:
             set_local_only(req.local_only)
+        if req.local_fallback is not None:
+            set_local_fallback(req.local_fallback)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     set_random_routing(req.random_routing)
@@ -1349,6 +1356,11 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         postcondition["required_metrics"] = node["required_metrics"]
                     if node.get("produces"):
                         postcondition["required_variables"] = node["produces"]
+                    # Native safety net for the local retry-exhaustion fallback (approach_docs/019).
+                    if node.get("fallback_native"):
+                        postcondition["fallback_native"] = node["fallback_native"]
+                    if node.get("fallback_call"):
+                        postcondition["fallback_call"] = node["fallback_call"]
 
                     description = node.get("intent", node.get("id", "")).strip()
                     if idx == 0:
@@ -1861,6 +1873,18 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                             except Exception:
                                 pass
 
+                    # Local retry-exhaustion fallback (approach_docs/019): if enabled and this
+                    # node declares a native safety net, pass it so the executor can invoke it
+                    # deterministically after the model exhausts its retries.
+                    _fb_mode = get_local_fallback()
+                    _fb_native = _fb_call = None
+                    if _fb_mode != "none":
+                        with Session(engine) as _fbs:
+                            _fbt = _fbs.get(Task, task_id)
+                            _pc = (_fbt.postcondition_json or {}) if _fbt else {}
+                        _fb_native = _pc.get("fallback_native")
+                        _fb_call = _pc.get("fallback_call")
+
                     _hb_task = asyncio.create_task(_heartbeat_loop(task_id))
                     try:
                         res, model_used = await executor.run_task(
@@ -1874,6 +1898,9 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                             cancel_check=is_cancelled,
                             state_summary=state_summary_str,
                             recipe_id=(knowledge_report.recipe_id if knowledge_report else None),
+                            fallback_native=_fb_native,
+                            fallback_call=_fb_call,
+                            fallback_mode=_fb_mode,
                         )
                     finally:
                         _hb_task.cancel()

@@ -39,6 +39,7 @@ dag:
     produces: [km_median]
     attached_skills: [survival_lifelines, visualization_best_practices]
     fallback_native: gads_kaplan_meier
+    fallback_call: "km = gads_kaplan_meier(df, time_col=time_col, event_col=event_col); km_median = km['overall_median']"
     postconditions:
       - "km_median is not None"
 

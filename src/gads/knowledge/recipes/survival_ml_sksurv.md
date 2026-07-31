@@ -75,6 +75,7 @@ dag:
     worker_tier: T2
     attached_skills: [survival_scikit_survival, visualization_best_practices]
     fallback_native: gads_plot_survival_curves
+    fallback_call: "profiles = gads_plot_survival_curves(surv_model, X_test, n_profiles=3)"
     postconditions:
       - "surv_metrics is not None"
 

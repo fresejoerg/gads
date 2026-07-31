@@ -448,7 +448,10 @@ class ExecutionManager:
         cancel_check = None,
         state_summary: Optional[str] = None,
         recipe_id: Optional[str] = None,
-        recipe_version: Optional[str] = None
+        recipe_version: Optional[str] = None,
+        fallback_native: Optional[str] = None,
+        fallback_call: Optional[str] = None,
+        fallback_mode: str = "none",
     ) -> Tuple[ExecutionResult, str]:
         """
         Runs the full loop with State Introspection. 
@@ -844,10 +847,73 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                 import traceback
                 traceback.print_exc()
                 return ExecutionResult(
-                    stdout="", stderr="", 
+                    stdout="", stderr="",
                     error={"ename": "RuntimeError", "evalue": str(e)},
                     execution_time_ms=0,
                     kernel_state={}
                 ), self.coder.model
 
+        # NATIVE FALLBACK (opt-in, post-exhaustion): the model ran and exhausted its retries.
+        # If this recipe node declares a native safety net, invoke it deterministically in the
+        # live kernel — one call, no replan. The model's capability was still MEASURED (it
+        # tried first and failed); this only recovers the run. See approach_docs/019.
+        if fallback_native and fallback_call and fallback_mode in ("native", "native_then_cloud"):
+            fb_result = await self._run_native_fallback(
+                fallback_native, fallback_call, project_id, session_id)
+            if fb_result is not None:
+                if error_history:
+                    record_resolution(recipe_id, recipe_version, task_description,
+                                      f"native_fallback:{fallback_native}")
+                return fb_result, f"native_fallback:{fallback_native}"
+
         return exec_result, self.coder.model
+
+    async def _run_native_fallback(self, fallback_native, fallback_call, project_id, session_id):
+        """Inject one native's source into the live kernel and run its canonical call to
+        satisfy a node whose model codegen exhausted retries. Returns a successful
+        ExecutionResult, or None if the native is unavailable / the fallback itself errored.
+        Best-effort: never raises."""
+        try:
+            from gads.knowledge.native import NATIVE_SOURCE
+        except Exception:
+            NATIVE_SOURCE = {}
+        if fallback_native not in NATIVE_SOURCE:
+            print(f"    [Executor] ⚠ No native source for fallback '{fallback_native}'; "
+                  "failing normally.", flush=True)
+            return None
+        print(f"    [Executor] ⛑ Native fallback: model exhausted retries — invoking "
+              f"'{fallback_native}' for this node.", flush=True)
+        fb_preamble = (
+            "import warnings as _wfb\n_wfb.filterwarnings('ignore')\n"
+            + NATIVE_SOURCE[fallback_native] + "\n"
+            "if '_gads_insights' not in globals(): _gads_insights = []\n"
+            "def gads_emit_insight(artifact, insight, evidence=''):\n"
+            "    _gads_insights.append({'artifact': artifact, 'insight': insight, 'evidence': evidence})\n"
+        )
+        fb_postamble = ("\nimport json as _jfb\n"
+                        "print('GADS_INSIGHTS_JSON:' + _jfb.dumps(_gads_insights))\n"
+                        "_gads_insights = []\n")
+        fb_code = fb_preamble + "\n" + fallback_call + "\n" + fb_postamble
+        try:
+            fb_result = await asyncio.wait_for(
+                self.sandbox.execute(fb_code, project_id=project_id, session_id=session_id),
+                timeout=360.0)
+        except Exception as e:
+            print(f"    [Executor] ⚠ Native fallback '{fallback_native}' raised: {e}", flush=True)
+            return None
+        fb_result.code = fallback_call
+        if fb_result.error is not None:
+            print(f"    [Executor] ⚠ Native fallback '{fallback_native}' also failed: "
+                  f"{fb_result.error.get('evalue', '')[:120]}", flush=True)
+            return None
+        if "GADS_INSIGHTS_JSON:" in fb_result.stdout:
+            try:
+                parts = fb_result.stdout.split("GADS_INSIGHTS_JSON:")
+                fb_result.semantic_insights = json.loads(parts[1].strip().split("\n")[0])
+                fb_result.stdout = parts[0] + "\n".join(parts[1].strip().split("\n")[1:])
+            except Exception:
+                pass
+        if fb_result.kernel_state:
+            self.authoritative_state.update(fb_result.kernel_state)
+        print(f"    [Executor] ✅ Native fallback '{fallback_native}' succeeded.", flush=True)
+        return fb_result

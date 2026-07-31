@@ -36,6 +36,32 @@ _ROUTING_MODE = _initial_mode()
 _PINNED_MODEL: Optional[str] = os.getenv("GADS_PINNED_MODEL", "").strip() or None
 _RANDOM_ROUTING = False
 
+# Local-execution retry-exhaustion fallback (approach_docs/019). When a task exhausts all
+# retries, optionally rescue the node instead of failing → replanning:
+#   none              — fail the task (default; the boundary stays visible)
+#   native            — invoke the node's fallback_native deterministically (no replan)
+#   cloud             — escalate the one task to a cloud model once (gated exception to
+#                       "local never escalates" — post-exhaustion, opt-in only)
+#   native_then_cloud — native if the node has one, else cloud
+VALID_LOCAL_FALLBACKS = ("none", "native", "cloud", "native_then_cloud")
+
+def _initial_fallback() -> str:
+    fb = os.getenv("GADS_LOCAL_FALLBACK", "").strip().lower()
+    return fb if fb in VALID_LOCAL_FALLBACKS else "none"
+
+_LOCAL_FALLBACK = _initial_fallback()
+
+def set_local_fallback(mode: str):
+    global _LOCAL_FALLBACK
+    mode = (mode or "").strip().lower()
+    if mode not in VALID_LOCAL_FALLBACKS:
+        raise ValueError(f"Unknown local_fallback '{mode}'. Valid: {VALID_LOCAL_FALLBACKS}")
+    _LOCAL_FALLBACK = mode
+    print(f"  [Registry] Local fallback set to '{_LOCAL_FALLBACK}'", flush=True)
+
+def get_local_fallback() -> str:
+    return _LOCAL_FALLBACK
+
 # Stages that stay on cloud tiers in hybrid mode. Everything not listed here
 # (Coder execution tasks, CompletenessVerifier, any future stage) goes local.
 HYBRID_CLOUD_STAGES = {"SpecDrafter", "Router", "Planner", "PlanCritique", "Synthesizer", "Critique"}
