@@ -1,6 +1,6 @@
 ---
 id: survival_analysis.cox_regression
-version: 1.0.0
+version: 1.1.0
 schema_version: 1
 author: gads-core
 
@@ -33,7 +33,7 @@ dag:
       - "df[event_col].nunique() == 2"
 
   - id: kaplan_meier_logrank
-    intent: "Describe survival before modeling. Fit a Kaplan-Meier estimator on (df[time_col], df[event_col]); report the overall median survival time and save the survival-curve figure. Pick one clinically/operationally meaningful categorical covariate, plot KM curves per group on one axis, and run a log-rank test between the groups — report its p-value and whether the curves differ significantly. Store the overall median survival as `km_median`."
+    intent: "Describe survival before modeling with the native node. Write EXACTLY these two statements and NOTHING else — no extra print() calls, no manual reporting (the native already prints a digest, saves the KM figure, and emits insights):\n\nkm = gads_kaplan_meier(df, time_col=time_col, event_col=event_col, group_col='horTh')\nkm_median = km['overall_median']\n\nThat is the entire task. Do not add any code after those two lines."
     depends_on: [prepare_survival_data]
     worker_tier: T2
     produces: [km_median]
@@ -42,7 +42,7 @@ dag:
       - "km_median is not None"
 
   - id: cox_ph_model
-    intent: "Fit the Cox proportional-hazards model AND test its core assumption in one native call: `cox_report = gads_cox_ph_report(df, duration_col=time_col, event_col=event_col, covariates=<numeric+encoded covariate list>)`. Encode categorical covariates to numeric first (pandas get_dummies with drop_first=True). This writes cox_report.json and emits insights. Report the concordance index, the significant hazard ratios (exp(coef)) with their 95% CIs, and — critically — any covariates in `cox_report['ph_violations']` that violate proportional hazards. Do NOT hand-roll the PH test."
+    intent: "Fit the Cox model AND test its core assumption in one native call. Keep it minimal — the native already prints the hazard ratios, concordance, and PH violations and emits insights, so do NOT add manual print/reporting code. First one-hot encode the categorical covariates (horTh, menostat, tgrade) to numeric with pandas.get_dummies(drop_first=True) into a dataframe `enc` that still contains time_col and event_col, then:\n\ncox_report = gads_cox_ph_report(enc, duration_col=time_col, event_col=event_col)\n\nThat is the core task. Do NOT hand-roll the Cox fit or the proportional-hazards test."
     depends_on: [kaplan_meier_logrank]
     worker_tier: T2
     produces: [cox_report]

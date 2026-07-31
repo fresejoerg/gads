@@ -91,6 +91,121 @@ def gads_make_surv_target(df, time_col, event_col):
     return y
 
 
+def gads_kaplan_meier(df, time_col, event_col, group_col=None,
+                      fig_path="km_curve.png", write_path="km_summary.json", emit_insights=True):
+    """Kaplan-Meier survival description + log-rank test, done deterministically.
+
+    Fits an overall KM estimator (reporting the median survival time), and — if `group_col`
+    is given, or a low-cardinality categorical is auto-detected — fits per-group KM curves,
+    plots them on one axis, and runs the multivariate log-rank test across groups. Saves the
+    figure, writes `km_summary.json`, prints a digest, and emits the median-survival and
+    log-rank insights. Returns a dict {overall_median, group_col, group_medians, logrank_p,
+    n, n_events, fig_path}. Fail-open.
+
+    Exists because assembling KaplanMeierFitter + grouping + the log-rank test + a plot is a
+    reliable codegen failure on small models (wrong `median_survival_time_` attribute,
+    mismatched brackets); one correct primitive removes that whole class of error.
+    """
+    import json
+    import numpy as np
+
+    result = {"overall_median": None, "group_col": None, "group_medians": {},
+              "logrank_p": None, "n": int(len(df)), "n_events": None,
+              "fig_path": fig_path, "summary_path": write_path}
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        from lifelines import KaplanMeierFitter
+        from lifelines.statistics import multivariate_logrank_test
+    except Exception as e:
+        print(f"[gads_kaplan_meier] lifelines/matplotlib unavailable ({e}); skipping")
+        result["error"] = f"unavailable: {e}"
+        return result
+
+    try:
+        T = df[time_col]
+        E = df[event_col].astype(bool)
+        result["n_events"] = int(E.sum())
+
+        # Auto-pick a grouping column when none is given: a non-time/event column with 2–5
+        # distinct values (categorical or low-cardinality numeric).
+        if group_col is None:
+            for c in df.columns:
+                if c in (time_col, event_col):
+                    continue
+                nun = df[c].nunique(dropna=True)
+                if 2 <= nun <= 5:
+                    group_col = c
+                    break
+
+        fig, ax = plt.subplots(figsize=(8, 5))
+        kmf = KaplanMeierFitter()
+        kmf.fit(T, event_observed=E, label="overall")
+        result["overall_median"] = (None if kmf.median_survival_time_ is None
+                                    or (isinstance(kmf.median_survival_time_, float)
+                                        and np.isinf(kmf.median_survival_time_))
+                                    else float(kmf.median_survival_time_))
+
+        if group_col is not None and group_col in df.columns:
+            result["group_col"] = str(group_col)
+            for gval, sub in df.groupby(group_col):
+                if len(sub) < 2:
+                    continue
+                k = KaplanMeierFitter()
+                k.fit(sub[time_col], event_observed=sub[event_col].astype(bool), label=f"{group_col}={gval}")
+                k.plot_survival_function(ax=ax)
+                med = k.median_survival_time_
+                result["group_medians"][str(gval)] = (None if med is None
+                    or (isinstance(med, float) and np.isinf(med)) else float(med))
+            try:
+                lr = multivariate_logrank_test(df[time_col], df[group_col], df[event_col].astype(bool))
+                result["logrank_p"] = float(lr.p_value)
+            except Exception as le:
+                print(f"[gads_kaplan_meier] log-rank test unavailable: {le}")
+        else:
+            kmf.plot_survival_function(ax=ax)
+
+        ax.set_xlabel(f"time ({time_col})")
+        ax.set_ylabel("survival probability")
+        ax.set_title("Kaplan-Meier survival" + (f" by {group_col}" if result["group_col"] else ""))
+        ax.grid(True, alpha=0.3)
+        fig.tight_layout()
+        fig.savefig(fig_path, dpi=110, bbox_inches="tight")
+        plt.close(fig)
+
+        with open(write_path, "w") as f:
+            json.dump({k: v for k, v in result.items() if k not in ("fig_path", "summary_path")}, f, indent=2)
+
+        med_str = "not reached" if result["overall_median"] is None else f"{result['overall_median']:.1f}"
+        print(f"[gads_kaplan_meier] n={result['n']} events={result['n_events']} "
+              f"median_survival={med_str}"
+              + (f" | group='{result['group_col']}' log-rank p={result['logrank_p']}"
+                 if result["group_col"] else ""))
+
+        if emit_insights:
+            emit = globals().get("gads_emit_insight")
+            if callable(emit):
+                try:
+                    emit(f"Overall median survival time: {med_str} "
+                         f"({result['n_events']} events across {result['n']} subjects).")
+                except Exception:
+                    pass
+                if result["logrank_p"] is not None:
+                    verdict = ("differ significantly" if result["logrank_p"] < 0.05
+                               else "do not differ significantly")
+                    try:
+                        emit(f"Survival curves across {result['group_col']} {verdict} "
+                             f"(log-rank p={result['logrank_p']:.4g}).")
+                    except Exception:
+                        pass
+        return result
+    except Exception as e:
+        print(f"[gads_kaplan_meier] KM failed ({type(e).__name__}: {e}); continuing")
+        result["error"] = f"{type(e).__name__}: {e}"
+        return result
+
+
 def gads_evaluate_survival(model, X_train, y_train, X_test, y_test, times=None,
                            write_path="survival_metrics.json", emit_insights=True):
     """Censoring-aware evaluation of a fitted scikit-survival model.

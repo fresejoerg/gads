@@ -681,7 +681,8 @@ class ExecutionManager:
                 # Inject survival-analysis native node preamble when survival APIs are referenced
                 _survival_preamble = ""
                 if any(kw in current_code for kw in ["gads_make_surv_target", "gads_evaluate_survival",
-                                                       "gads_cox_ph_report", "CoxPHFitter", "CoxPHSurvivalAnalysis",
+                                                       "gads_cox_ph_report", "gads_kaplan_meier",
+                                                       "CoxPHFitter", "CoxPHSurvivalAnalysis",
                                                        "RandomSurvivalForest", "lifelines", "sksurv",
                                                        "Surv.from_", "KaplanMeierFitter"]):
                     try:

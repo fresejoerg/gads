@@ -9,14 +9,27 @@ triggers: ["lifelines", "coxphfitter", "kaplanmeierfitter", "kaplan-meier", "kap
 column and an event column — **no structured array** (that is scikit-survival; do not mix
 the two APIs).
 
-## Kaplan-Meier + log-rank (describe before you model)
+## Kaplan-Meier + log-rank — PREFER the native `gads_kaplan_meier`
+It fits the overall KM estimator, saves the curve figure, fits per-group curves, and runs
+the multivariate log-rank test in one call (handles the `median_survival_time_` attribute
+and the plotting that small models get wrong):
+```python
+km = gads_kaplan_meier(df, time_col="time", event_col="event", group_col="horTh")
+km["overall_median"]     # median survival time (None = "not reached")
+km["group_medians"]      # {group_value: median}
+km["logrank_p"]          # < 0.05 → survival curves differ significantly across groups
+```
+It writes `km_summary.json` + `km_curve.png` and emits insights. `group_col` is optional
+(a low-cardinality categorical is auto-detected).
+
+### Doing it directly (only if you need the fitter object)
 ```python
 from lifelines import KaplanMeierFitter
 from lifelines.statistics import logrank_test
 
 kmf = KaplanMeierFitter()
 kmf.fit(df["time"], event_observed=df["event"], label="all")
-kmf.plot_survival_function()          # median survival: kmf.median_survival_time_
+kmf.plot_survival_function()          # median survival: kmf.median_survival_time_  (NOTE the trailing underscore)
 
 # Compare two groups (e.g. treated vs control):
 mask = df["group"] == "treated"

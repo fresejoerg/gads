@@ -20,7 +20,8 @@ from .causal import gads_causal_estimate_ate, gads_causal_bayesian_ate
 from .recommendation import (gads_build_interaction_matrix, gads_temporal_loo_split,
                              gads_fit_and_recommend, gads_evaluate_topn, gads_recommend_and_evaluate)
 from .model_audit import gads_audit_model
-from .survival import gads_make_surv_target, gads_evaluate_survival, gads_cox_ph_report
+from .survival import (gads_make_surv_target, gads_evaluate_survival, gads_cox_ph_report,
+                       gads_kaplan_meier)
 
 NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_automl_fit": gads_automl_fit,
@@ -39,6 +40,7 @@ NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_make_surv_target": gads_make_surv_target,
     "gads_evaluate_survival": gads_evaluate_survival,
     "gads_cox_ph_report": gads_cox_ph_report,
+    "gads_kaplan_meier": gads_kaplan_meier,
 }
 
 # Preamble injected into every sandbox execution when AutoGluon recipes are active.
@@ -443,6 +445,7 @@ SURVIVAL_PREAMBLE = (
     "import warnings as _w_surv\n_w_surv.filterwarnings('ignore')\n\n"
     + "\n\n".join(_inspect.getsource(_fn) for _fn in (
         _surv_mod.gads_make_surv_target,
+        _surv_mod.gads_kaplan_meier,
         _surv_mod.gads_evaluate_survival,
         _surv_mod.gads_cox_ph_report,
     ))
