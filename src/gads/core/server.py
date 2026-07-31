@@ -556,12 +556,16 @@ async def delete_project(project_id: uuid.UUID):
         
     return {"status": "success"}
 
-async def _cleanup_stale_sessions(sandbox, current_project_id: uuid.UUID):
+async def _cleanup_stale_sessions(sandbox, current_project_id: uuid.UUID, reset_current: bool = True):
     """Reset sandbox sessions for all projects that have no active (pending/running) tasks.
 
     Session IDs are str(project_id), so we can enumerate them via the DB without
     needing a sandbox list-sessions endpoint. Called at the start of each execution
     phase so stale kernels from previous runs don't accumulate.
+
+    `reset_current=False` PRESERVES this project's kernel — used on a replan of a
+    deterministic recipe plan so completed upstream nodes' state survives and the
+    resume-from-failed-node path can skip re-running them (see the execution loop).
     """
     try:
         with Session(engine) as db:
@@ -588,12 +592,16 @@ async def _cleanup_stale_sessions(sandbox, current_project_id: uuid.UUID):
     except Exception as e:
         print(f"  [SessionCleanup] Warning: cleanup failed: {e}", flush=True)
 
-    # Always reset the current project's session for a clean kernel slate
-    try:
-        await sandbox.reset_session(str(current_project_id))
-        print(f"  [SessionCleanup] Reset current session {current_project_id}.", flush=True)
-    except Exception as e:
-        print(f"  [SessionCleanup] Warning: could not reset current session: {e}", flush=True)
+    # Reset the current project's session for a clean kernel slate — unless the caller
+    # asked to preserve it (resume-from-failed-node on a deterministic replan).
+    if reset_current:
+        try:
+            await sandbox.reset_session(str(current_project_id))
+            print(f"  [SessionCleanup] Reset current session {current_project_id}.", flush=True)
+        except Exception as e:
+            print(f"  [SessionCleanup] Warning: could not reset current session: {e}", flush=True)
+    else:
+        print(f"  [SessionCleanup] Preserving current session {current_project_id} (resume mode).", flush=True)
 
 
 async def _probe_kernel_for_metrics(sandbox, project_id: uuid.UUID, session_id: str, required_metrics: List[str]) -> Dict[str, Any]:
@@ -1692,7 +1700,12 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     session.commit()
 
             # 4. EXECUTION
-            await _cleanup_stale_sessions(executor.sandbox, project_id)
+            # Preserve the kernel across replans of a deterministic recipe plan so the
+            # resume-from-failed-node path can skip already-completed upstream nodes.
+            # Attempt 1 always starts clean; drafted (non-deterministic) plans always
+            # reset (their descriptions vary run-to-run, so nothing is safely resumable).
+            _reset_kernel = (workflow_attempt == 1) or (not plan_is_deterministic)
+            await _cleanup_stale_sessions(executor.sandbox, project_id, reset_current=_reset_kernel)
             for task_id in task_ids:
                 if await is_cancelled(): return
 
@@ -1786,6 +1799,38 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                         print(f"    [Workflow] Warning: Namespace snapshot failed: {e}")
 
                     state_summary_str = json.dumps(namespace_summary, indent=2)
+
+                    # RESUME-FROM-FAILED-NODE: on a replan of a deterministic recipe plan
+                    # the kernel is preserved (see _reset_kernel above), so a node that
+                    # already completed in a PRIOR attempt — with its declared output
+                    # variables still live in the kernel — need not run again. Skip it and
+                    # reuse the prior result. This turns a single failed step from a full
+                    # upstream-DAG re-run into a re-run of just the failed node + downstream.
+                    # Conservative: only skips when the outputs are VERIFIABLY present.
+                    if plan_is_deterministic and workflow_attempt > 1 and isinstance(namespace_summary, dict):
+                        with Session(engine) as _rs:
+                            _cur = _rs.get(Task, task_id)
+                            _req_vars = (_cur.postcondition_json or {}).get("required_variables", []) if _cur else []
+                            _prior = _rs.exec(
+                                select(Task).where(
+                                    Task.project_id == project_id,
+                                    Task.description == desc,
+                                    Task.status == "completed",
+                                    Task.id != task_id,
+                                ).order_by(Task.created_at.desc())
+                            ).first()
+                            if _prior is not None and _req_vars and all(v in namespace_summary for v in _req_vars):
+                                hub = ExecutionHub(_rs)
+                                _cur.status = "completed"
+                                _cur.heartbeat = datetime.now()
+                                _cur.result_json = {**(_prior.result_json or {}), "resumed_from_prior_attempt": True}
+                                _rs.add(_cur)
+                                _rs.commit()
+                                hub.create_outbox_event("TASK_COMPLETED", {"task_id": str(task_id), "description": desc})
+                                print(f"  [Resume] ✓ Skipping '{desc[:60]}' — completed in a prior "
+                                      f"attempt; outputs {_req_vars} live in kernel.", flush=True)
+                                task_span.end(output={"resumed": True})
+                                break  # task satisfied without re-execution; on to the next node
 
                     tid_str = str(task_id)
                     LIVE_STREAMS[tid_str] = {"reasoning": "", "stdout": ""}
@@ -2031,6 +2076,20 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                         "Do NOT add a column to a task's postcondition if that column is built by a later task."
                     )
                     critique_feedback = execution_feedback + ("\n\n" + critique_feedback if critique_feedback else "")
+
+            # A recipe-structural execution failure warrants a fresh planning attempt,
+            # steered by the execution_feedback assembled above. Without this the failure
+            # falls straight through to synthesis and only replans if the synthesis critique
+            # happens to reject — so the resume-from-failed-node path was unreachable in its
+            # own target scenario. For a deterministic recipe plan the kernel is preserved
+            # across the replan (see _reset_kernel), so resume skips the already-completed
+            # upstream nodes on the next attempt instead of re-running the whole DAG; only the
+            # failed node + its downstream re-run. Falls through to synthesis (report what we
+            # have) once attempts are exhausted.
+            if (failed_tasks or pending_tasks) and workflow_attempt < MAX_WORKFLOW_ATTEMPTS:
+                print(f"  [Workflow] ↻ Replanning after execution failure "
+                      f"(attempt {workflow_attempt}/{MAX_WORKFLOW_ATTEMPTS}).", flush=True)
+                continue
 
             # 4b. DETERMINISTIC MODEL SAVE (if spec requested it)
             if spec_hints.get("save_model") and not failed_tasks and not pending_tasks:
