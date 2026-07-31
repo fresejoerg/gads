@@ -31,14 +31,16 @@ Before the main loop, two one-shot stages run:
 - **SpecDrafter** (`agents/spec_drafter.py`, T3) — formalizes the user objective into a structured spec with hints forwarded to the Planner.
 
 1. **Router** (`agents/router.py`, T3) — classifies the objective into `task_type`/`data_modality`, picks a matching `Recipe`.
-2. **Planner** (`agents/planner.py`, T2) — decomposes objective into `PlannerTask[]`, each with a `postcondition_json` contract, an `assigned_to` model from the live hierarchy, and `attached_skills`.
-3. **PlanCritique** (`agents/plan_critique.py`, T2) — audits the plan before execution; can reject (re-plan with feedback) or mark `is_terminal_failure` (halt entire workflow). The outer loop allows `MAX_WORKFLOW_ATTEMPTS = 3` replans.
+2. **Planner** (`agents/planner.py`, T2) — decomposes objective into `PlannerTask[]`, each with a `postcondition_json` contract, an `assigned_to` model from the live hierarchy, and `attached_skills`. **When a recipe is matched (or the spec pins a `recipe_id`) the plan is instead compiled *deterministically* from the recipe DAG** (`plan_is_deterministic=True`, `server.py` RECIPE PLAN COMPILER): the Planner LLM call is skipped, PlanCritique is bypassed, and each node's `produces` → `postcondition_json.required_variables` (also `required_metrics`, `fallback_native`/`fallback_call`).
+3. **PlanCritique** (`agents/plan_critique.py`, T2) — audits the plan before execution; can reject (re-plan with feedback) or mark `is_terminal_failure` (halt entire workflow). The outer loop allows `MAX_WORKFLOW_ATTEMPTS = 3` replans. Skipped for deterministic (recipe-compiled) plans.
 4. **Per-task Execution** (`core/executor.py:ExecutionManager.run_task`) — for each `Task`:
    - Probes the IPython kernel for live variables (`namespace_summary`) so the Coder sees ground truth.
    - Calls **Coder** (`agents/workers/coder.py`) to generate Python.
    - **RuntimeOracle** (`core/runtime_oracle.py`) AST-estimates runtime; >280s → bypass, generate **handover ZIP** via `HandoverManager`, continue.
+   - **Native-node preamble**: when the generated code references a native primitive (keyword-matched in `executor.py`), the matching `*_PREAMBLE` from `knowledge/native/` is prepended so pre-written, audited functions are defined in the kernel (see Native nodes).
    - Wraps code with `gads_emit_insight()` preamble + structural DataFrame probe postamble. Executes in sandbox.
-   - On error: `ExecutionHub.escalate_task` bumps the task to the next model tier (max 2 escalations).
+   - **Adaptive retry loop** (replaces the old fixed 2-escalation model): up to `max_attempts=10`, but stops as soon as a failure *reason* recurs (normalized signature — distinct reasons = self-correction, keep going; a repeated reason = looping, stop). ALL prior errors (text only, never the code) are fed back to the Coder each attempt, plus a first-attempt "common pitfalls" prior mined from the cross-run **error ledger** (`core/error_ledger.py` → `research/error_ledger.jsonl`).
+   - **On exhaustion — fallback** (opt-in, local only, `GADS_LOCAL_FALLBACK`): if the node declares a `fallback_native`, invoke it deterministically in the live kernel (no replan); and/or escalate the one task to a cloud model for a single attempt (`cloud`/`native_then_cloud`) — a deliberate, gated exception to "local never escalates". Fallback-completed nodes are tagged `model_used="native_fallback:…"`/`"cloud_fallback:…"`, emit a `TASK_FALLBACK` outbox event, and are counted separately in pass@model reporting.
    - On success: scans the workspace for new files, registers `.png` as base64 plots and `.json` as interactive Plotly artifacts (via `introspection.harden_json_artifact` which strips binary data).
    - Hallucination guard: scans stdout for tokens like "mock data" / "simulating data" and fails the task even if it didn't raise.
 - **4b. save_model hook** — deterministic post-execution hook (see Project Specs table).
@@ -46,6 +48,8 @@ Before the main loop, two one-shot stages run:
 5. **Synthesizer** (`agents/workers/synthesizer.py`, T2) — writes narrative + takeaways + per-artifact captions.
 6. **Critique** (`agents/workers/critique.py`, T2) — QA pass; can reject and re-trigger the synthesis loop. Critique sees a distilled-Markdown preview of the dashboard (`core/distiller.py`), not raw HTML.
 7. **Reporting** (`core/reporting.py`) — emits `final_dashboard.html` (Jinja2 template at `src/gads/templates/dashboard.html.j2`) and `research_report.md` to the workspace.
+
+**Replan-on-failure & resume-from-failed-node**: an execution failure (or a CompletenessVerifier gap) triggers a replan — `continue` back to Planning, up to `MAX_WORKFLOW_ATTEMPTS = 3` (without this an execution failure would fall straight through to synthesis). For a **deterministic recipe plan** the sandbox kernel is *preserved* across the replan (`_cleanup_stale_sessions(reset_current=False)` when `plan_is_deterministic and workflow_attempt>1`), so `run_task`'s resume path skips any node that completed in a prior attempt whose declared `produces` variables are verifiably live in the kernel — re-running only the failed node + its downstream instead of the whole DAG (`result_json.resumed_from_prior_attempt=True`). Drafted (non-deterministic) plans always reset the kernel. Resume is what makes replan-on-failure cheap enough to enable.
 
 ### Async Plumbing
 
@@ -61,6 +65,8 @@ Before the main loop, two one-shot stages run:
 
 **Routing modes** (`registry.py`, `resolve_stage_model` is the single choke point): `cloud` (tiered + escalation ladder), `local` (all tiers collapse to `["local_model"]`, no escalation), `hybrid` (plan construction — SpecDrafter/Router/Planner/PlanCritique — and report writing — Synthesizer/Critique — on cloud tiers; execution tasks + CompletenessVerifier on `local_model`), `cloud_pinned` (one operator-chosen cloud model for every stage, **no escalation ladder**). Set via `POST /config {routing_mode, pinned_model, random_routing}` (legacy `{local_only}` still maps to local/cloud and cannot clobber a mode when absent) or `GADS_ROUTING_MODE`/`GADS_PINNED_MODEL` in `.env` (fallback: `GADS_LOCAL_ONLY`). Runtime config is in-process only — a backend restart reverts to `.env`.
 
+**Local fallback** (`GADS_LOCAL_FALLBACK`, or `POST /config {local_fallback}`): `none` (default) | `native` | `cloud` | `native_then_cloud` — what happens when a local task exhausts all retries (see Execution). `cloud`/`native_then_cloud` are the deliberate, opt-in, *post-exhaustion only* exception to the never-escalate mandate; the cloud model is resolved via `get_model_hierarchy(force_cloud=True)` (which builds real cloud tiers even in local mode, since the normal local hierarchy collapses to `local_model`). Default `none` keeps the local capability boundary visible.
+
 ### BaseAgent (agents/base.py)
 
 All agents extend `BaseAgent[TIn, TOut]`. There are **three completion paths**:
@@ -72,13 +78,16 @@ The `local_model` branch also injects `repetition_penalty=1.1, temperature=0.1` 
 
 ### Knowledge & Prompt System
 
-- **Recipes** (`src/gads/knowledge/recipes/*.md`) — YAML frontmatter (id, applies_when, requires, dag, invariants) + Markdown body with `## Rationale` heading. Loaded by `KnowledgeRegistry`. The Router matches; if matched, the Planner receives a `ReconciliationReport` as a prior.
-- **Skills** (`src/gads/knowledge/skills/*.md`) — keyword-triggered expertise injected into the Coder's prompt. Planner-attached + keyword-matched skills are deduplicated and concatenated.
+- **Recipes** (`src/gads/knowledge/recipes/*.md`) — YAML frontmatter (id, applies_when, requires, dag, invariants) + Markdown body with `## Rationale` heading. Loaded by `KnowledgeRegistry`. The Router matches; if matched, the Planner receives a `ReconciliationReport` as a prior and the plan is compiled deterministically from the `dag`. Per-node fields (`RecipeTask`): `intent`, `worker_tier`, `depends_on`, `produces`, `required_metrics`, `attached_skills`, and `fallback_native`/`fallback_call` (the node's native safety net for the local fallback).
+- **Skills** (`src/gads/knowledge/skills/*.md`) — keyword-triggered expertise injected into the Coder's prompt. Planner-attached + keyword-matched skills are deduplicated and concatenated. An embedding index (`core/skill_semantics.py`) supplements keyword matching for tasks with no curated `attached_skills`.
+- **Native nodes** (`src/gads/knowledge/native/*.py`) — pre-written, audited Python functions injected into the sandbox as a preamble for high-stakes / single-right-answer steps where LLM codegen reliably fails: AutoGluon fit/predict, DoWhy & Bayesian ATE, implicit-CF recommenders, the skore `gads_audit_model` methodological gate, and survival (`gads_make_surv_target`, `gads_evaluate_survival`, `gads_cox_ph_report`; plus fallback-only `gads_kaplan_meier`, `gads_plot_survival_curves`). Registered in `native/__init__.py` (`NATIVE_REGISTRY`, `NATIVE_SOURCE`, `*_PREAMBLE`); functions are annotation-free and self-contained (imports inside) so their source injects verbatim via `inspect.getsource`. Keyword-triggered in `executor.py`. **Design rule:** nativize invariant/correctness/guarantee operations (loses ~no capability); keep genuinely variable work (plotting, feature engineering, model choice) model-generated with the native only as an opt-in `fallback_native`, so model capability stays measured (see approach_docs/019).
 - **Prompts** (`core/prompts.py`) — `FACTORY_DEFAULTS` are the source of truth; user overrides are stored as files in `gads_data/prompts/` and reloaded on every agent run (hot-edit via `POST /prompts/{agent_name}`). Templates use `{placeholder}` style — when adding new placeholders, both the factory default AND every agent's `formatted_prompt = base_prompt.format(...)` call must be updated together.
 
 ### Observability
 
 `core/llm.trace_context` is a `ContextVar` set at the top of `run_agent_workflow`. `get_structured_completion` reads it to inject Langfuse trace headers and LiteLLM metadata on every call. Stages also create explicit `langfuse_client.trace(...).span(...)` spans. **Don't forget to update `trace_context.get().update({...})` when adding a new agent stage** or its spans will hang off the wrong parent.
+
+**Delegation dial & pass@model** (`core/dial.py`): each completed run appends a record to `research/dial_ledger.jsonl` — the delegation rung (D0…D5) × routing outcome, plus `pass_at_model` (`model_pass`/`exec_nodes`, the fraction the assigned model did itself) vs `fallback_pass` (`native_fallback`/`cloud_fallback`, nodes a fallback rescued). The two are kept **separate and never collapsed** so a fallback-assisted pass cannot masquerade as a model pass — this is what keeps the efficiency-boundary measurement honest.
 
 ### Postcondition Contracts (execution_hub.py:validate_contract)
 

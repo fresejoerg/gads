@@ -39,7 +39,7 @@ The entire orchestration is one auditable coroutine (`run_agent_workflow` in `co
 8. **Synthesizer → Critique** — narrative, takeaways, and per-artifact captions, QA-checked against a distilled view of the dashboard.
 9. **Reporting** — emits `final_dashboard.html`, `research_report.md`, a `.py`/`.ipynb` code bundle, the applied recipe, and a delegation-dial ledger entry.
 
-Failure is handled by **three nested retry ladders**: the Coder retries with error feedback (≤2), then the task escalates to a stronger model (≤2), then the whole workflow replans with failure context (≤3 attempts).
+Failure handling has several layers: the Coder retries with **accumulated** error feedback — adaptive, up to 10 attempts, stopping the moment a failure *reason* repeats (a first-attempt "common pitfalls" prior comes from a cross-run error ledger); an execution failure **replans** with failure context (≤3 attempts), and for a deterministic recipe plan the kernel is **preserved so the replan resumes** — re-running only the failed node plus its downstream, not the whole DAG; and an opt-in **local fallback** (`GADS_LOCAL_FALLBACK`) can, *only after* the local model exhausts its retries, invoke a node's native safety net or escalate that one task to a cloud model for a single attempt. Fallback-assisted nodes are tracked separately from model-only passes (`pass@model`).
 
 ---
 
@@ -55,7 +55,7 @@ GADS measures capability along a **delegation dial** — how much of the *method
 | **D4** | Curated skill — worked code patterns injected into the Coder |
 | **D5** | Mechanized — a deterministic native kernel function does the work |
 
-The **project rung is the minimum over its task rungs**, and `D*(engine)` is the lowest rung an engine can hold within tolerance. Crossed against the engine (local 12B ↔ cloud tiers), this produces a **rung × engine** pass/fail grid — the central evidence base, accumulated in `research/dial_ledger.jsonl` with benchmarks under `research/benchmarks/` and findings in `research/JOURNAL.md`.
+The **project rung is the minimum over its task rungs**, and `D*(engine)` is the lowest rung an engine can hold within tolerance. Crossed against the engine (local 12B ↔ cloud tiers), this produces a **rung × engine** pass/fail grid — the central evidence base, accumulated in `research/dial_ledger.jsonl` with benchmarks under `research/benchmarks/` and findings in `research/JOURNAL.md`. Each record separates **`pass@model`** (nodes the assigned model completed itself) from **fallback-assisted** nodes (a native or cloud fallback rescued them), so the boundary reading is never inflated by the safety net.
 
 ---
 
@@ -100,8 +100,9 @@ Durable state lives in **PostgreSQL** (via SQLModel); UI events are written to a
 A Docker-isolated **IPython kernel** (one persistent session per project) keeps variable state across agent turns. Fixed package set (no runtime `pip install`):
 
 - **Data:** pandas, numpy, polars, pyarrow, duckdb
-- **ML:** scikit-learn, torch, lightgbm, xgboost, shap, joblib
+- **ML:** scikit-learn, torch, lightgbm, xgboost, shap, joblib, skore (methodological audit)
 - **AutoML:** AutoGluon (tabular + timeseries)
+- **Survival:** lifelines, scikit-survival
 - **Causal:** dowhy, econml, causalml, causallearn, linearmodels, statsmodels, pymc, arviz, bambi, pycausalimpact, pgmpy
 - **NLP:** sentence-transformers, nltk, textblob
 - **Viz:** matplotlib, seaborn, plotly, kaleido, networkx

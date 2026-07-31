@@ -39,3 +39,13 @@ Informed / potentially informs:
 - **Skills encode judgment checkpoints, not just domain facts**: The framing is judgment (human) → intelligence (LLM pattern matching) → procedural (code). Skills should specify *where in the workflow* the agent should pause and ask the human, not just what domain knowledge to apply. This could inform how GADS recipes define `invariants` and how the Planner writes `postcondition_json` for open-ended EDA tasks.
 
 ---
+
+## Libraries & Tools
+
+**[L1] skore (probabl.ai)** — https://docs.skore.probabl.ai · https://blog.probabl.ai/data-science-agents-you-can-trust
+
+Directly informed the **`gads_audit_model` native node**: skore's `EstimatorReport` automated checks (leakage / over-under-fit / class imbalance / worse-than-baseline / low-value features) are wrapped as GADS's methodological-soundness gate — the signal for *methodological appropriateness*, the axis on which agentic DS most often fails silently. The "data science agents you can trust" post framed the case for turning those judgment calls into measurable checks.
+
+**[L2] lifelines & scikit-survival** — https://lifelines.readthedocs.io · https://scikit-survival.readthedocs.io
+
+The two survival-analysis engines behind the `survival_analysis.*` recipes and native nodes: lifelines for interpretable inference (Kaplan-Meier, log-rank, Cox PH + the proportional-hazards assumption test) and scikit-survival for ML prediction (Random Survival Forest + censoring-aware metrics: IPCW C-index, time-dependent AUC, Integrated Brier Score).
