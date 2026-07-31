@@ -452,6 +452,7 @@ class ExecutionManager:
         fallback_native: Optional[str] = None,
         fallback_call: Optional[str] = None,
         fallback_mode: str = "none",
+        max_attempts: int = 10,
     ) -> Tuple[ExecutionResult, str]:
         """
         Runs the full loop with State Introspection. 
@@ -463,7 +464,8 @@ class ExecutionManager:
         # error means the model is stuck, not progressing, so further re-rolls only waste
         # time. ALL prior errors are fed back each attempt (the error text alone, not the
         # code — the error is the signal that nudges a different approach).
-        max_attempts = 10
+        # `max_attempts` is a parameter: the cloud fallback re-invokes run_task with a cloud
+        # model and max_attempts=1 (a single escalated attempt, not another full retry loop).
         retry_count = 0
         error_feedback = None
         previous_code = ""
