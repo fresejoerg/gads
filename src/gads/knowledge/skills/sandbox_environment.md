@@ -12,8 +12,9 @@ The IPython kernel sandbox has a **fixed set of pre-installed packages**. You CA
 | Category | Packages |
 |---|---|
 | Data | pandas, numpy, polars, pyarrow, duckdb |
-| ML/Modeling | scikit-learn, joblib, torch, lightgbm, xgboost, shap |
+| ML/Modeling | scikit-learn, joblib, torch, lightgbm, xgboost, shap, skore |
 | AutoML | autogluon.tabular (`TabularPredictor`), autogluon.timeseries (`TimeSeriesPredictor`) |
+| Survival | lifelines (`CoxPHFitter`, `KaplanMeierFitter`), scikit-survival (`sksurv`: `RandomSurvivalForest`, `Surv`) |
 | Causal | dowhy, econml, causalml, causallearn, linearmodels, statsmodels, pymc, arviz, bambi, pycausalimpact, pgmpy |
 | NLP | sentence-transformers (`all-MiniLM-L6-v2` cached), nltk, textblob |
 | Visualization | matplotlib, seaborn, plotly, kaleido, networkx |

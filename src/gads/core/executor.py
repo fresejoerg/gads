@@ -678,8 +678,21 @@ class ExecutionManager:
                     except Exception as _e:
                         print(f"    [Executor] Warning: Could not load model-audit preamble: {_e}", flush=True)
 
+                # Inject survival-analysis native node preamble when survival APIs are referenced
+                _survival_preamble = ""
+                if any(kw in current_code for kw in ["gads_make_surv_target", "gads_evaluate_survival",
+                                                       "gads_cox_ph_report", "CoxPHFitter", "CoxPHSurvivalAnalysis",
+                                                       "RandomSurvivalForest", "lifelines", "sksurv",
+                                                       "Surv.from_", "KaplanMeierFitter"]):
+                    try:
+                        from gads.knowledge.native import SURVIVAL_PREAMBLE
+                        _survival_preamble = SURVIVAL_PREAMBLE + "\n"
+                        print(f"    [Executor] Injecting survival-analysis native node preamble", flush=True)
+                    except Exception as _e:
+                        print(f"    [Executor] Warning: Could not load survival preamble: {_e}", flush=True)
+
                 # Wrap code with telemetry hooks
-                telemetry_preamble = _autogluon_preamble + _causal_preamble + _rec_preamble + _audit_preamble + """
+                telemetry_preamble = _autogluon_preamble + _causal_preamble + _rec_preamble + _audit_preamble + _survival_preamble + """
 if '_gads_insights' not in globals(): _gads_insights = []
 def gads_emit_insight(artifact, insight, evidence=""):
     _gads_insights.append({"artifact": artifact, "insight": insight, "evidence": evidence})

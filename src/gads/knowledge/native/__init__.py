@@ -20,6 +20,7 @@ from .causal import gads_causal_estimate_ate, gads_causal_bayesian_ate
 from .recommendation import (gads_build_interaction_matrix, gads_temporal_loo_split,
                              gads_fit_and_recommend, gads_evaluate_topn, gads_recommend_and_evaluate)
 from .model_audit import gads_audit_model
+from .survival import gads_make_surv_target, gads_evaluate_survival, gads_cox_ph_report
 
 NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_automl_fit": gads_automl_fit,
@@ -35,6 +36,9 @@ NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_evaluate_topn": gads_evaluate_topn,
     "gads_recommend_and_evaluate": gads_recommend_and_evaluate,
     "gads_audit_model": gads_audit_model,
+    "gads_make_surv_target": gads_make_surv_target,
+    "gads_evaluate_survival": gads_evaluate_survival,
+    "gads_cox_ph_report": gads_cox_ph_report,
 }
 
 # Preamble injected into every sandbox execution when AutoGluon recipes are active.
@@ -428,4 +432,18 @@ from . import model_audit as _audit_mod
 MODEL_AUDIT_PREAMBLE = (
     "import warnings as _w_audit\n_w_audit.filterwarnings('ignore')\n\n"
     + _inspect.getsource(_audit_mod.gads_audit_model)
+)
+
+
+# Preamble injected when survival-analysis keywords are detected. Built from the survival
+# module source (single source of truth) so the injected functions track the tested ones.
+from . import survival as _surv_mod
+
+SURVIVAL_PREAMBLE = (
+    "import warnings as _w_surv\n_w_surv.filterwarnings('ignore')\n\n"
+    + "\n\n".join(_inspect.getsource(_fn) for _fn in (
+        _surv_mod.gads_make_surv_target,
+        _surv_mod.gads_evaluate_survival,
+        _surv_mod.gads_cox_ph_report,
+    ))
 )

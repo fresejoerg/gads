@@ -27,6 +27,7 @@ KNOWN_CAPABILITIES = {
     "statsmodels", "pymc", "arviz", "bambi", "pycausalimpact", "pgmpy",
     "sentence-transformers", "nltk", "textblob",
     "matplotlib", "seaborn", "plotly", "kaleido", "networkx",
+    "lifelines", "scikit-survival", "sksurv", "skore",
 }
 
 # Triggers this short/common would over-fire on ordinary code (the list->tolist() class
