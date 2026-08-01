@@ -97,6 +97,10 @@ async def catch_exceptions_middleware(request, call_next):
 
 registry = KnowledgeRegistry("src/gads/knowledge/recipes")
 WORKSPACE_ROOT = "/home/joergf/projects/MyLocalStack/data/workspaces"
+# Source-dataset root, bind mounted READ-ONLY into the sandbox at the identical path.
+# Datasets under this root are symlinked into workspaces rather than copied (see
+# _mount_external_dataset); the read-only mount is what makes that safe.
+DATASETS_ROOT = os.getenv("GADS_DATASETS_ROOT", "/home/joergf/datasets")
 
 LIVE_STREAMS: Dict[str, Dict[str, str]] = {}
 
@@ -3124,11 +3128,18 @@ async def create_project(req: ProjectCreateRequest, background_tasks: Background
             instructions=[InstructionRead.from_orm(i) for i in instructions]
         )
 def _mount_external_dataset(workspace_dir: str, host_path: str):
-    """Copies an external dataset into the workspace.
+    """Make an external dataset available in a project workspace.
 
-    Previously used symlinks, but symlinks allow task code to overwrite the
-    source file (writes go through the link to the original). Copying protects
-    the source dataset from accidental overwrites.
+    Datasets under `GADS_DATASETS_ROOT` are **symlinked**, not copied. That root is bind
+    mounted into the sandbox READ-ONLY at the identical path, so the link resolves on both
+    host and container while task code physically cannot write through it. This is what
+    makes the link safe: the 2026-05 incident (generated code overwrote an original Kaggle
+    train.csv) happened because the mount was writable, and copying was the workaround —
+    at the cost of ~17GB of duplicated datasets across workspaces (one 144MB file had 89
+    copies). The read-only mount removes the hazard without the duplication.
+
+    Anything outside that root is still **copied**: an arbitrary host path is not mounted
+    into the sandbox, so a symlink to it would dangle inside the container.
     """
     import shutil
     if not os.path.lexists(host_path):
@@ -3138,12 +3149,25 @@ def _mount_external_dataset(workspace_dir: str, host_path: str):
     filename = os.path.basename(host_path)
     target_path = os.path.join(workspace_dir, filename)
 
-    try:
-        if os.path.lexists(target_path):
-            if os.path.islink(target_path): os.unlink(target_path)
-            else: os.remove(target_path)
+    if os.path.lexists(target_path):
+        if os.path.islink(target_path) or os.path.isfile(target_path):
+            os.unlink(target_path) if os.path.islink(target_path) else os.remove(target_path)
 
+    src = os.path.realpath(host_path)
+    root = os.path.realpath(DATASETS_ROOT)
+    inside_mounted_root = os.path.commonpath([src, root]) == root if os.path.isdir(root) else False
+
+    if inside_mounted_root:
+        try:
+            os.symlink(src, target_path)
+            print(f"  [Dataset] Linked '{filename}' (read-only source, no copy)", flush=True)
+            return
+        except Exception as e:
+            print(f"  [Dataset] Symlink failed ({e}); falling back to copy.", flush=True)
+
+    try:
         shutil.copy2(host_path, target_path)
+        print(f"  [Dataset] Copied '{filename}' (outside the read-only datasets root)", flush=True)
     except Exception as e:
         raise Exception(f"Failed to copy dataset: {e}")
 
