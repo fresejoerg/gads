@@ -59,6 +59,11 @@ langfuse_client = Langfuse(
 
 ACTIVE_WORKFLOWS: set[uuid.UUID] = set()
 
+# Projects whose sandbox session is pinned for interactive follow-up work: their kernel holds
+# rehydrated state and must survive another project's stale-session sweep (approach_docs/020).
+# In-process only, like ACTIVE_WORKFLOWS — a backend restart clears it (and the kernels too).
+PINNED_SESSIONS: set[uuid.UUID] = set()
+
 async def run_agent_workflow_wrapper(project_id: uuid.UUID, objective: str, instruction_id: Optional[uuid.UUID] = None):
     """Wrapper to manage the ACTIVE_WORKFLOWS lock."""
     try:
@@ -141,6 +146,13 @@ class ConfigUpdate(BaseModel):
     pinned_model: Optional[str] = None
     # Local retry-exhaustion fallback: none | native | cloud | native_then_cloud
     local_fallback: Optional[str] = None
+
+class RehydrateRequest(BaseModel):
+    # Only replay if these variables are missing; None = replay when the session is empty.
+    required_vars: Optional[List[str]] = None
+    force: bool = False          # replay even if the session already looks live
+    timeout: float = 900.0       # replay re-runs the original computation; allow for fits
+
 
 class FileUpload(BaseModel):
     name: str
@@ -506,6 +518,80 @@ async def manual_cleanup():
     count = await perform_cleanup()
     return {"status": "success", "removed_projects": count}
 
+@app.get("/projects/{project_id}/kernel")
+async def get_project_kernel(project_id: uuid.UUID):
+    """Live namespace of a project's sandbox session (no side effects).
+
+    `status` is 'live' when variables are present, 'cold' when the session is empty or
+    unreachable — i.e. whether follow-up work can build on prior state as-is.
+    """
+    workspace_dir = f"{WORKSPACE_ROOT}/{project_id}"
+    with Session(engine) as session:
+        known = session.get(Project, project_id) is not None
+    if not known and not os.path.isdir(workspace_dir):
+        raise HTTPException(status_code=404, detail="Project not found")
+    from gads.core.kernel_state import (snapshot_kernel, replayable_tasks,
+                                        replay_code_from_workspace, meaningful_variables)
+    variables = meaningful_variables(await snapshot_kernel(SandboxClient(), project_id))
+    n_db = len(replayable_tasks(project_id))
+    return {
+        "project_id": str(project_id),
+        "status": "live" if variables else "cold",
+        "variables": variables or {},
+        "variable_count": len(variables or {}),
+        "replayable_tasks": n_db,
+        # Replay can also be recovered from the workspace export when DB rows are gone.
+        "workspace_replay_available": bool(replay_code_from_workspace(workspace_dir)) if not n_db else True,
+        "in_database": known,
+        "pinned": project_id in PINNED_SESSIONS,
+    }
+
+
+@app.post("/projects/{project_id}/rehydrate")
+async def rehydrate_project(project_id: uuid.UUID, req: Optional[RehydrateRequest] = None):
+    """Restore a completed project's kernel state so follow-up work can build on it.
+
+    Idempotent: if the session already holds the state this is a no-op probe. Otherwise the
+    project's COMPLETED task code is replayed into the session. Fail-soft — a failed replay
+    returns status 'cold' with the error rather than raising, so callers can proceed against
+    workspace files instead.
+
+    Note the returned state is *replayed*, not restored: re-running the original code can
+    rebuild subtly different objects where a step was not fully deterministic.
+    """
+    req = req or RehydrateRequest()
+    workspace_dir = f"{WORKSPACE_ROOT}/{project_id}"
+    with Session(engine) as session:
+        known = session.get(Project, project_id) is not None
+    # A workspace with no DB row is still rehydratable (archive recovery), so accept either.
+    if not known and not os.path.isdir(workspace_dir):
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project_id in ACTIVE_WORKFLOWS:
+        raise HTTPException(status_code=409,
+                            detail="A workflow is currently running for this project; "
+                                   "rehydration would race its kernel.")
+    from gads.core.kernel_state import ensure_kernel_state
+    # Pin BEFORE replaying so a concurrent run's sweep cannot wipe the work in progress.
+    PINNED_SESSIONS.add(project_id)
+    result = await ensure_kernel_state(
+        SandboxClient(), project_id,
+        required_vars=req.required_vars, force=req.force, timeout=req.timeout,
+        workspace_dir=workspace_dir,
+    )
+    if result["status"] in ("cold", "empty") and not result.get("variables"):
+        PINNED_SESSIONS.discard(project_id)   # nothing worth protecting
+    result["pinned"] = project_id in PINNED_SESSIONS
+    return result
+
+
+@app.post("/projects/{project_id}/unpin")
+async def unpin_project_session(project_id: uuid.UUID):
+    """Release a pinned session so normal stale-session cleanup can reclaim its kernel."""
+    was = project_id in PINNED_SESSIONS
+    PINNED_SESSIONS.discard(project_id)
+    return {"project_id": str(project_id), "was_pinned": was, "pinned": False}
+
+
 @app.post("/projects/{project_id}/cancel")
 async def cancel_project(project_id: uuid.UUID):
     """Mark a project for cancellation."""
@@ -580,6 +666,10 @@ async def _cleanup_stale_sessions(sandbox, current_project_id: uuid.UUID, reset_
         reset_count = 0
         for project in all_projects:
             if project.id == current_project_id:
+                continue
+            # Kernel-state pin: a project with a live/rehydrated session for interactive
+            # follow-up work must not be wiped by another project's run (approach_docs/020).
+            if project.id in PINNED_SESSIONS:
                 continue
             with Session(engine) as db:
                 active = db.exec(

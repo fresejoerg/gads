@@ -637,68 +637,21 @@ class ExecutionManager:
 
                 print(f"    [Executor] Executing code in sandbox...", flush=True)
 
-                # Inject AutoGluon native node preamble when the code references AutoGluon APIs
-                _autogluon_preamble = ""
-                if any(kw in current_code for kw in ["autogluon", "TabularPredictor", "TimeSeriesPredictor",
-                                                       "gads_automl_fit", "gads_timeseries_fit", "gads_calibrate_threshold"]):
-                    try:
-                        from gads.knowledge.native import AUTOGLUON_PREAMBLE
-                        _autogluon_preamble = AUTOGLUON_PREAMBLE + "\n"
-                        print(f"    [Executor] Injecting AutoGluon native node preamble", flush=True)
-                    except Exception as _e:
-                        print(f"    [Executor] Warning: Could not load AutoGluon preamble: {_e}", flush=True)
-
-                # Inject causal native node preamble when the code references causal APIs
-                _causal_preamble = ""
-                if any(kw in current_code for kw in ["CausalModel", "dowhy", "causal_estimate",
-                                                       "gads_causal_estimate_ate", "gads_causal_bayesian_ate",
-                                                       "bambi", "bmb.Model"]):
-                    try:
-                        from gads.knowledge.native import CAUSAL_PREAMBLE
-                        _causal_preamble = CAUSAL_PREAMBLE + "\n"
-                        print(f"    [Executor] Injecting causal native node preamble", flush=True)
-                    except Exception as _e:
-                        print(f"    [Executor] Warning: Could not load causal preamble: {_e}", flush=True)
-
-                # Inject recommendation native node preamble when CF/recommender APIs are referenced
-                _rec_preamble = ""
-                if any(kw in current_code for kw in ["gads_recommend_and_evaluate", "gads_build_interaction_matrix",
-                                                       "gads_fit_and_recommend", "gads_evaluate_topn",
-                                                       "gads_temporal_loo_split", "AlternatingLeastSquares",
-                                                       "implicit.als"]):
-                    try:
-                        from gads.knowledge.native import RECOMMENDATION_PREAMBLE
-                        _rec_preamble = RECOMMENDATION_PREAMBLE + "\n"
-                        print(f"    [Executor] Injecting recommendation native node preamble", flush=True)
-                    except Exception as _e:
-                        print(f"    [Executor] Warning: Could not load recommendation preamble: {_e}", flush=True)
-
-                # Inject model-audit native node preamble when the skore audit is referenced
-                _audit_preamble = ""
-                if any(kw in current_code for kw in ["gads_audit_model", "EstimatorReport", "skore"]):
-                    try:
-                        from gads.knowledge.native import MODEL_AUDIT_PREAMBLE
-                        _audit_preamble = MODEL_AUDIT_PREAMBLE + "\n"
-                        print(f"    [Executor] Injecting model-audit native node preamble", flush=True)
-                    except Exception as _e:
-                        print(f"    [Executor] Warning: Could not load model-audit preamble: {_e}", flush=True)
-
-                # Inject survival-analysis native node preamble when survival APIs are referenced
-                _survival_preamble = ""
-                if any(kw in current_code for kw in ["gads_make_surv_target", "gads_evaluate_survival",
-                                                       "gads_cox_ph_report",
-                                                       "CoxPHFitter", "CoxPHSurvivalAnalysis",
-                                                       "RandomSurvivalForest", "lifelines", "sksurv",
-                                                       "Surv.from_", "KaplanMeierFitter"]):
-                    try:
-                        from gads.knowledge.native import SURVIVAL_PREAMBLE
-                        _survival_preamble = SURVIVAL_PREAMBLE + "\n"
-                        print(f"    [Executor] Injecting survival-analysis native node preamble", flush=True)
-                    except Exception as _e:
-                        print(f"    [Executor] Warning: Could not load survival preamble: {_e}", flush=True)
+                # Inject the native-node definitions this code references (keyword-routed;
+                # single source of truth in gads.knowledge.native.preamble_for_code, shared
+                # with kernel rehydration so replayed code gets the same definitions).
+                _native_preamble = ""
+                try:
+                    from gads.knowledge.native import preamble_for_code
+                    _native_preamble, _native_names = preamble_for_code(current_code)
+                    if _native_names:
+                        print(f"    [Executor] Injecting native node preamble(s): "
+                              f"{', '.join(_native_names)}", flush=True)
+                except Exception as _e:
+                    print(f"    [Executor] Warning: Could not load native preambles: {_e}", flush=True)
 
                 # Wrap code with telemetry hooks
-                telemetry_preamble = _autogluon_preamble + _causal_preamble + _rec_preamble + _audit_preamble + _survival_preamble + """
+                telemetry_preamble = _native_preamble + """
 if '_gads_insights' not in globals(): _gads_insights = []
 def gads_emit_insight(artifact, insight, evidence=""):
     _gads_insights.append({"artifact": artifact, "insight": insight, "evidence": evidence})

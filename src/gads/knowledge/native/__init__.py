@@ -460,3 +460,44 @@ SURVIVAL_PREAMBLE = (
 # Per-native source, for the opt-in local-fallback path (invoke ONE native on demand rather
 # than injecting the always-on preamble). Includes the demoted plotting natives.
 NATIVE_SOURCE = {name: _inspect.getsource(fn) for name, fn in NATIVE_REGISTRY.items()}
+
+
+# Keyword → preamble routing table. Single source of truth for "which native definitions
+# does this code need in the kernel", used by the executor before running generated code AND
+# by kernel rehydration when replaying a prior run's code into a fresh session (the replayed
+# code calls the same natives, so it needs the same definitions).
+_PREAMBLE_ROUTES = (
+    ("AutoGluon", ("autogluon", "TabularPredictor", "TimeSeriesPredictor",
+                   "gads_automl_fit", "gads_timeseries_fit", "gads_calibrate_threshold"),
+     lambda: AUTOGLUON_PREAMBLE),
+    ("causal", ("CausalModel", "dowhy", "causal_estimate", "gads_causal_estimate_ate",
+                "gads_causal_bayesian_ate", "bambi", "bmb.Model"),
+     lambda: CAUSAL_PREAMBLE),
+    ("recommendation", ("gads_recommend_and_evaluate", "gads_build_interaction_matrix",
+                        "gads_fit_and_recommend", "gads_evaluate_topn",
+                        "gads_temporal_loo_split", "AlternatingLeastSquares", "implicit.als"),
+     lambda: RECOMMENDATION_PREAMBLE),
+    ("model-audit", ("gads_audit_model", "EstimatorReport", "skore"),
+     lambda: MODEL_AUDIT_PREAMBLE),
+    ("survival", ("gads_make_surv_target", "gads_evaluate_survival", "gads_cox_ph_report",
+                  "CoxPHFitter", "CoxPHSurvivalAnalysis", "RandomSurvivalForest",
+                  "lifelines", "sksurv", "Surv.from_", "KaplanMeierFitter"),
+     lambda: SURVIVAL_PREAMBLE),
+)
+
+
+def preamble_for_code(code: str):
+    """Return (preamble_text, [names]) for the native groups this code references.
+
+    Best-effort per group: a preamble that fails to build is skipped rather than breaking
+    execution. Order is stable (definition order above) so injected source is deterministic.
+    """
+    parts, names = [], []
+    for name, keywords, get_preamble in _PREAMBLE_ROUTES:
+        if any(kw in code for kw in keywords):
+            try:
+                parts.append(get_preamble() + "\n")
+                names.append(name)
+            except Exception as e:  # pragma: no cover - defensive
+                print(f"    [Native] Warning: could not load {name} preamble: {e}", flush=True)
+    return "".join(parts), names
