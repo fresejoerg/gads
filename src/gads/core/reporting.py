@@ -15,10 +15,16 @@ def create_master_reports(
     narrative: str,
     takeaways: List[str],
     artifacts: List[Any],
-    artifact_insights: Optional[List[Any]] = None
+    artifact_insights: Optional[List[Any]] = None,
+    followups: Optional[List[Dict[str, Any]]] = None,
 ):
     """
     Assembles the final integrated HTML dashboard and Markdown research report.
+
+    `followups` appends analyst-directed sections AFTER the autonomous result — each with its
+    own instruction text, timestamp, optional narrative/stdout and its own cards. The main
+    section is never mutated or reordered by a follow-up (approach_docs/020). Each entry:
+    {instruction_text, created_at, model_used, narrative, stdout, artifacts}.
     """
     insights_map = {}
     if artifact_insights:
@@ -91,6 +97,64 @@ The following artifacts were generated during this analysis:
     # We also need the inverse: Figure N -> Filename
     figure_label_to_artifact = {v.lower(): k for k, v in artifact_to_figure_label.items()}
 
+    cards = _build_cards(artifacts, workspace_dir, insights_map, artifact_to_figure_label)
+
+    # Load persisted metrics (written by the metrics guarantee probe)
+    key_metrics: Dict[str, Any] = {}
+    metrics_path = os.path.join(workspace_dir, "metrics.json")
+    if os.path.exists(metrics_path):
+        try:
+            with open(metrics_path) as f:
+                raw_metrics = json.load(f)
+            for k, v in raw_metrics.items():
+                key_metrics[k] = f"{v:.4f}" if isinstance(v, float) else str(v)
+        except Exception as e:
+            print(f"  [Reporting] Warning: could not load metrics.json: {e}")
+
+    # Follow-up sections: each carries its own cards, built with the same logic so they
+    # render identically to the main run (approach_docs/020).
+    followup_views = []
+    for fu in (followups or []):
+        followup_views.append({
+            "instruction_text": fu.get("instruction_text", ""),
+            "created_at": fu.get("created_at", ""),
+            "model_used": fu.get("model_used", ""),
+            "narrative": fu.get("narrative", ""),
+            "stdout": (fu.get("stdout") or "").strip()[-4000:],
+            "cards": _build_cards(fu.get("artifacts", []), workspace_dir, {}, {}),
+        })
+    if followup_views:
+        md_content += "\n## Follow-up Analyses\n"
+        md_content += ("Analyst-directed work performed after the autonomous run; the "
+                       "findings above are unchanged.\n\n")
+        for fu in followup_views:
+            md_content += f"### {fu['instruction_text']}\n"
+            md_content += f"*{fu['created_at']}*\n\n"
+            if fu["narrative"]:
+                md_content += fu["narrative"] + "\n\n"
+            for c in fu["cards"]:
+                md_content += f"- **{c['description']}**\n"
+        with open(os.path.join(workspace_dir, "research_report.md"), "w") as f:
+            f.write(md_content)
+
+    html_content = template.render(
+        project_id=str(project_id),
+        narrative=narrative,
+        takeaways=takeaways,
+        cards=cards,
+        key_metrics=key_metrics,
+        followups=followup_views,
+    )
+
+    with open(os.path.join(workspace_dir, "final_dashboard.html"), "w") as f:
+        f.write(html_content)
+
+    return html_content
+
+
+def _build_cards(artifacts, workspace_dir, insights_map, artifact_to_figure_label):
+    """Turn Artifact rows into renderable dashboard cards (shared by the main run and each
+    follow-up section, so both look the same)."""
     cards = []
     for a in artifacts:
         # ... logic ...
@@ -171,31 +235,97 @@ The following artifacts were generated during this analysis:
             except: continue
 
         cards.append(card)
+    return cards
 
-    # Load persisted metrics (written by the metrics guarantee probe)
-    key_metrics: Dict[str, Any] = {}
-    metrics_path = os.path.join(workspace_dir, "metrics.json")
-    if os.path.exists(metrics_path):
-        try:
-            with open(metrics_path) as f:
-                raw_metrics = json.load(f)
-            for k, v in raw_metrics.items():
-                if isinstance(v, float):
-                    key_metrics[k] = f"{v:.4f}"
-                else:
-                    key_metrics[k] = str(v)
-        except Exception as e:
-            print(f"  [Reporting] Warning: could not load metrics.json: {e}")
 
-    html_content = template.render(
-        project_id=str(project_id),
-        narrative=narrative,
-        takeaways=takeaways,
-        cards=cards,
-        key_metrics=key_metrics
-    )
-    
-    with open(os.path.join(workspace_dir, "final_dashboard.html"), "w") as f:
-        f.write(html_content)
+def rebuild_dashboard(project_id: uuid.UUID, workspace_dir: str) -> Optional[str]:
+    """Regenerate dashboard + report for a project from persisted state, including every
+    follow-up section.
 
-    return html_content
+    Deliberately rebuilt from the DB rather than patched into the existing HTML: that makes
+    regeneration **idempotent and additive** — running it after the 3rd follow-up reproduces
+    follow-ups 1 and 2 unchanged, and never double-appends. Artifacts are partitioned by the
+    `followup`/`instruction_id` stamps the follow-up lane writes into `content_json`.
+
+    Best-effort: returns None on failure. A reporting problem must not fail a follow-up whose
+    analysis already succeeded.
+    """
+    from gads.core.models import Artifact, Instruction, Project
+    try:
+        with Session(engine) as session:
+            project = session.get(Project, project_id)
+            artifacts = session.exec(
+                select(Artifact).where(Artifact.project_id == project_id)
+                .order_by(Artifact.created_at)
+            ).all()
+            instructions = {
+                str(i.id): i for i in session.exec(
+                    select(Instruction).where(Instruction.project_id == project_id)).all()
+            }
+            tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
+
+        main_artifacts, by_instruction = [], {}
+        for a in artifacts:
+            cj = a.content_json or {}
+            iid = cj.get("instruction_id") if cj.get("followup") else None
+            (by_instruction.setdefault(iid, []) if iid else main_artifacts).append(a)
+
+        # One section per follow-up instruction, oldest first, carrying that task's stdout.
+        followups = []
+        for iid, arts in by_instruction.items():
+            instr = instructions.get(iid)
+            ftask = next((t for t in tasks
+                          if str(t.instruction_id) == iid
+                          and (t.result_json or {}).get("mode") == "followup"), None)
+            rj = (ftask.result_json or {}) if ftask else {}
+            created = (instr.created_at if instr else None) or (ftask.created_at if ftask else None)
+            followups.append({
+                "instruction_text": (instr.content if instr else "(follow-up)"),
+                "created_at": created.strftime("%Y-%m-%d %H:%M") if created else "",
+                "model_used": rj.get("model_used", ""),
+                "narrative": "",
+                "stdout": rj.get("stdout", ""),
+                "artifacts": arts,
+                "_sort": created,
+            })
+        # Follow-up tasks that produced no artifact still belong in the record.
+        for t in tasks:
+            rj = t.result_json or {}
+            iid = str(t.instruction_id) if t.instruction_id else None
+            if rj.get("mode") == "followup" and iid and iid not in by_instruction:
+                instr = instructions.get(iid)
+                followups.append({
+                    "instruction_text": (instr.content if instr else "(follow-up)"),
+                    "created_at": t.created_at.strftime("%Y-%m-%d %H:%M") if t.created_at else "",
+                    "model_used": rj.get("model_used", ""),
+                    "narrative": "", "stdout": rj.get("stdout", ""),
+                    "artifacts": [], "_sort": t.created_at,
+                })
+        followups.sort(key=lambda f: f["_sort"] or 0)
+        for f in followups:
+            f.pop("_sort", None)
+
+        # SAFETY: never replace a richer dashboard with a poorer one. If the DB holds no
+        # main-run artifacts and no narrative (e.g. the project's rows were lost and only the
+        # workspace survived — see kernel_state.replay_code_from_workspace), a rebuild would
+        # overwrite a complete existing dashboard with an almost-empty one. Skip instead; the
+        # follow-up's own outputs are still in the workspace and the DB.
+        dash = os.path.join(workspace_dir, "final_dashboard.html")
+        has_main = bool(main_artifacts) or bool(project and project.narrative)
+        if not has_main and os.path.exists(dash) and os.path.getsize(dash) > 2048:
+            print("  [Reporting] Existing dashboard preserved: the database has no main-run "
+                  "artifacts to rebuild from (follow-up outputs remain in the workspace).",
+                  flush=True)
+            return None
+
+        return create_master_reports(
+            project_id=project_id,
+            workspace_dir=workspace_dir,
+            narrative=(project.narrative if project and project.narrative else ""),
+            takeaways=(project.takeaways if project and project.takeaways else []),
+            artifacts=main_artifacts,
+            followups=followups,
+        )
+    except Exception as e:
+        print(f"  [Reporting] Warning: dashboard rebuild failed: {e}", flush=True)
+        return None

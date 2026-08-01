@@ -70,31 +70,34 @@
                     <h2>Supporting Data Visualizations</h2>
                     <p class="text-muted mb-4">The following artifacts provide quantitative grounding for the summary above.</p>
                     
-                    {% for card in cards %}
+                    {# Card markup is a macro so follow-up sections render identically to the
+                       main run. `uid` must be unique per card across the whole page: the
+                       renderer below maps every `data-<uid>` script onto `plot-<uid>`. #}
+                    {% macro render_card(card, uid) %}
                     <div class="card">
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h3 class="m-0">{{ card.description }}</h3>
-                            <button class="btn btn-sm btn-outline-secondary" onclick="toggleRaw('raw-{{ loop.index }}')">View JSON</button>
+                            <button class="btn btn-sm btn-outline-secondary" onclick="toggleRaw('raw-{{ uid }}')">View JSON</button>
                         </div>
-                        
+
                         {% if card.ctx_text %}
                         <div class="insight-text">{{ card.ctx_text }}</div>
                         {% endif %}
-                        
+
                         {% if card.type == 'json_plot' %}
                         <!-- The data is embedded safely as application/json -->
-                        <script type="application/json" id="data-{{ loop.index }}" class="plotly-data">
+                        <script type="application/json" id="data-{{ uid }}" class="plotly-data">
                             {{ card.json_data | safe }}
                         </script>
-                        <div id="plot-{{ loop.index }}" class="plot-container"></div>
-                        <pre id="raw-{{ loop.index }}" class="d-none mt-3 p-3 bg-light border rounded" style="max-height: 200px; overflow: auto; font-size: 0.8rem;">{{ card.json_data }}</pre>
-                        
+                        <div id="plot-{{ uid }}" class="plot-container"></div>
+                        <pre id="raw-{{ uid }}" class="d-none mt-3 p-3 bg-light border rounded" style="max-height: 200px; overflow: auto; font-size: 0.8rem;">{{ card.json_data }}</pre>
+
                         {% elif card.type == 'legacy_html' %}
                         <!-- Legacy HTML support -->
                         <div class="plot-container" style="border: 1px dashed #e2e8f0; padding: 10px;">
                             {{ card.html_content | safe }}
                         </div>
-                        
+
                         {% elif card.type == 'static_plot' %}
                         <div class="text-center">
                             <img src="data:image/png;base64,{{ card.img_b64 }}" style="max-width: 100%; border-radius: 8px;" alt="{{ card.description }}">
@@ -112,7 +115,45 @@
                             <strong>{{ card.caption }}</strong>
                         </div>
                     </div>
+                    {% endmacro %}
+
+                    {% for card in cards %}
+                    {{ render_card(card, 'm' ~ loop.index) }}
                     {% endfor %}
+
+                    {# ——— FOLLOW-UP SECTIONS ———
+                       Analyst-directed work done after the autonomous run. Appended, never
+                       merged into the section above: the original result must stay exactly
+                       as the workflow produced it. #}
+                    {% if followups %}
+                    <hr class="my-5" style="border-top: 2px solid #f1f5f9; opacity: 1;">
+                    <h2>Follow-up Analyses</h2>
+                    <p class="text-muted mb-4">
+                        Directed by the analyst after reviewing the results above.
+                        These build on the same session state and do not change the original findings.
+                    </p>
+                    {% for fu in followups %}
+                    {% set fu_i = loop.index %}{# outer index: `loop` is shadowed inside the card loop #}
+                    <div style="border-left: 4px solid #6366f1; padding: 0.25rem 0 0.25rem 1rem; margin: 2rem 0 1rem;">
+                        <div style="font-weight: 600; color: #1e293b;">{{ fu.instruction_text }}</div>
+                        <div class="text-muted" style="font-size: 0.85rem;">
+                            {{ fu.created_at }}{% if fu.model_used %} · {{ fu.model_used }}{% endif %}
+                        </div>
+                    </div>
+                    {% if fu.narrative %}
+                    <div class="insight-text">{{ fu.narrative }}</div>
+                    {% endif %}
+                    {% if fu.stdout %}
+                    <pre class="mt-2 mb-3 p-3 bg-light border rounded" style="max-height: 260px; overflow: auto; font-size: 0.8rem;">{{ fu.stdout }}</pre>
+                    {% endif %}
+                    {% for card in fu.cards %}
+                    {{ render_card(card, 'f' ~ fu_i ~ '-' ~ loop.index) }}
+                    {% endfor %}
+                    {% if not fu.cards and not fu.stdout %}
+                    <p class="text-muted"><em>No new artifacts were produced by this follow-up.</em></p>
+                    {% endif %}
+                    {% endfor %}
+                    {% endif %}
 
                 </div>
 

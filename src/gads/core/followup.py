@@ -222,6 +222,17 @@ async def run_followup(project_id: uuid.UUID, instruction_id: uuid.UUID, task_id
                 pass
         s.commit()
 
+    # Append this follow-up to the dashboard/report. Rebuilt from persisted state, so it is
+    # additive and idempotent — earlier follow-ups are reproduced, never duplicated or lost
+    # (approach_docs/020). Best-effort: a reporting failure must not fail analysis that
+    # already succeeded.
+    try:
+        from gads.core.reporting import rebuild_dashboard
+        if rebuild_dashboard(project_id, workspace_dir):
+            print("  [Follow-up] Dashboard updated with follow-up section.", flush=True)
+    except Exception as e:
+        print(f"  [Follow-up] Warning: dashboard update failed: {e}", flush=True)
+
     print(f"  [Follow-up] ✓ '{objective[:60]}' — {len(new_files)} new file(s), "
           f"kernel={kernel.get('status')}", flush=True)
     return {"status": "completed", "kernel": kernel, "new_files": new_files,
