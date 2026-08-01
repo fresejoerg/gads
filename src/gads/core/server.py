@@ -151,6 +151,13 @@ class ConfigUpdate(BaseModel):
     # Local retry-exhaustion fallback: none | native | cloud | native_then_cloud
     local_fallback: Optional[str] = None
 
+class FollowUpRequest(BaseModel):
+    objective: str                       # the user's instruction, used verbatim as the task
+    rehydrate: bool = True               # restore prior kernel state before running
+    # "auto"/"none" = no recipe guidance; "recipe_id#node_id" injects ONE node's intent.
+    use_recipe: str = "auto"
+
+
 class RehydrateRequest(BaseModel):
     # Only replay if these variables are missing; None = replay when the session is empty.
     required_vars: Optional[List[str]] = None
@@ -586,6 +593,67 @@ async def rehydrate_project(project_id: uuid.UUID, req: Optional[RehydrateReques
         PINNED_SESSIONS.discard(project_id)   # nothing worth protecting
     result["pinned"] = project_id in PINNED_SESSIONS
     return result
+
+
+@app.post("/projects/{project_id}/followup")
+async def create_followup(project_id: uuid.UUID, req: FollowUpRequest,
+                          background_tasks: BackgroundTasks):
+    """Run ONE user-directed instruction against a completed project's live kernel.
+
+    The short lane (approach_docs/020): instruction → one task → rehydrate → Coder → execute
+    → artifacts. Skips SpecDrafter/Router/Planner/PlanCritique/CompletenessVerifier/Critique —
+    the user is the planner and the critic. Use `POST /projects` (with `existing_project_id`)
+    when a full autonomous re-plan is actually wanted.
+
+    Returns immediately with the task id; stream progress from `GET /tasks/{id}/stream`.
+    """
+    objective = (req.objective or "").strip()
+    if not objective:
+        raise HTTPException(status_code=400, detail="objective is required")
+
+    workspace_dir = f"{WORKSPACE_ROOT}/{project_id}"
+    with Session(engine) as session:
+        project = session.get(Project, project_id)
+        if not project and not os.path.isdir(workspace_dir):
+            raise HTTPException(status_code=404, detail="Project not found")
+        if project_id in ACTIVE_WORKFLOWS:
+            raise HTTPException(status_code=409,
+                                detail="This project already has work in flight.")
+        busy = session.exec(select(Task).where(Task.project_id == project_id,
+                                               Task.status.in_(["pending", "running"]))).first()
+        if busy:
+            raise HTTPException(status_code=409,
+                                detail="This project has a running task; wait for it to finish.")
+
+        # A workspace recovered from disk (no DB row) still needs a Project to hang the
+        # instruction/task off — recreate a minimal shell rather than refusing the request.
+        if not project:
+            project = Project(id=project_id, name=f"Recovered {str(project_id)[:8]}",
+                              objective="(recovered from workspace)")
+            session.add(project)
+            session.commit()
+
+        instruction = Instruction(project_id=project_id, content=objective)
+        session.add(instruction)
+        session.commit()
+        session.refresh(instruction)
+
+        model = resolve_stage_model("Coder", "local_model")
+        task = Task(project_id=project_id, instruction_id=instruction.id,
+                    description=objective, assigned_to=model,
+                    status="pending", heartbeat=datetime.now())
+        session.add(task)
+        session.commit()
+        session.refresh(task)
+        instruction_id, task_id = instruction.id, task.id
+
+    ACTIVE_WORKFLOWS.add(project_id)
+    from gads.core.followup import run_followup_wrapper
+    background_tasks.add_task(run_followup_wrapper, project_id, instruction_id, task_id,
+                              objective, req.rehydrate, req.use_recipe)
+    return {"project_id": str(project_id), "instruction_id": str(instruction_id),
+            "task_id": str(task_id), "status": "started",
+            "stream": f"/tasks/{task_id}/stream"}
 
 
 @app.post("/projects/{project_id}/unpin")
