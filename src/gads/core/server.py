@@ -151,6 +151,10 @@ class ConfigUpdate(BaseModel):
     # Local retry-exhaustion fallback: none | native | cloud | native_then_cloud
     local_fallback: Optional[str] = None
 
+class NotesRequest(BaseModel):
+    notes: str = ""
+
+
 class FollowUpRequest(BaseModel):
     objective: str                       # the user's instruction, used verbatim as the task
     rehydrate: bool = True               # restore prior kernel state before running
@@ -654,6 +658,88 @@ async def create_followup(project_id: uuid.UUID, req: FollowUpRequest,
     return {"project_id": str(project_id), "instruction_id": str(instruction_id),
             "task_id": str(task_id), "status": "started",
             "stream": f"/tasks/{task_id}/stream"}
+
+
+NOTES_FILENAME = "user_notes.txt"
+
+
+@app.get("/projects/{project_id}/notes")
+async def get_project_notes(project_id: uuid.UUID):
+    """Analyst notes for a project (free text, stored in the workspace)."""
+    path = os.path.join(f"{WORKSPACE_ROOT}/{project_id}", NOTES_FILENAME)
+    notes = ""
+    if os.path.exists(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                notes = f.read()
+        except Exception:
+            pass
+    return {"project_id": str(project_id), "notes": notes}
+
+
+@app.post("/projects/{project_id}/notes")
+async def save_project_notes(project_id: uuid.UUID, req: NotesRequest):
+    """Persist analyst notes to the workspace.
+
+    Kept as a workspace file rather than a DB column: it survives the archive (and the DB
+    losses that motivated approach_docs/020), travels with the exported bundle, and is
+    surfaced to the Synthesizer so the analyst's own context reaches the report.
+    """
+    workspace_dir = f"{WORKSPACE_ROOT}/{project_id}"
+    os.makedirs(workspace_dir, exist_ok=True)
+    path = os.path.join(workspace_dir, NOTES_FILENAME)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(req.notes or "")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not save notes: {e}")
+    return {"project_id": str(project_id), "saved": True, "chars": len(req.notes or "")}
+
+
+def _read_project_notes(workspace_dir: str) -> str:
+    path = os.path.join(workspace_dir, NOTES_FILENAME)
+    if not os.path.exists(path):
+        return ""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read().strip()
+    except Exception:
+        return ""
+
+
+@app.post("/projects/{project_id}/finish")
+async def finish_project(project_id: uuid.UUID):
+    """End a project's interactive session and release its kernel.
+
+    A project stays *active* (kernel pinned, state warm, follow-ups cheap) until the analyst
+    explicitly finishes it — the user-driven lifecycle from #14. Finishing unpins the session
+    so normal cleanup can reclaim it and resets the kernel to free sandbox memory. The
+    workspace, artifacts, dashboard and DB records are untouched; the project can still be
+    reopened and rehydrated (#18).
+    """
+    with Session(engine) as session:
+        project = session.get(Project, project_id)
+        if not project and not os.path.isdir(f"{WORKSPACE_ROOT}/{project_id}"):
+            raise HTTPException(status_code=404, detail="Project not found")
+        if project_id in ACTIVE_WORKFLOWS:
+            raise HTTPException(status_code=409,
+                                detail="Work is still in flight; cancel or wait before finishing.")
+        if project:
+            state = dict(project.last_state_json or {})
+            state["finished_at"] = datetime.now().isoformat(timespec="seconds")
+            project.last_state_json = state
+            session.add(project)
+            session.commit()
+
+    PINNED_SESSIONS.discard(project_id)
+    released = False
+    try:
+        await SandboxClient().reset_session(str(project_id))
+        released = True
+    except Exception as e:
+        print(f"  [Finish] Warning: could not reset session: {e}", flush=True)
+    print(f"  [Finish] Project {project_id} finished; kernel released={released}.", flush=True)
+    return {"project_id": str(project_id), "finished": True, "kernel_released": released}
 
 
 @app.post("/projects/{project_id}/unpin")
@@ -2582,9 +2668,24 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
 
                     try:
                         synthesizer = SynthesizerAgent(model=synthesizer_model)
+                        # Analyst notes (user_notes.txt) are the human's own context for this
+                        # project — domain caveats, what they actually care about. Appended to
+                        # the artifact context rather than added as a prompt placeholder, so
+                        # no factory-default/format() coupling is introduced.
+                        _notes = _read_project_notes(workspace_dir)
+                        _synth_context = context
+                        if _notes:
+                            _synth_context += (
+                                "\n\n### ANALYST NOTES (written by the user for this project)\n"
+                                f"{_notes[:4000]}\n"
+                                "Treat these as context and priorities from the analyst; "
+                                "reflect them in the narrative where they are relevant."
+                            )
+                            print(f"  [Synthesis] Including {len(_notes)} chars of analyst notes.", flush=True)
+
                         synth_res = await synthesizer.run(SynthesizerInput(
-                            objective=objective, 
-                            context_artifacts=context,
+                            objective=objective,
+                            context_artifacts=_synth_context,
                             existing_narrative=None,
                             existing_takeaways=None
                         ))

@@ -126,6 +126,26 @@ def api_post(path, json_data=None):
         print(f"  [API] POST {path} failed: {e}")
         return None
 
+def api_get_long(path, timeout=60.0):
+    """GET for endpoints that run sandbox code (kernel probes) — the 10s default is too tight."""
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            return client.get(f"{BACKEND_URL}{path}").json()
+    except Exception as e:
+        print(f"  [API] GET(long) {path} failed: {e}")
+        return None
+
+def api_post_long(path, json_data=None, timeout=900.0):
+    """POST for long operations — rehydration replays a run's code and can take minutes."""
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(f"{BACKEND_URL}{path}", json=json_data)
+            resp.raise_for_status()
+            return resp.json()
+    except Exception as e:
+        print(f"  [API] POST(long) {path} failed: {e}")
+        return None
+
 def api_delete(path):
     try:
         with httpx.Client(timeout=10.0) as client:
@@ -734,10 +754,48 @@ def render_orchestrator_panel():
             st.session_state.disable_recipes = False
             st.session_state.last_synced_project_id = None
             st.rerun()
-        
+
     with ctrl_cols[3]:
         if st.button("REFRESH", key="btn_refresh", help="Manually refresh the UI state.", use_container_width=True):
             st.rerun()
+
+    # --- FOLLOW-UP LANE (approach_docs/020) ---
+    # Distinct from LAUNCH on purpose: LAUNCH re-runs the full autonomous pipeline, this runs
+    # ONE user-directed instruction against the project's live kernel and appends its output
+    # to the dashboard. Only offered once a project exists and has results to build on.
+    if st.session_state.current_project_id and proj_details and proj_details["project"].get("narrative"):
+        with st.expander("🔎 FOLLOW-UP — ask a question about these results", expanded=False):
+            st.caption(
+                "Runs a single instruction against this project's session state "
+                "(rehydrated if needed). Output is appended to the dashboard as its own "
+                "section; the original findings are not changed."
+            )
+            fu_text = st.text_area(
+                "Follow-up instruction",
+                placeholder="e.g. do error analysis on the false negatives; "
+                            "plot recall against tumour grade",
+                height=80, key="followup_text", label_visibility="collapsed",
+            )
+            fu_cols = st.columns([1, 1, 2])
+            with fu_cols[0]:
+                fu_rehydrate = st.checkbox("Rehydrate", value=True, key="fu_rehydrate",
+                                           help="Restore prior kernel state (replays the run's "
+                                                "code if the session went cold).")
+            with fu_cols[1]:
+                if st.button("RUN", key="btn_followup", use_container_width=True):
+                    if not (fu_text or "").strip():
+                        st.warning("Enter an instruction first.")
+                    else:
+                        res = api_post(
+                            f"/projects/{st.session_state.current_project_id}/followup",
+                            {"objective": fu_text.strip(), "rehydrate": fu_rehydrate},
+                        )
+                        if res and res.get("task_id"):
+                            st.toast("Follow-up started.")
+                            st.rerun()
+                        else:
+                            detail = res.get("detail") if isinstance(res, dict) else None
+                            st.error(f"Follow-up failed to start: {detail or 'backend error'}")
 
     st.markdown("---")
 
@@ -892,7 +950,89 @@ def render_grounding_panel():
                 st.rerun() # Refresh to show in workspace
     
     st.markdown("---")
-    
+
+    # --- SESSION LIFECYCLE (#14) ---
+    # Deliberately OUTSIDE the auto-refreshing fragment below: probing the live kernel runs
+    # code in the sandbox, so it happens on demand, not every 3 seconds.
+    if st.session_state.current_project_id:
+        pid = st.session_state.current_project_id
+        st.markdown("#### SESSION")
+
+        if st.session_state.get("kernel_info_pid") != pid:
+            st.session_state.kernel_info = None
+            st.session_state.kernel_info_pid = pid
+
+        k = st.session_state.get("kernel_info")
+        if k:
+            status = k.get("status", "unknown")
+            badge = {"live": "🟢 live", "cold": "⚪ cold"}.get(status, f"• {status}")
+            st.caption(f"Kernel: {badge} — {k.get('variable_count', 0)} variable(s)"
+                       + (" · pinned" if k.get("pinned") else ""))
+            if k.get("variables"):
+                with st.expander("Live variables", expanded=False):
+                    st.json(k["variables"])
+            if status == "cold" and k.get("workspace_replay_available"):
+                st.caption("Prior state can be replayed from this run's saved code.")
+        else:
+            st.caption("Kernel: not checked.")
+
+        sess_cols = st.columns(3)
+        with sess_cols[0]:
+            if st.button("CHECK", key="btn_kernel_check", use_container_width=True,
+                         help="Probe the sandbox session for live variables."):
+                with st.spinner("Probing session..."):
+                    st.session_state.kernel_info = api_get_long(f"/projects/{pid}/kernel")
+                st.rerun()
+        with sess_cols[1]:
+            if st.button("REHYDRATE", key="btn_rehydrate", use_container_width=True,
+                         help="Restore this project's kernel state by replaying its "
+                              "completed code. Safe to repeat; may take a while."):
+                with st.spinner("Replaying prior task code..."):
+                    res = api_post_long(f"/projects/{pid}/rehydrate", {})
+                if res:
+                    st.session_state.kernel_info = {
+                        "status": res.get("status"), "variables": res.get("variables", {}),
+                        "variable_count": len(res.get("variables", {})),
+                        "pinned": res.get("pinned"), "workspace_replay_available": True,
+                    }
+                    st.toast(f"Kernel {res.get('status')} "
+                             f"({len(res.get('variables', {}))} vars, {res.get('seconds', 0)}s)")
+                else:
+                    st.error("Rehydration failed.")
+                st.rerun()
+        with sess_cols[2]:
+            if st.button("FINISH", key="btn_finish", use_container_width=True,
+                         help="End the interactive session and release the kernel. "
+                              "Artifacts and the dashboard are kept."):
+                res = api_post(f"/projects/{pid}/finish")
+                if res and res.get("finished"):
+                    st.session_state.kernel_info = None
+                    st.toast("Project finished; kernel released.")
+                    st.rerun()
+                else:
+                    detail = res.get("detail") if isinstance(res, dict) else None
+                    st.error(f"Could not finish: {detail or 'backend error'}")
+
+        # --- ANALYST NOTES ---
+        if st.session_state.get("notes_pid") != pid:
+            fetched = api_get(f"/projects/{pid}/notes") or {}
+            st.session_state.notes_text = fetched.get("notes", "")
+            st.session_state.notes_pid = pid
+        notes_val = st.text_area(
+            "Project notes", value=st.session_state.get("notes_text", ""), height=90,
+            key="notes_area",
+            help="Your own context for this project. Saved to user_notes.txt in the "
+                 "workspace and given to the Synthesizer when the report is written.",
+        )
+        if st.button("SAVE NOTES", key="btn_save_notes", use_container_width=True):
+            if api_post(f"/projects/{pid}/notes", {"notes": notes_val}) is not None:
+                st.session_state.notes_text = notes_val
+                st.toast("Notes saved.")
+            else:
+                st.error("Could not save notes.")
+
+        st.markdown("---")
+
     @st.fragment(run_every=3)
     def render_state_explorer():
         if not st.session_state.current_project_id: return
