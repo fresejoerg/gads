@@ -27,7 +27,7 @@ requires:
 # ——— EXECUTION DAG (mechanized: calls gads_* native nodes, D5) ———
 dag:
   - id: build_interaction_matrix
-    intent: "Identify the user-id, item-id, (optional) rating, and (optional) timestamp columns in `df`. Call the native `bundle = gads_build_interaction_matrix(df, user_col=<user col>, item_col=<item col>, rating_col=<rating col or None>, min_interactions=5)` — pass the ACTUAL column names. It k-core-filters, builds the sparse user × item CSR, and returns a `bundle` dict with the matrix and index maps (it prints shape/sparsity). Do NOT re-implement the matrix construction — just call it with the right columns."
+    intent: "Identify the user-id, item-id, (optional) rating, and (optional) timestamp columns in `df`. Call the native `bundle = gads_build_interaction_matrix(df, user_col=<user col>, item_col=<item col>, rating_col=<rating col or None>, min_interactions=5, max_rows=200000)` — pass the ACTUAL column names. It k-core-filters, builds the sparse user × item CSR, and returns a `bundle` dict with the matrix and index maps (it prints shape/sparsity). Do NOT re-implement the matrix construction — just call it with the right columns. CRITICAL: pass the FULL dataframe and let `max_rows` handle any size reduction — NEVER call `df.sample(...)` or otherwise randomly subset the interactions first. Interaction logs are long-tailed, so a random subset shares almost no users or items and the k-core filter then collapses the matrix to near-nothing; `max_rows` does density-preserving dense-core sampling instead."
     worker_tier: T2
     attached_skills: [implicit_cf_recommender]
     produces: [bundle]

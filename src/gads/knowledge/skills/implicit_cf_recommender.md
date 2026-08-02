@@ -20,8 +20,21 @@ recall_at_10 = metrics["recall_at_10"]            # bind top-level scalars (cont
 ndcg_at_10 = metrics["ndcg_at_10"]
 ```
 
+## NEVER randomly sample interactions
+Interaction logs are long-tailed — most users touch 1–2 items. A random subset
+(`df.sample(...)`) therefore shares almost no users or items, and the k-core filter that
+follows collapses the matrix to nothing (a real run reduced an 800k-review log to 10×13,
+and on heavier tails it fails outright with "empty 5-core").
+
+Pass the **full** frame and let the native reduce it, which keeps the densest core instead:
+```python
+bundle = gads_build_interaction_matrix(df, user_col, item_col, min_interactions=5, max_rows=200000)
+```
+`gads_dense_core_sample(df, user_col, item_col, max_rows=..., min_interactions=5)` is the
+same reduction if you need it standalone. Both are deterministic.
+
 Or step-by-step (same functions, when you need the intermediate `bundle`):
-`bundle = gads_build_interaction_matrix(df, user_col, item_col, rating_col=..., min_interactions=5)`
+`bundle = gads_build_interaction_matrix(df, user_col, item_col, rating_col=..., min_interactions=5, max_rows=200000)`
 → `bundle = gads_temporal_loo_split(bundle, time_col=...)`
 → `bundle = gads_fit_and_recommend(bundle, method="als", N=20)`
 → `metrics = gads_evaluate_topn(bundle, k_values=(10,20))`.

@@ -187,7 +187,19 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
     _HAS_FILE_LOAD = re.search(r'read_csv|read_parquet|read_excel', code)
     _HAS_TRAINING = any(m in code for m in _TRAINING_MARKERS)
     _HAS_SAMPLE = 'sample(' in code or '.sample(' in code
-    if _HAS_FILE_LOAD and _HAS_TRAINING and not _HAS_SAMPLE:
+    # Collaborative filtering must NEVER get the random row cap: interaction logs are
+    # long-tailed, so a random subset shares almost no users/items and the k-core filter
+    # downstream collapses the matrix (an 800k-review log became 10x13). Those recipes do
+    # their own density-preserving reduction via gads_build_interaction_matrix(max_rows=...).
+    # Note `_TRAINING_MARKERS` contains 'fit(', which CF's model.fit(matrix) matches.
+    _CF_MARKERS = ('gads_build_interaction_matrix', 'gads_dense_core_sample',
+                   'gads_recommend_and_evaluate', 'AlternatingLeastSquares', 'implicit',
+                   'interaction_matrix', 'csr_matrix')
+    _IS_CF = any(m in code for m in _CF_MARKERS)
+    if _IS_CF and _HAS_FILE_LOAD and _HAS_TRAINING and not _HAS_SAMPLE:
+        print("  [Sanitizer] Skipped row-cap guard: collaborative-filtering code "
+              "(random sampling would destroy interaction density)", flush=True)
+    if _HAS_FILE_LOAD and _HAS_TRAINING and not _HAS_SAMPLE and not _IS_CF:
         _ml_subsample_injection = (
             "# Auto-injected ML training guard: cap dataset at 50K rows to prevent timeout\n"
             "_ml_row_limit = 50_000\n"
