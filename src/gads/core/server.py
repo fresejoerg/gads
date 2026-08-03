@@ -1635,11 +1635,31 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                             hint_lines.append(f"Target column: `{spec_hints['target_column']}`.")
                         if spec_hints.get("sample_rows"):
                             n = spec_hints["sample_rows"]
-                            hint_lines.append(
-                                f"SAMPLING CONSTRAINT: immediately after loading, apply "
-                                f"`df = df.sample({n}, random_state=42).reset_index(drop=True)` "
-                                f"to cap the dataset at {n:,} rows."
+                            # Collaborative filtering must NOT be randomly row-capped: an
+                            # interaction log is long-tailed, so a random subset shares almost
+                            # no users/items and the k-core filter downstream collapses the
+                            # matrix (see #22). Express the same budget as dense-core sampling.
+                            _dag_text = " ".join(
+                                str(x.get("intent", "")) for x in
+                                (knowledge_report.recommended_dag_nodes or [])
                             )
+                            _is_cf = ("gads_build_interaction_matrix" in _dag_text
+                                      or "recommendation" in str(knowledge_report.recipe_id or "")
+                                      or "collaborative" in str(knowledge_report.recipe_id or ""))
+                            if _is_cf:
+                                hint_lines.append(
+                                    f"SAMPLING CONSTRAINT: cap the data at {n:,} interactions by "
+                                    f"passing `max_rows={n}` to gads_build_interaction_matrix "
+                                    f"(dense-core sampling). Do NOT call `df.sample(...)` — "
+                                    f"randomly subsetting an interaction log destroys the "
+                                    f"co-occurrence structure and collapses the matrix."
+                                )
+                            else:
+                                hint_lines.append(
+                                    f"SAMPLING CONSTRAINT: immediately after loading, apply "
+                                    f"`df = df.sample({n}, random_state=42).reset_index(drop=True)` "
+                                    f"to cap the dataset at {n:,} rows."
+                                )
                         if hint_lines:
                             description += "\n\n[SPEC HINTS: " + " ".join(hint_lines) + "]"
 

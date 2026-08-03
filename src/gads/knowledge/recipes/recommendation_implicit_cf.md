@@ -27,7 +27,7 @@ requires:
 # ——— EXECUTION DAG (mechanized: calls gads_* native nodes, D5) ———
 dag:
   - id: build_interaction_matrix
-    intent: "Identify the user-id, item-id, (optional) rating, and (optional) timestamp columns in `df`. Call the native `bundle = gads_build_interaction_matrix(df, user_col=<user col>, item_col=<item col>, rating_col=<rating col or None>, min_interactions=5, max_rows=200000)` — pass the ACTUAL column names. It k-core-filters, builds the sparse user × item CSR, and returns a `bundle` dict with the matrix and index maps (it prints shape/sparsity). Do NOT re-implement the matrix construction — just call it with the right columns. CRITICAL: pass the FULL dataframe and let `max_rows` handle any size reduction — NEVER call `df.sample(...)` or otherwise randomly subset the interactions first. Interaction logs are long-tailed, so a random subset shares almost no users or items and the k-core filter then collapses the matrix to near-nothing; `max_rows` does density-preserving dense-core sampling instead."
+    intent: "FIRST load the interaction dataset from the workspace into `df` with `pd.read_csv('<the csv file in the workspace>')` — `df` does not exist until you create it. Then identify the user-id, item-id, (optional) rating, and (optional) timestamp columns in `df`. Call the native `gads_build_interaction_matrix` with the ACTUAL column names as STRING LITERALS taken from the dataset schema, e.g. `bundle = gads_build_interaction_matrix(df, user_col='user_id', item_col='parent_asin', rating_col='rating', min_interactions=5, max_rows=200000)`. Do NOT pass bare names like `user_col=user_col` and do NOT invent placeholder variables — every argument must be a literal string that exists in `df.columns`. It k-core-filters, builds the sparse user × item CSR, and returns a `bundle` dict with the matrix and index maps (it prints shape/sparsity). Do NOT re-implement the matrix construction — just call it with the right columns. CRITICAL: pass the FULL dataframe and let `max_rows` handle any size reduction — NEVER call `df.sample(...)` or otherwise randomly subset the interactions first. Interaction logs are long-tailed, so a random subset shares almost no users or items and the k-core filter then collapses the matrix to near-nothing; `max_rows` does density-preserving dense-core sampling instead."
     worker_tier: T2
     attached_skills: [implicit_cf_recommender]
     produces: [bundle]
@@ -58,11 +58,13 @@ dag:
     depends_on: [fit_and_recommend]
     attached_skills: [implicit_cf_recommender]
     required_metrics: [recall_at_10, ndcg_at_10]
+    fallback_native: gads_evaluate_topn
+    fallback_call: "metrics = gads_evaluate_topn(bundle, k_values=(10, 20)); recall_at_10 = metrics['recall_at_10']; ndcg_at_10 = metrics['ndcg_at_10']"
     postconditions:
       - "'recall_at_10' in open('metrics.json').read()"
 
   - id: characterize_recommendations
-    intent: "Using `bundle['recommendations']` and the index maps in `bundle`, inspect 2–3 example users: show their training history vs their top recommendations to sanity-check relevance. Report catalog coverage (fraction of items ever recommended). Emit an insight on recommendation quality and coverage."
+    intent: "Characterize the recommendations. The bundle keys are EXACTLY: `bundle['recommendations']` ({user_idx: [item_idx, ...]}), `bundle['user_index']` ({user_id: user_idx}) and `bundle['item_index']` ({item_id: item_idx}) — there is no 'user_map' or 'item_map'; invent no other keys. Build reverse maps with `{v: k for k, v in bundle['user_index'].items()}` when you need ids back. Inspect 2–3 example users: show their training history vs their top recommendations. Report catalog coverage as the fraction of distinct recommended items over `bundle['n_items']`. Emit ONE insight on recommendation quality and coverage, and — if `metrics['lift_over_popularity']` is below 1.0 — state plainly that the model does not beat a most-popular baseline."
     worker_tier: T2
     depends_on: [fit_and_recommend]
     postconditions:

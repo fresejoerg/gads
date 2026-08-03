@@ -435,6 +435,58 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
         code = _subsample_injection + code
         print("  [Sanitizer] Injected 20K subsample guard for CausalModel usage", flush=True)
 
+    code = _repair_stray_indent(code)
+    return code
+
+
+def _repair_stray_indent(code: str) -> str:
+    """Strip stray leading whitespace that makes otherwise-valid code unparseable.
+
+    Small local models routinely emit a top-level statement with one accidental leading
+    space — "unexpected indent" is one of the most common failure signatures we see, and it
+    burns the whole retry budget on code that is otherwise correct (an observed case differed
+    from working code by exactly one character, on an optional insight-emitting call).
+
+    Only fixes lines that are indented while the preceding logical line is itself at column 0
+    and does NOT open a block, and only accepts the result if it actually parses. Verification
+    by `ast.parse` is what makes this safe: a repair that changes meaning cannot be accepted,
+    and anything unparseable for another reason is returned untouched for the normal
+    error-feedback loop to handle.
+    """
+    import ast as _ast
+    try:
+        _ast.parse(code)
+        return code
+    except SyntaxError:
+        pass
+
+    lines = code.split("\n")
+    prev_idx = None
+    repaired, fixed = list(lines), 0
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip())
+        if indent > 0 and prev_idx is not None:
+            prev = lines[prev_idx]
+            prev_s = prev.strip()
+            prev_indent = len(prev) - len(prev.lstrip())
+            opens_block = prev_s.endswith((":", "\\", ",", "(", "[", "{"))
+            if prev_indent == 0 and not opens_block:
+                repaired[i] = line.lstrip()
+                fixed += 1
+        prev_idx = i
+
+    if fixed:
+        candidate = "\n".join(repaired)
+        try:
+            _ast.parse(candidate)
+            print(f"  [Sanitizer] Repaired {fixed} stray-indent line(s) "
+                  f"(verified by re-parsing)", flush=True)
+            return candidate
+        except SyntaxError:
+            pass
     return code
 
 

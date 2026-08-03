@@ -71,7 +71,7 @@ def gads_dense_core_sample(df, user_col, item_col, max_rows=200000, min_interact
 
 
 def gads_build_interaction_matrix(df, user_col, item_col, rating_col=None, min_interactions=5,
-                                  max_rows=None):
+                                  max_rows=None, min_interactions_floor=2):
     """Build a sparse user x item CSR from an interaction log.
 
     Iterative k-core filtering to `min_interactions` on both users and items, contiguous
@@ -85,27 +85,54 @@ def gads_build_interaction_matrix(df, user_col, item_col, rating_col=None, min_i
     import numpy as np
     from scipy.sparse import csr_matrix
 
-    d = df.dropna(subset=[user_col, item_col]).copy()
-    d = d.drop_duplicates([user_col, item_col], keep="last")
+    d0 = df.dropna(subset=[user_col, item_col]).copy()
+    d0 = d0.drop_duplicates([user_col, item_col], keep="last")
+
+    def _kcore(frame, k):
+        """Iterative k-core: users and items each need >= k interactions, mutually."""
+        f = frame
+        while True:
+            n0 = len(f)
+            uc = f[user_col].value_counts()
+            f = f[f[user_col].isin(uc[uc >= k].index)]
+            ic = f[item_col].value_counts()
+            f = f[f[item_col].isin(ic[ic >= k].index)]
+            if len(f) == n0 or len(f) == 0:
+                return f
+
+    # ADAPTIVE CORE: the requested k is often infeasible on real interaction logs. Amazon
+    # Fashion averages 1.10 interactions per user — its 3-core is empty, while its 2-core is a
+    # usable 4,819 x 3,905 matrix. Rather than failing on a legitimate (if sparse) dataset,
+    # step k down to `min_interactions_floor` and use the strictest core that actually
+    # survives, reporting which one was used. Deterministic; a no-op when k works as asked.
+    k_used, d = None, None
+    for k in range(int(min_interactions), int(min_interactions_floor) - 1, -1):
+        cand = _kcore(d0, k)
+        if len(cand) > 0:
+            k_used, d = k, cand
+            break
+    if d is None or len(d) == 0:
+        d, k_used = d0.iloc[0:0], int(min_interactions_floor)
+    elif k_used != int(min_interactions):
+        print(f"[gads_build_interaction_matrix] {min_interactions}-core is empty for this data; "
+              f"relaxed to a {k_used}-core (mean {len(d0)/max(1, d0[user_col].nunique()):.2f} "
+              f"interactions/user — a sparse log, so treat absolute metrics with care)")
+
+    # Size reduction happens AFTER the feasible core is known, so the budget is spent on
+    # interactions that can actually survive; then re-core, since sampling changes degrees.
     if max_rows is not None and len(d) > max_rows:
         d = gads_dense_core_sample(d, user_col, item_col, max_rows=max_rows,
-                                   min_interactions=min_interactions)
-    while True:  # iterative k-core
-        n0 = len(d)
-        uc = d[user_col].value_counts()
-        d = d[d[user_col].isin(uc[uc >= min_interactions].index)]
-        ic = d[item_col].value_counts()
-        d = d[d[item_col].isin(ic[ic >= min_interactions].index)]
-        if len(d) == n0 or len(d) == 0:
-            break
+                                   min_interactions=k_used)
+        d = _kcore(d, k_used)
     if len(d) == 0:
         raise ValueError(
-            f"[gads_build_interaction_matrix] empty {min_interactions}-core — no user and item "
-            f"survive with >= {min_interactions} interactions each. The usual cause is that the "
-            f"frame was RANDOMLY down-sampled upstream (df.sample(...)), which destroys the "
-            f"co-occurrence structure of a long-tailed interaction log: pass the FULL frame and "
-            f"use max_rows= here for dense-core sampling instead. Otherwise the data is "
-            f"genuinely too sparse — lower min_interactions."
+            f"[gads_build_interaction_matrix] no usable core: even a "
+            f"{min_interactions_floor}-core is empty (tried {min_interactions} down to "
+            f"{min_interactions_floor}). Two causes, in order of likelihood: (1) the frame was "
+            f"RANDOMLY down-sampled upstream (df.sample(...)), which destroys the co-occurrence "
+            f"structure of a long-tailed interaction log — pass the FULL frame and use max_rows= "
+            f"here instead; (2) the data genuinely has no repeat interactions, in which case "
+            f"collaborative filtering is not applicable and a content-based approach is needed."
         )
     users = {u: i for i, u in enumerate(d[user_col].unique())}
     items = {it: j for j, it in enumerate(d[item_col].unique())}
@@ -115,7 +142,7 @@ def gads_build_interaction_matrix(df, user_col, item_col, rating_col=None, min_i
           f"{len(items):,} items, density {len(d)/(len(users)*len(items)):.4%}")
     return {"matrix": matrix, "user_index": users, "item_index": items, "df": d,
             "user_col": user_col, "item_col": item_col, "rating_col": rating_col,
-            "n_users": len(users), "n_items": len(items)}
+            "n_users": len(users), "n_items": len(items), "min_interactions_used": k_used}
 
 
 def gads_temporal_loo_split(bundle, time_col=None, random_state=42):
