@@ -460,6 +460,76 @@ Artifacts: `research/harness/aah/` (MIT provenance), `research/benchmarks/aah_v1
 results.jsonl + scorer `scripts/grade_aah.py`), recipe family + `aah_star_schema` skill, 3 rung
 specs, datasets exported to `$GADS_DATASETS_ROOT/aah/`. Rungs 4–6 and reps pending.
 
+## 2026-07-30 — `[survey]` External corroboration: Stripe's Kai knowledge-AI platform
+
+Read Stripe's "Meet Kai" post (stripe.dev/blog/meet-stripes-knowledge-ai-platform). Enterprise
+knowledge-work agent (GTM/sales/compliance), not DS; product announcement, thin on mechanism
+(defers skill selection to a follow-up). No run, no UUID — a reading note, not evidence. Nothing
+that changes the roadmap, but useful external validation of directions GADS already took:
+
+- **Active vs "extended" context (S3/vfs), 932-turn sessions without context degradation** →
+  validates GADS's context-distillation bet (sliding-window 2+1, `orchestrator_summary`, live
+  kernel snapshot as ground truth) over context-stuffing.
+- **"A monolithic agent can't encode domain complexity → decentralized domain ownership, avoid
+  micro-agent proliferation"** → validates the recipe/skill KnowledgeRegistry design (modular
+  `.md` knowledge, not an agent zoo).
+- **"Knowledge work needs task-specific tools/data/outputs unlike coding's uniform workflow"** →
+  already encoded in GADS's faceted taxonomy + per-`task_type` recipe DAGs.
+- **"Context locked into individual sessions" named as a pain point** → the cross-run error ledger
+  (`research/error_ledger.jsonl`) is exactly the un-locking of session-local context; proof point
+  for the error-learning stack.
+
+**One adoptable/reinforcing concept:** Stripe lists **"reflection-based self-improvement loops for
+skills"** as a *future* priority — verbatim GADS's open follow-up (auto-propose recipe/skill edits
+from the `error_ledger_report.py` hardening report as a GOD task). A team at their scale prioritizing
+what GADS already has the substrate for is a nudge that closing that loop is high-value. Cheap
+companion: a per-recipe/skill quality tab in Studio (analogue of their AgentStudio "quality signals")
+to make the loop observable.
+
+**Where GADS is ahead:** the post is silent on evaluation methodology and provenance/citations,
+substituting business metrics (deals, revenue) for any rigor story. That rigor — reproducibility +
+methodological-appropriateness as first-class metrics, the skore audit gate, UUID/commit citation —
+is exactly GADS's differentiator on the dimension that matters for a research platform.
+
+## 2026-08-04 — `[survey]` Ellf (Explosion AI): recipes-as-code, and the precondition gap
+
+Read the Ellf beta docs (beta.ellf.ai/docs — landing, `recipe-development`, `tasks-actions-agents`).
+Explosion AI's new NLP platform, from the spaCy/Prodigy team. A reading note, no run, no UUID.
+
+**The instructive difference — recipes-as-code vs recipes-as-specification.** An Ellf recipe is a
+decorated Python function (`@task_recipe`, `@action_recipe`, `@agent_recipe`, `@service_recipe`)
+that *executes directly*, with typed inputs (`Dataset[Literal["text"]]`), `field_props` driving
+generated UI/CLI, and per-recipe dependencies shipped as a container image. A GADS recipe is
+declarative YAML+Markdown compiled into a plan an LLM writes code *for*. So in GADS terms **Ellf
+recipes are closer to native nodes than to recipes** — the same prefer-a-lookup-to-a-generation
+instinct, drawn at a different line: their LLM is confined to *agents* (autonomous annotators),
+while "actions execute deterministic code". Worth noting they reached the same instinct from the
+annotation/data-development side rather than the autonomous-DS side.
+
+Also: the docs contain **no "skills" concept** — recipes are the only composable unit. The
+recipe/skill split remains a GADS-specific decomposition.
+
+**The one transferable idea → issue #31.** Ellf declares inputs with *kind constraints* plus
+`Validation` objects carrying operator, value, message and **severity** (`error` blocks submission;
+`warning`/`info`/`success` do not). GADS's `applies_when` matches task_type/modality but never asks
+whether the data is structurally *fit* for the method — and this cycle paid for that: five
+end-to-end runs to establish that Amazon Fashion cannot support collaborative filtering (1.10
+interactions/user, empty 3-core). That is a property the DataAnalyzer already measures **before the
+Planner runs**. A declarative `preconditions` block evaluated at launch would have failed it once,
+with the true reason, instead of failing several nodes deep after each fix.
+
+The **severity grading** is the independent win: GADS today has only advisory `postconditions`
+(deliberately not runtime-evaluated) and hard-fail `required_metrics`. There is no way to say "this
+run is legal but distrust the absolute numbers" — exactly the state adaptive k-core relaxation
+produces (bdf7a4d), and exactly what a `warning` level expresses.
+
+**Where GADS is ahead:** no visible system-level evaluation instrumentation — no delegation dial,
+no `pass@model`, no cross-run error ledger. Their quality story is per-project (holdout F1, training
+curves, "rule-of-10" test sizing); GADS measures *its own scaffolding*. Their ADR project-plan
+methodology is nonetheless a good source of NLP `invariants` if that recipe family is ever built:
+validate learnability before scaling, training curves before spending annotation budget, reject
+composite labels in favour of NER + role assignment.
+
 ---
 
 *Add entries above this line. Keep the evidence discipline: UUID or it didn't happen.*
