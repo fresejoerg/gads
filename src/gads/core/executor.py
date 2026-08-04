@@ -435,8 +435,64 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
         code = _subsample_injection + code
         print("  [Sanitizer] Injected 20K subsample guard for CausalModel usage", flush=True)
 
+    code = _repair_native_kwarg_case(code)
     code = _repair_stray_indent(code)
     return code
+
+
+def _repair_native_kwarg_case(code: str) -> str:
+    """Lower-case capitalized keyword arguments in calls to gads_* native nodes.
+
+    Small local models capitalize identifiers unpredictably — observed across runs:
+    `user_col` -> `User_Col`, `method` -> `Method`. Against a native with a fixed signature
+    that is an immediate `TypeError: unexpected keyword argument`, and each variant is a
+    *different* error string, so the adaptive retry policy never sees a repeat and burns the
+    whole budget on a one-character problem.
+
+    Safe because it is signature-verified: a name is rewritten only when the lower-cased form
+    is a real parameter of that specific native AND the written form is not. Unknown functions
+    and genuinely wrong kwargs are left alone for the normal error feedback to handle.
+    """
+    import re as _re
+    if "gads_" not in code:
+        return code
+    try:
+        import inspect as _inspect
+        from gads.knowledge.native import NATIVE_REGISTRY
+        params = {name: set(_inspect.signature(fn).parameters)
+                  for name, fn in NATIVE_REGISTRY.items()}
+    except Exception:
+        return code
+
+    fixed = []
+
+    def _fix_call(m):
+        fname, args = m.group(1), m.group(2)
+        valid = params.get(fname)
+        if not valid:
+            return m.group(0)
+
+        def _fix_kw(km):
+            kw = km.group(1)
+            if kw in valid:
+                return km.group(0)
+            low = kw.lower()
+            if low in valid:
+                fixed.append(f"{fname}({kw}->{low})")
+                return f"{low}{km.group(2)}"
+            return km.group(0)
+
+        # Only rewrite top-level `Name =` kwarg positions, never `==` comparisons.
+        new_args = _re.sub(r"\b([A-Za-z_]\w*)(\s*=(?!=))", _fix_kw, args)
+        return f"{fname}({new_args}"
+
+    # Match up to the call's argument text; nested parens are handled by the kwarg regex
+    # operating on whatever it captured, which is sufficient for these flat native calls.
+    out = _re.sub(r"\b(gads_\w+)\(([^)]*)", _fix_call, code)
+    if fixed:
+        print(f"  [Sanitizer] Fixed native kwarg casing: {', '.join(sorted(set(fixed))[:5])}",
+              flush=True)
+    return out
 
 
 def _repair_stray_indent(code: str) -> str:

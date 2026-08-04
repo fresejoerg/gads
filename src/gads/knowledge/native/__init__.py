@@ -19,7 +19,7 @@ from .ml import gads_automl_fit, gads_automl_predict, gads_timeseries_fit, gads_
 from .causal import gads_causal_estimate_ate, gads_causal_bayesian_ate
 from .recommendation import (gads_build_interaction_matrix, gads_temporal_loo_split,
                              gads_fit_and_recommend, gads_evaluate_topn, gads_recommend_and_evaluate,
-                             gads_dense_core_sample)
+                             gads_dense_core_sample, gads_characterize_recommendations)
 from .model_audit import gads_audit_model
 from .survival import (gads_make_surv_target, gads_evaluate_survival, gads_cox_ph_report,
                        gads_kaplan_meier, gads_plot_survival_curves)
@@ -34,6 +34,8 @@ NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_causal_bayesian_ate": gads_causal_bayesian_ate,
     "gads_build_interaction_matrix": gads_build_interaction_matrix,
     "gads_dense_core_sample": gads_dense_core_sample,
+    # Fallback-only (issue #30): deliberately NOT in RECOMMENDATION_PREAMBLE.
+    "gads_characterize_recommendations": gads_characterize_recommendations,
     "gads_temporal_loo_split": gads_temporal_loo_split,
     "gads_fit_and_recommend": gads_fit_and_recommend,
     "gads_evaluate_topn": gads_evaluate_topn,

@@ -64,9 +64,11 @@ dag:
       - "'recall_at_10' in open('metrics.json').read()"
 
   - id: characterize_recommendations
-    intent: "Characterize the recommendations. The bundle keys are EXACTLY: `bundle['recommendations']` ({user_idx: [item_idx, ...]}), `bundle['user_index']` ({user_id: user_idx}) and `bundle['item_index']` ({item_id: item_idx}) — there is no 'user_map' or 'item_map'; invent no other keys. Build reverse maps with `{v: k for k, v in bundle['user_index'].items()}` when you need ids back. Inspect 2–3 example users: show their training history vs their top recommendations. Report catalog coverage as the fraction of distinct recommended items over `bundle['n_items']`. Emit ONE insight on recommendation quality and coverage, and — if `metrics['lift_over_popularity']` is below 1.0 — state plainly that the model does not beat a most-popular baseline."
+    intent: "Report catalog coverage and two example users. Write EXACTLY these statements and NOTHING else — no helper functions, no extra prints, no reformatting:\n\nrev_item = {v: k for k, v in bundle['item_index'].items()}\nrev_user = {v: k for k, v in bundle['user_index'].items()}\nrecs = bundle['recommendations']\ncovered = len({i for lst in recs.values() for i in lst})\ncoverage = covered / bundle['n_items']\nprint('catalog coverage:', round(coverage, 4), 'of', bundle['n_items'], 'items')\nfor u in list(recs)[:2]:\n    print('user', rev_user[u], '-> top recs:', [rev_item[i] for i in recs[u][:5]])\ngads_emit_insight('metrics.json', f\"The recommender covers {coverage:.1%} of the catalog; lift over popularity is {metrics['lift_over_popularity']:.2f} (below 1.0 means it does not beat recommending popular items).\", evidence=f\"coverage={coverage:.4f}\")\n\nThat is the entire task."
     worker_tier: T2
     depends_on: [fit_and_recommend]
+    fallback_native: gads_characterize_recommendations
+    fallback_call: "profile = gads_characterize_recommendations(bundle, metrics=metrics, n_examples=3)"
     postconditions:
       - "'recommendations' in bundle"
 
