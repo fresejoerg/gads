@@ -8,6 +8,7 @@ __pycache__/
 .env
 *.log
 gads.db
+.env.bak*
 
 # IDEs
 .vscode/
