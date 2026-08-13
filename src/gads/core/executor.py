@@ -600,6 +600,7 @@ class ExecutionManager:
         previous_code = ""
         error_history = []           # one human-readable error string per failed attempt
         error_reason_counts = {}     # normalized reason -> count (a reason seen twice => stop)
+        last_bad_text = ""           # last unparseable generation, for the failure payload
 
         # First-attempt prior: recurring structural failures this recipe step has hit in
         # PAST runs (from the cross-run error ledger), injected so the model can preempt
@@ -728,10 +729,12 @@ class ExecutionManager:
                 try:
                     ast.parse(current_code)
                 except SyntaxError as _se:
-                    raise CodeGenerationError(
+                    _err = CodeGenerationError(
                         f"generated text is not valid Python ({_se.msg} at line {_se.lineno})",
                         content_chars=len(current_code),
-                    ) from None
+                    )
+                    _err.text = current_code
+                    raise _err from None
 
                 # --- PREDICTIVE RUNTIME ORACLE ---
                 # 1. Gather Data Dimensions
@@ -940,6 +943,15 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                 # onward produces a SyntaxError the model cannot act on — so treat it as
                 # a normal failed attempt whose feedback carries the actual remedy.
                 print(f"    [Executor] ❌ No usable code generated: {e}", flush=True)
+                # Keep the offending text visible: without it these failures are
+                # undebuggable — nothing reaches the sandbox, so no stdout/stderr and
+                # no result_json.code is ever written for the attempt.
+                _bad = getattr(e, "text", "") or ""
+                if _bad:
+                    print(f"    [Executor] ┌ generated text ({len(_bad)} chars), first 500:\n"
+                          + "\n".join("    │ " + ln for ln in _bad[:500].splitlines())
+                          + "\n    └", flush=True)
+                    last_bad_text = _bad
                 attempt_msg = (
                     f"CodeGenerationError: {e}\n\n"
                     "REMEDY: Output ONLY a single ```python fenced block containing the "
@@ -963,7 +975,7 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                     print(f"    [Executor] 🛑 Same failure reason twice (CodeGenerationError) — "
                           f"stopping retries after {retry_count + 1} attempt(s); no progress.", flush=True)
                     exec_result = ExecutionResult(
-                        stdout="", stderr="",
+                        stdout="", stderr=last_bad_text[:8000],
                         error={"ename": "CodeGenerationError", "evalue": str(e)},
                         execution_time_ms=0, kernel_state={}
                     )
