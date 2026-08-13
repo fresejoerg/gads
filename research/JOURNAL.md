@@ -530,6 +530,85 @@ methodology is nonetheless a good source of NLP `invariants` if that recipe fami
 validate learnability before scaling, training curves before spending annotation budget, reject
 composite labels in favour of NER + role assignment.
 
+## 2026-08-13 — `[method]` Three confounds between us and the D3 conditions arm
+
+Starting issue #26 (run the API-familiarity arm of `approach_docs/014`) surfaced three defects
+that would each, independently, have made the arm measure nothing. None is an engine result.
+Recording them before any cell is read, per the standing discipline: **grade the failure class
+before reading any cell.** Four pilot runs on `qrdata_ihdp_0_d3ols`, all graded
+harness/design-confound and excluded from H1: `df1fe72f`, `cd57bf6f`, `56917ff0` (cancelled),
+`4ee77379`.
+
+**1 — Chain-of-thought returned as the program** (fixed, `1d721f8`). `get_code_completion`'s
+unfenced fallback returned the longer output channel as-is. gemma-4-12b routes thinking into
+`reasoning_content`; when it never opened a fence, the accumulated *deliberation prose* became
+"the program", failed `ast.parse`, and surfaced as `ValidationError: syntax error (unterminated
+string literal) at line n` — a false diagnosis the model cannot act on, so every retry re-burned
+on it. `df1fe72f`: three attempts at `define_causal_question`, all prose (20344 / 2161 / 6317
+chars, opening `*   Goal:` and `*    Wait, the prompt says:`), `exec_nodes: 0`. Note attempts 2
+and 3 were far under the 8192 budget — truncation is a contributing case, not the cause. Fix:
+gate the unfenced fallback on `ast.parse`; raise a typed `CodeGenerationError` carrying a
+`truncated` flag from `finish_reason`, caught *inside* the retry loop (the generic handler
+returned immediately, aborting the task with no retry) and converted into feedback that states
+the remedy.
+
+**2 — Correct code destroyed by a uniform indent** (fixed, `2e8f4c1`). After fix 1, `cd57bf6f`
+still hit `exec_nodes: 0` — but the specimens show the model writing **correct statsmodels code**,
+emitted with every line after the first at column 4. `_repair_stray_indent` compared each line
+against the *original* predecessor, so in a uniformly-indented block only line 2 ever qualified;
+the partial repair then failed to parse and was discarded wholesale. Comparing against the
+*repaired* predecessor cascades down the block (`opens_block` still protects real nesting, the
+`ast.parse` acceptance gate is unchanged). Replayed on all six real specimens: the two genuine
+programs now parse (6 and 19 lines repaired), the four prose blobs route to the actionable path.
+Also moved the honesty gate to the choke point — `ast.parse` after `_sanitize_code`, before
+dispatch — which closes the fenced-path hole (prose after an unclosed fence) and saves a sandbox
+round-trip.
+
+**Both are the same class**, and it is the *third* instance: reasoning-model output-channel
+failures masquerading as engine incapacity. Router token starvation (2026-07-20) was the first.
+The signature to watch: a failure whose diagnosis names a *syntactic* defect the model never
+committed.
+
+**3 — Skill discovery silently defeated the manipulation** (fixed, `85db4ab`). The RecipeCompiler
+falls back to keyword+semantic discovery when a node names no skills. Discovery matches on the
+task description — which is deliberately library-agnostic — so it injected whatever was nearest:
+both the statsmodels and the sklearn causal recipes were handed `causal_inference_dowhy` +
+`causal_ml_econml` (verified on the task rows of `cd57bf6f` and `56917ff0`). The model duly wrote
+`gads_causal_estimate_ate` in an OLS run. Two consequences:
+
+- **The arm was not testing H1.** The API surface in the *prompt* was DoWhy in all three arms,
+  and asymmetrically so: DoWhy got *matched* knowledge, the other two got *conflicting* knowledge
+  (skill says use the native, intent says statsmodels). The deliberation spirals that kept node 1
+  from emitting code are what an instruction conflict looks like from the inside.
+- **The dial ledger was overstating autonomy.** D3 is defined as "no curated skill" — D4 is the
+  rung where skills live. Discovery lifts the effective rung at runtime while `dial_rung.py`
+  computes it from what the recipe *declares*, so the ledger recorded D3 for a prompt carrying
+  curated library knowledge. This is a measurement-integrity gap in the dial framework itself,
+  not specific to this arm; it deserves its own issue.
+
+Fix: `RecipeTask.attached_skills` becomes three-state (`None` = absent → discovery, `[]` =
+declared empty → no skill, non-empty → verbatim). The old `= []` default made absent and
+declared-empty indistinguishable after `.dict()`, so "this node is deliberately skill-free" was
+inexpressible. All three `.directed` causal recipes pinned `attached_skills: []` on every node
+(DoWhy included — otherwise that arm alone runs at an effective D4) at v1.1.0.
+
+**A negative result worth keeping: do not raise the token budget.** With no skills in the prompt,
+gemma-4-12b emits fenced code for node 1 at the current 8192 budget in 2/2 trials (reasoning
+3354 / 1489 tokens, `finish=stop`). At 16384, one of two trials ran away and burned the entire
+budget (16381 reasoning tokens, zero content). The over-deliberation is **content-driven, not
+budget-bound** — more headroom buys more rambling, not more code.
+
+**Method note for the arm itself.** Two protocol changes, both to protect the comparison:
+(a) all 12 cells (4 benchmarks × 3 surfaces) run on the current commit, DoWhy re-run included —
+the 2026-07-16 0/5 D3 baseline predates the error ledger, adaptive retry and resume, so
+new-code-OLS vs old-code-DoWhy would confound API surface with harness improvements;
+(b) grading uses the new `--metrics-only` flag, because the QRData benchmarks' methodology block
+requires `gads_causal_estimate_ate(` and forbids `CausalModel(` — DoWhy-specific checks that
+would systematically fail the arms using the library the experiment manipulates. `online_classroom`
+stays N/A, so H1's "≥4/5" reads against 4 benchmarks. Config parity with the baseline verified:
+`routing_mode: local`, `local_fallback: none`, gemma-4-12b (the fallback legs landed 2026-07-30,
+two weeks *after* the baseline, so it was fallback-free by construction).
+
 ---
 
 *Add entries above this line. Keep the evidence discipline: UUID or it didn't happen.*
