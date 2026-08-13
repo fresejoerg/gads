@@ -32,6 +32,16 @@ _TRANSIENT_ENAMES = {
     "TimeoutError", "ConnectionError", "ChannelError", "Cancelled",
     "KeyboardInterrupt", "MemoryError", "BrokenPipeError", "OSError",
 }
+# Failures where no code ever ran: the model emitted something that isn't a program.
+# Still recorded (a node that repeatedly yields no program is worth seeing in the
+# hardening report), but never injected as a first-attempt *pitfall* — "you previously
+# wrote a syntax error" carries no information about the data or the API, and a symptom
+# without a remedy is exactly what a small model cannot act on. The retry loop already
+# hands these an actionable remedy at the moment they occur.
+_NON_EXECUTING_REASON_PATTERNS = (
+    "codegenerationerror", "syntax error", "unexpected indent",
+    "unterminated string literal", "invalid syntax",
+)
 _TRANSIENT_PATTERNS = (
     "exceed_context_size", "context size", "context length", "context window",
     "channel error", "connection error", "timed out", "timeout", "rate limit",
@@ -164,6 +174,8 @@ def common_pitfalls(recipe_id, task_description, top_n: int = 3, min_count: int 
         if (e.get("type") == "error" and e.get("recipe_id") == recipe_id
                 and e.get("node") == node):
             r = e.get("reason")
+            if any(p in (r or "").lower() for p in _NON_EXECUTING_REASON_PATTERNS):
+                continue
             reasons[r] += 1
             samples.setdefault(r, e.get("message", ""))
             if e.get("fix") and r not in fixes:

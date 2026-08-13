@@ -1,4 +1,5 @@
 import asyncio
+import ast
 import uuid
 import time
 import contextlib
@@ -526,7 +527,14 @@ def _repair_stray_indent(code: str) -> str:
             continue
         indent = len(line) - len(line.lstrip())
         if indent > 0 and prev_idx is not None:
-            prev = lines[prev_idx]
+            # Read the REPAIRED previous line, not the original: when a model emits a
+            # whole program uniformly indented (every line after the first at col 4),
+            # only line 2 has an original predecessor at col 0. Comparing against the
+            # original stopped the repair dead after one line, the partial result
+            # failed to parse, and the entire repair was discarded. Cascading down the
+            # repaired text flattens the whole block; `opens_block` still guards real
+            # nesting, since a dedented `def foo():` correctly blocks its body.
+            prev = repaired[prev_idx]
             prev_s = prev.strip()
             prev_indent = len(prev) - len(prev.lstrip())
             opens_block = prev_s.endswith((":", "\\", ",", "(", "[", "{"))
@@ -709,6 +717,21 @@ class ExecutionManager:
                     await stream_callback(delta)
                 
                 current_code = _sanitize_code(coder_res.content.code)
+
+                # Honesty gate: everything that reaches the sandbox must be a program.
+                # A reasoning model that never closes its fence leaks deliberation prose,
+                # which the sandbox reports as "ValidationError: syntax error at line n" —
+                # a diagnosis the model cannot act on, burning every retry. Checking here
+                # (after the sanitizer has had its repair pass, so legitimately fixable
+                # code is not rejected) routes any non-program into the CodeGenerationError
+                # branch with an actionable remedy, and saves a sandbox round-trip.
+                try:
+                    ast.parse(current_code)
+                except SyntaxError as _se:
+                    raise CodeGenerationError(
+                        f"generated text is not valid Python ({_se.msg} at line {_se.lineno})",
+                        content_chars=len(current_code),
+                    ) from None
 
                 # --- PREDICTIVE RUNTIME ORACLE ---
                 # 1. Gather Data Dimensions
