@@ -1,4 +1,5 @@
 import os
+import ast
 import json
 import re
 import hashlib
@@ -17,6 +18,22 @@ LITELLM_MASTER_KEY = os.getenv("LITELLM_MASTER_KEY", "sk-1234")
 # Global context for trace propagation (project_id, task_id, workflow_id)
 # Value should be a Dict[str, Any]
 trace_context: ContextVar[Optional[Dict[str, Any]]] = ContextVar("trace_context", default=None)
+
+
+class CodeGenerationError(RuntimeError):
+    """Raw code mode produced no usable program.
+
+    Distinct from a code *execution* failure: nothing ran, because nothing that
+    parses as Python was generated. Carries the channel sizes and whether the
+    generation hit the token budget so the executor can turn it into actionable
+    retry feedback instead of a misleading SyntaxError.
+    """
+
+    def __init__(self, message, content_chars=0, reasoning_chars=0, truncated=False):
+        super().__init__(message)
+        self.content_chars = content_chars
+        self.reasoning_chars = reasoning_chars
+        self.truncated = truncated
 
 # Configure instructor with LiteLLM async completion
 client = instructor.patch(create=acompletion, mode=instructor.Mode.JSON_SCHEMA)
@@ -140,9 +157,12 @@ async def get_code_completion(model: str, messages: list, stream_callback=None, 
     # structured path already reads both; this must too.
     full_content = ""
     full_reasoning = ""
+    truncated = False  # finish_reason == 'length': budget exhausted mid-generation
     if stream_callback:
         resp = await acompletion(model=model, messages=messages, stream=True, **kwargs)
         async for chunk in resp:
+            if chunk.choices[0].finish_reason == "length":
+                truncated = True
             delta = chunk.choices[0].delta
             content = getattr(delta, "content", "") or ""
             reasoning = ""
@@ -157,6 +177,7 @@ async def get_code_completion(model: str, messages: list, stream_callback=None, 
                 await stream_callback(active)
     else:
         resp = await acompletion(model=model, messages=messages, **kwargs)
+        truncated = resp.choices[0].finish_reason == "length"
         msg = resp.choices[0].message
         full_content = msg.content or ""
         full_reasoning = getattr(msg, "reasoning_content", "") or ""
@@ -184,20 +205,31 @@ async def get_code_completion(model: str, messages: list, stream_callback=None, 
         code = _fenced_code(candidate)
         if code:
             return code
-    # No fence anywhere: the model followed "code only" literally. Use the
-    # longer channel as-is (the executor's sanitizer strips stray fence lines).
+    # No fence anywhere: the model may have followed "code only" literally, in
+    # which case the longer channel IS the program. But a reasoning model that
+    # never opens a fence usually leaked its deliberation instead — and returning
+    # chain-of-thought prose as a program produces a SyntaxError the model cannot
+    # act on ("unterminated string literal at line n"), burning every retry on a
+    # false diagnosis. Only accept unfenced text that actually parses as Python.
     unfenced = max(
         (re.sub(r'<think>.*?</think>', '', t, flags=re.DOTALL).strip() for t in (full_content, full_reasoning)),
         key=len
     )
     if unfenced:
-        return unfenced
-    # Never return an empty program — empty code "succeeds" in the sandbox and
-    # fails only at the metrics probe, a far more confusing failure than an
-    # explicit error here.
-    raise ValueError(
-        f"Raw code mode: model returned no usable code "
-        f"(content={len(full_content)} chars, reasoning={len(full_reasoning)} chars)."
+        try:
+            ast.parse(unfenced)
+            return unfenced
+        except SyntaxError:
+            pass  # deliberation prose, not a program — fall through to the raise
+    # Never return a non-program: empty code "succeeds" in the sandbox and fails
+    # only at the metrics probe, and prose fails with a misleading syntax error.
+    # Both are far more confusing than an explicit, actionable error here.
+    raise CodeGenerationError(
+        "Model emitted no ```python code block; its output was deliberation prose, "
+        "not a program." + (" The generation was cut off at the token budget." if truncated else ""),
+        content_chars=len(full_content),
+        reasoning_chars=len(full_reasoning),
+        truncated=truncated,
     )
 
 

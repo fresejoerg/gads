@@ -15,6 +15,7 @@ from gads.core.handover import HandoverManager
 from gads.core.error_ledger import (
     normalize_error_reason, record_error, record_resolution, common_pitfalls,
 )
+from gads.core.llm import CodeGenerationError
 from sqlmodel import Session
 
 def _sanitize_code(code: str) -> str:
@@ -909,6 +910,43 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                         break
                     retry_count += 1
 
+            except CodeGenerationError as e:
+                # Nothing ran: the model emitted no parseable program (reasoning models
+                # leak deliberation prose when they never open a fence). Returning here
+                # would abort the task on a generation hiccup, and feeding the raw prose
+                # onward produces a SyntaxError the model cannot act on — so treat it as
+                # a normal failed attempt whose feedback carries the actual remedy.
+                print(f"    [Executor] ❌ No usable code generated: {e}", flush=True)
+                attempt_msg = (
+                    f"CodeGenerationError: {e}\n\n"
+                    "REMEDY: Output ONLY a single ```python fenced block containing the "
+                    "complete program. Do NOT deliberate in prose, do NOT restate the task, "
+                    "and do NOT think step-by-step outside the fence — write the code directly."
+                )
+                if getattr(e, "truncated", False):
+                    attempt_msg += (
+                        " Your last generation was cut off at the token budget: keep the "
+                        "program short and skip commentary."
+                    )
+                error_history.append(attempt_msg)
+                error_feedback = "\n".join(
+                    f"  Attempt {i + 1} — {m}" for i, m in enumerate(error_history)
+                )
+                record_error(recipe_id, recipe_version, task_description,
+                             "CodeGenerationError", str(e), self.coder.model)
+                reason = normalize_error_reason("CodeGenerationError", str(e))
+                error_reason_counts[reason] = error_reason_counts.get(reason, 0) + 1
+                if error_reason_counts[reason] >= 2:
+                    print(f"    [Executor] 🛑 Same failure reason twice (CodeGenerationError) — "
+                          f"stopping retries after {retry_count + 1} attempt(s); no progress.", flush=True)
+                    exec_result = ExecutionResult(
+                        stdout="", stderr="",
+                        error={"ename": "CodeGenerationError", "evalue": str(e)},
+                        execution_time_ms=0, kernel_state={}
+                    )
+                    break
+                retry_count += 1
+                continue
             except asyncio.TimeoutError:
                 print(f"    [Executor] ❌ Timeout (LLM or sandbox execution)", flush=True)
                 return ExecutionResult(
