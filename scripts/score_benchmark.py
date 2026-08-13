@@ -81,17 +81,24 @@ def main():
     ap.add_argument("--workspace", required=True, help="finished project workspace directory")
     ap.add_argument("--mode", default=None, help="routing mode label for the JSON record")
     ap.add_argument("--json", default=None, help="append a machine-readable result line to this file")
+    ap.add_argument(
+        "--metrics-only", action="store_true",
+        help="grade on the metric golds alone, skipping artifact and methodology checks. "
+             "For cross-API-surface comparisons (approach_docs/014): the same estimand is "
+             "realized through different libraries, so a methodology block naming one of them "
+             "(e.g. requires gads_causal_estimate_ate, forbids CausalModel) cannot be held "
+             "constant across arms and would grade the API surface rather than the answer.",
+    )
     args = ap.parse_args()
 
     bench = Path(args.benchmark)
     workspace = Path(args.workspace)
     expected = json.loads((bench / "expected.json").read_text())
 
-    sections = {
-        "reproducibility": check_metrics(expected, workspace),
-        "completeness": check_artifacts(expected, workspace),
-        "methodology": check_methodology(expected, workspace),
-    }
+    sections = {"reproducibility": check_metrics(expected, workspace)}
+    if not args.metrics_only:
+        sections["completeness"] = check_artifacts(expected, workspace)
+        sections["methodology"] = check_methodology(expected, workspace)
 
     total = passed = 0
     print(f"\n═══ {expected['benchmark_id']} · workspace {workspace.name[:8]}"
@@ -112,6 +119,7 @@ def main():
             "benchmark_id": expected["benchmark_id"],
             "workspace": workspace.name,
             "mode": args.mode,
+            "metrics_only": args.metrics_only,
             "passed": passed,
             "total": total,
             "verdict": verdict,
