@@ -2031,24 +2031,40 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     # Planner-attached skills always get full body (curated, intentional).
                     # Keyword-matched skills need >=2 trigger hits to load full body (avoids weak-match bloat).
                     KEYWORD_HIT_THRESHOLD = 2
-                    assigned_ids = set(task_obj.attached_skills or [])
-                    scored_matches = registry.find_skills_scored(desc)
+                    # Three-state, matching RecipeTask.attached_skills: None = nobody
+                    # curated this task (discover freely); [] = declared skill-free, which
+                    # must suppress BOTH matchers — a node pinned to a specific library
+                    # gets actively wrong guidance from matchers that only see the
+                    # library-agnostic description (approach_docs/014); non-empty = curated.
+                    # Gated on plan_is_deterministic: only a RECIPE can declare a node
+                    # skill-free. `PlannerTask.attached_skills` defaults to [], so a
+                    # drafted-lane task the Planner left blank is indistinguishable from
+                    # a deliberate empty declaration — and that is exactly where the
+                    # discovery safety net matters most (weak model, no curation).
+                    curated = task_obj.attached_skills
+                    declared_skill_free = (
+                        plan_is_deterministic and isinstance(curated, list) and not curated
+                    )
+                    assigned_ids = set(curated or [])
 
                     full_body_ids = set(assigned_ids)
-                    for skill, hits in scored_matches:
-                        if skill.id not in full_body_ids and hits >= KEYWORD_HIT_THRESHOLD:
-                            full_body_ids.add(skill.id)
-
-                    # Semantic discovery — only for uncurated tasks. Tasks with
-                    # recipe/Planner-attached skills keep byte-stable prompts (the
-                    # frozen benchmarks depend on that); tasks nobody curated get the
-                    # embedding matcher as a safety net beyond keyword triggers.
-                    if not assigned_ids:
-                        sem_matches = registry.find_skills_semantic(desc)
-                        for skill, score in sem_matches:
-                            if skill.id not in full_body_ids:
+                    if not declared_skill_free:
+                        for skill, hits in registry.find_skills_scored(desc):
+                            if skill.id not in full_body_ids and hits >= KEYWORD_HIT_THRESHOLD:
                                 full_body_ids.add(skill.id)
-                                print(f"    [SkillSemantics] attached '{skill.id}' (cos={score:.2f})", flush=True)
+
+                        # Semantic discovery — only for uncurated tasks. Tasks with
+                        # recipe/Planner-attached skills keep byte-stable prompts (the
+                        # frozen benchmarks depend on that); tasks nobody curated get the
+                        # embedding matcher as a safety net beyond keyword triggers.
+                        if not assigned_ids:
+                            sem_matches = registry.find_skills_semantic(desc)
+                            for skill, score in sem_matches:
+                                if skill.id not in full_body_ids:
+                                    full_body_ids.add(skill.id)
+                                    print(f"    [SkillSemantics] attached '{skill.id}' (cos={score:.2f})", flush=True)
+                    else:
+                        print("    [Workflow] Node declared skill-free — discovery suppressed.", flush=True)
 
                     # The sandbox core constraints are mandatory for every Coder call.
                     # (The Coder is single-shot — it cannot request skills, so no index
