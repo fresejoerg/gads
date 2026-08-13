@@ -109,7 +109,7 @@ def validate_recipe(content: str, registry: Any = None, filename: Optional[str] 
     if registry is not None:
         known_skills = set(getattr(registry, "skills", {}).keys())
         for t in recipe.dag:
-            for sk in t.attached_skills:
+            for sk in t.attached_skills or []:
                 if sk not in known_skills:
                     warnings.append(f"Node '{t.id}' attaches unknown skill '{sk}'.")
 

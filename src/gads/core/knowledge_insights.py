@@ -42,7 +42,7 @@ def _native_function_index(registry) -> Dict[str, str]:
 def _node_dicts(recipe) -> List[Dict[str, Any]]:
     """DAG nodes as plain dicts (the shape dial.node_rung expects)."""
     return [
-        {"id": t.id, "intent": t.intent, "attached_skills": t.attached_skills}
+        {"id": t.id, "intent": t.intent, "attached_skills": t.attached_skills or []}
         for t in recipe.dag
     ]
 
@@ -72,7 +72,7 @@ def build_graph(registry) -> Dict[str, Any]:
         attached_seen = set()
         native_seen = set()
         for t in rec.dag:
-            for sk in t.attached_skills:
+            for sk in t.attached_skills or []:
                 if sk == "sandbox_environment" or (rid, sk) in attached_seen:
                     continue
                 attached_seen.add((rid, sk))
@@ -117,7 +117,7 @@ def build_coverage(registry) -> Dict[str, Any]:
     attached_skills = set()
     for rec in registry.recipes.values():
         for t in rec.dag:
-            attached_skills.update(s for s in t.attached_skills if s != "sandbox_environment")
+            attached_skills.update(s for s in (t.attached_skills or []) if s != "sandbox_environment")
     keyword_only = sorted(sid for sid in registry.skills if sid not in attached_skills)
 
     # native reachability: mechanized by some recipe intent vs unreferenced
@@ -203,7 +203,7 @@ def item_impact(registry, item_type: str, item_id: str) -> Dict[str, Any]:
     elif t == "skills":
         # recipes whose DAG attaches this skill
         for rid, rec in registry.recipes.items():
-            nodes = [t2.id for t2 in rec.dag if item_id in t2.attached_skills]
+            nodes = [t2.id for t2 in rec.dag if item_id in (t2.attached_skills or [])]
             if nodes:
                 referenced_by["recipes"].append({"recipe": rid, "nodes": nodes})
     elif t == "native":

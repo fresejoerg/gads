@@ -1669,12 +1669,22 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     # Prefer skills the recipe node explicitly declares; only fall back
                     # to discovery (keyword + semantic) when the node names none, so
                     # curated recipes keep byte-stable prompts.
-                    node_skills = [
-                        s for s in (node.get("attached_skills") or [])
-                        if s in registry.skills
-                    ]
+                    #
+                    # An explicitly EMPTY list means "no curated skill" and suppresses
+                    # discovery — distinct from the key being absent. Discovery cannot
+                    # tell which library a node is meant to use (it matches on the task
+                    # description, which is library-agnostic), so on a node pinned to a
+                    # specific API it injects whatever is semantically nearest: the
+                    # statsmodels/sklearn causal recipes were both handed the DoWhy and
+                    # EconML skills, contradicting their own intent. It also silently
+                    # lifts a D3 node's effective rung, since D3 is defined as
+                    # "no curated skill" (approach_docs/014).
+                    declared = node.get("attached_skills")
+                    node_skills = [s for s in (declared or []) if s in registry.skills]
                     if node_skills:
                         attached = list(node_skills)
+                    elif isinstance(declared, list) and not declared:
+                        attached = []
                     else:
                         matches = registry.find_skills_combined(description)
                         attached = [s.id for s, _src, _score in matches]

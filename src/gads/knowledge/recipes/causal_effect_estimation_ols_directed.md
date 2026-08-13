@@ -1,6 +1,6 @@
 ---
 id: causal_effect.observational.ols.directed
-version: 1.0.0
+version: 1.1.0
 schema_version: 1
 author: gads-core
 
@@ -42,6 +42,7 @@ dag:
           (at most 10).
       Print all three variables with a one-line justification of each role assignment.
     worker_tier: T2
+    attached_skills: []          # D3: no curated skill (approach_docs/014)
     produces: [treatment_col, outcome_col, confounder_cols]
     postconditions:
       - "isinstance(treatment_col, str)"
@@ -70,6 +71,7 @@ dag:
       insight interpreting them (placebo should be ~0; subset should be ~ATE).
     depends_on: [define_causal_question]
     worker_tier: T2
+    attached_skills: []          # D3: no curated skill (approach_docs/014)
     produces: [ate, placebo_new_effect, subset_new_effect, treatment_col, df_sample]
     postconditions:
       - "isinstance(ate, float)"
@@ -87,6 +89,7 @@ dag:
       adjustment set. Save as causal_effect_summary.png and print a confirmation.
     depends_on: [estimate_and_refute]
     worker_tier: T2
+    attached_skills: []          # D3: no curated skill (approach_docs/014)
     produces: [causal_effect_summary_path]
     postconditions:
       - "ate is not None"

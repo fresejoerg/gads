@@ -34,7 +34,11 @@ class RecipeTask(BaseModel):
     required_metrics: List[str] = []
     # Skill IDs to inject (full body) into the Coder prompt for this node. When set,
     # the RecipeEnforcer uses these verbatim instead of keyword-scoring the intent.
-    attached_skills: List[str] = []
+    # Three-state on purpose: None (key absent) = fall back to discovery; [] (declared
+    # empty) = no curated skill, suppress discovery; non-empty = use verbatim. The
+    # empty/absent distinction is what lets a D3 recipe pin itself skill-free — see the
+    # RecipeCompiler in server.py and approach_docs/014.
+    attached_skills: Optional[List[str]] = None
     skippable_if: Optional[str] = None
     rationale_required: bool = False
     # Optional native-node safety net: the name (NATIVE_REGISTRY key) of a native that can
