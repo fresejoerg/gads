@@ -1,6 +1,6 @@
 ---
 id: tabular_eda.descriptive.standard
-version: 1.0.0
+version: 1.1.0
 schema_version: 1
 author: gads-core
 
@@ -69,13 +69,21 @@ dag:
     intent: >
       Visualise the distribution of the columns: histograms for numeric columns and bar
       charts of the most frequent categories for categorical ones. Group several columns
-      into each figure rather than emitting one file per column, and save the figures as
-      PNG. If the dataset is large you may sample for PLOTTING ONLY — and if you do, say so
-      in the figure title. Skip columns flagged constant or identifier-like in `quality`.
+      into each figure rather than emitting one file per column. Skip columns flagged
+      constant or identifier-like in `quality`. If the dataset is large you may sample for
+      PLOTTING ONLY — and if you do, say so in the figure title.
+      You MUST actually create the image files: call `plt.savefig("<name>.png")` for every
+      figure and close it. Describing a figure, or returning its filename in a dict without
+      calling savefig, produces nothing and is a failure of this step. Collect the filenames
+      you actually saved in `univariate_figures` and bind
+      `n_univariate_figures = len(univariate_figures)`.
     depends_on: [assess_quality]
     worker_tier: T2
-    produces: [univariate_figures]
+    produces: [univariate_figures, n_univariate_figures]
+    required_metrics: [n_univariate_figures]
     attached_skills: [tabular_visualization, visualization_best_practices]
+    postconditions:
+      - "n_univariate_figures > 0"
 
   - id: bivariate_relationships
     intent: >
@@ -84,39 +92,52 @@ dag:
       pairs whose absolute correlation exceeds 0.8 as collinear in `correlations`.
       If the SPEC HINTS name a target column, additionally quantify each feature's
       association with that target and plot the strongest ones. If no target is named, skip
-      the target-specific part — it is optional, not a failure. Save figures as PNG.
+      the target-specific part — it is optional, not a failure.
+      You MUST actually create the image files with `plt.savefig("<name>.png")`; collect the
+      saved filenames in `bivariate_figures` and bind
+      `n_bivariate_figures = len(bivariate_figures)`.
     depends_on: [assess_quality]
     worker_tier: T2
-    produces: [correlations, bivariate_figures]
+    produces: [correlations, bivariate_figures, n_bivariate_figures]
+    required_metrics: [n_bivariate_figures]
     attached_skills: [tabular_visualization, visualization_best_practices]
+    postconditions:
+      - "n_bivariate_figures > 0"
 
   - id: recommend_transformations
     intent: >
-      Turn the measurements into a transformation manifest and write it to
-      `eda_transformations.meta.json` (the `.meta.json` suffix matters — a plain `.json`
-      file is registered as an interactive plot). Store it in `transformations`.
-      For every column recommend an imputation strategy, a scaling strategy and an encoding
-      strategy, each drawn ONLY from these vocabularies, using null when nothing applies:
-        impute: median | mean | mode | constant | forward_fill | drop_rows | drop_column | null
-        scale:  standard | minmax | robust | log1p | quantile_normal | null
-        encode: onehot | ordinal | target | frequency | null
-      Justify every recommendation from the statistics already measured, and carry the
-      quality flags through. Never scale or encode a datetime column. Leave a declared
-      target column untransformed.
+      Decide how each column should be prepared, then hand those decisions to
+      `gads_write_transformation_manifest` — do NOT write the JSON yourself.
+      Build a dict `decisions` mapping each column name to
+      `{"impute": ..., "scale": ..., "encode": ..., "rationale": "..."}`, choosing ONLY from
+      these vocabularies and using None when nothing applies:
+        impute: median | mean | mode | constant | forward_fill | drop_rows | drop_column | None
+        scale:  standard | minmax | robust | log1p | quantile_normal | None
+        encode: onehot | ordinal | target | frequency | None
+      Justify each choice from the statistics already measured. Never scale or encode a
+      datetime column. Leave a declared target column untransformed.
       If the objective or SPEC HINTS indicate the data is destined for a machine-learning
-      model AND only one input file was supplied, also add a `split` block recommending how
-      to divide it into train/validation/test — choosing time-ordered when a time column
-      orders the rows, grouped when a repeated entity would otherwise span partitions,
-      stratified for an imbalanced discrete target, and random only when none of those
-      apply. Otherwise set `split` to null.
+      model AND only one input file was supplied, also build a `split` dict with
+      `method` (time_ordered when a time column orders the rows, grouped when a repeated
+      entity would otherwise span partitions, stratified for a discrete/imbalanced target,
+      random only if none apply), `ratios`, the relevant column, and a `rationale`.
+      Otherwise leave `split` as None.
+      Then call:
+        transformations = gads_write_transformation_manifest(decisions, df=df,
+            target_column=<target or None>, split=split, source_file=<the data filename>)
+        n_manifest_columns = len(transformations["files"][<the data filename>]["columns"])
+      The function writes `eda_transformations.meta.json` in the exact schema the
+      downstream applier requires and validates your vocabulary values.
     depends_on: [assess_quality]
     worker_tier: T2
-    produces: [transformations]
+    produces: [transformations, n_manifest_columns]
+    required_metrics: [n_manifest_columns]
     attached_skills: [tabular_profiling]
     fallback_native: gads_recommend_transformations
-    fallback_call: "transformations = gads_recommend_transformations(df, profile, quality, target_col=None, ml_intent=True)"
+    fallback_call: "transformations = gads_recommend_transformations(df, profile, quality, target_col=None, ml_intent=True); n_manifest_columns = len(list(transformations['files'].values())[0]['columns'])"
     postconditions:
       - "transformations is not None"
+      - "n_manifest_columns > 0"
 
   - id: eda_summary
     intent: >
@@ -137,6 +158,8 @@ dag:
 # ——— INVARIANTS ———
 invariants:
   - "Profiling and quality assessment run on the FULL dataset — never sample for them. Sampling is permitted for plotting only, and must be stated in the figure."
+  - "A step that produces a file must WRITE that file. Returning a filename, or a dict describing a figure or a manifest, without calling plt.savefig / the manifest writer, produces nothing — the deliverables of this recipe are artifacts on disk, not variables in the kernel."
+  - "The manifest is written by gads_write_transformation_manifest, never by hand-rolled json.dump — the applier depends on exact key names (`recommended_impute`, not `impute`) and hand-written schemas drift."
   - "The transformation manifest is written as `eda_transformations.meta.json`; any other `.json` name is registered as an interactive Plotly artifact and will render as a broken figure."
   - "Recommendation values come only from the declared vocabularies — an unknown value makes the manifest unusable by gads_apply_transformations."
   - "Datetime columns are never scaled or encoded; derive calendar features explicitly instead."

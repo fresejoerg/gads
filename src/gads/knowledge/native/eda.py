@@ -394,6 +394,122 @@ def gads_recommend_transformations(df, profile=None, quality=None, target_col=No
     return manifest
 
 
+def gads_write_transformation_manifest(decisions, df=None, target_column=None, split=None,
+                                       source_file="dataset", profile=None, quality=None,
+                                       write_path="eda_transformations.meta.json"):
+    """Serialize per-column transformation DECISIONS into the canonical manifest.
+
+    The split of labour that matters: choosing a strategy per column is judgment and stays
+    with the model; producing the exact on-disk schema is invariant and belongs here. A
+    cloud model asked to emit the schema by hand invented its own key names (`impute`
+    instead of `recommended_impute`, `strategy`/`train_fraction` instead of
+    `method`/`ratios`) and then never wrote the file at all — which is precisely the class
+    of failure a native removes.
+
+    `decisions` maps column name -> dict with any of impute / scale / encode / rationale /
+    flags (the `recommended_` prefix is optional). Unknown vocabulary values raise, loudly,
+    rather than producing a manifest the applier will reject later. Measured statistics are
+    filled in from `profile` / `quality` / `df` when available.
+    """
+    import json
+
+    # The profiling helpers are fallback-only, so they may not be defined in the kernel.
+    # Their absence only costs the enrichment statistics — never the manifest itself.
+    try:
+        if df is not None and profile is None:
+            profile = gads_profile_dataframe(df)
+        if df is not None and quality is None:
+            quality = gads_assess_quality(df, profile)
+    except NameError:
+        pass
+    pcols = (profile or {}).get("columns", {})
+    qcols = (quality or {}).get("columns", {})
+
+    def _pick(d, *names):
+        for n in names:
+            if n in d and d[n] is not None:
+                return d[n]
+        return None
+
+    columns = {}
+    for name, raw in (decisions or {}).items():
+        name = str(name)
+        if not isinstance(raw, dict):
+            raise ValueError(f"decisions['{name}'] must be a dict, got {type(raw).__name__}")
+        impute = _pick(raw, "recommended_impute", "impute")
+        scale = _pick(raw, "recommended_scale", "scale")
+        encode = _pick(raw, "recommended_encode", "encode")
+        for label, val, allowed in (("impute", impute, _GADS_IMPUTE_VALUES),
+                                    ("scale", scale, _GADS_SCALE_VALUES),
+                                    ("encode", encode, _GADS_ENCODE_VALUES)):
+            if val not in allowed:
+                raise ValueError(
+                    f"column '{name}': {label}={val!r} is not one of "
+                    f"{[a for a in allowed if a is not None]} (or null)")
+        p = pcols.get(name, {})
+        q = qcols.get(name, {})
+        flags = _pick(raw, "flags", "quality_flags") or q.get("flags") or []
+        columns[name] = {
+            "dtype": str(_pick(raw, "dtype", "type") or p.get("dtype", "unknown")),
+            "missing_rate": p.get("missing_rate"),
+            "n_unique": p.get("n_unique"),
+            "outlier_rate": q.get("outlier_rate"),
+            "skew": p.get("skew"),
+            "recommended_impute": impute,
+            "recommended_scale": scale,
+            "recommended_encode": encode,
+            "flags": list(flags),
+            "rationale": str(raw.get("rationale") or ""),
+        }
+
+    # Accept the obvious aliases for the split block rather than failing on wording.
+    norm_split = None
+    if split:
+        method = _pick(split, "method", "strategy") or "random"
+        ratios = split.get("ratios")
+        if not ratios:
+            ratios = {
+                "train": float(_pick(split, "train_fraction", "train") or 0.7),
+                "val": float(_pick(split, "validation_fraction", "val", "valid_fraction") or 0.15),
+                "test": float(_pick(split, "test_fraction", "test") or 0.15),
+            }
+        norm_split = {
+            "applies_to": split.get("applies_to") or source_file,
+            "method": method,
+            "ratios": ratios,
+            "stratify_by": _pick(split, "stratify_by", "stratify_on"),
+            "group_by": _pick(split, "group_by", "group_on"),
+            "time_column": _pick(split, "time_column", "time_col"),
+            "random_state": int(split.get("random_state", 42)),
+            "rationale": str(split.get("rationale") or ""),
+        }
+        if method == "stratified" and not norm_split["stratify_by"]:
+            norm_split["stratify_by"] = target_column
+        valid = ("time_ordered", "grouped", "stratified", "random")
+        if method not in valid:
+            raise ValueError(f"split method {method!r} is not one of {list(valid)}")
+
+    manifest = {
+        "schema_version": "1.0",
+        "generated_by": "gads_write_transformation_manifest",
+        "target_column": str(target_column) if target_column else None,
+        "split": norm_split,
+        "files": {
+            source_file: {
+                "n_rows": (profile or {}).get("n_rows"),
+                "n_cols": (profile or {}).get("n_cols"),
+                "missing_cell_rate": (profile or {}).get("missing_cell_rate"),
+                "columns": columns,
+            }
+        },
+    }
+    with open(write_path, "w") as f:
+        json.dump(manifest, f, indent=2, default=str)
+    print(f"  [EDA] Wrote {write_path}: {len(columns)} columns, "
+          f"split={(norm_split or {}).get('method', 'none')}")
+    return manifest
+
+
 _GADS_IMPUTE_VALUES = ("median", "mean", "mode", "constant", "forward_fill",
                        "drop_rows", "drop_column", None)
 _GADS_SCALE_VALUES = ("standard", "minmax", "robust", "log1p", "quantile_normal", None)

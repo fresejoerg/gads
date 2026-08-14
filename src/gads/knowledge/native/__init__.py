@@ -24,8 +24,8 @@ from .model_audit import gads_audit_model
 from .survival import (gads_make_surv_target, gads_evaluate_survival, gads_cox_ph_report,
                        gads_kaplan_meier, gads_plot_survival_curves)
 from .eda import (gads_profile_dataframe, gads_assess_quality, gads_recommend_split,
-                  gads_recommend_transformations, gads_apply_transformations,
-                  gads_eda_summary)
+                  gads_recommend_transformations, gads_write_transformation_manifest,
+                  gads_apply_transformations, gads_eda_summary)
 
 NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_automl_fit": gads_automl_fit,
@@ -58,6 +58,7 @@ NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_assess_quality": gads_assess_quality,
     "gads_recommend_split": gads_recommend_split,
     "gads_recommend_transformations": gads_recommend_transformations,
+    "gads_write_transformation_manifest": gads_write_transformation_manifest,
     "gads_apply_transformations": gads_apply_transformations,
     "gads_eda_summary": gads_eda_summary,
 }
@@ -488,7 +489,10 @@ EDA_PREAMBLE = (
     + "_GADS_IMPUTE_VALUES = " + repr(_eda_mod._GADS_IMPUTE_VALUES) + "\n"
     + "_GADS_SCALE_VALUES = " + repr(_eda_mod._GADS_SCALE_VALUES) + "\n"
     + "_GADS_ENCODE_VALUES = " + repr(_eda_mod._GADS_ENCODE_VALUES) + "\n\n"
-    + _inspect.getsource(_eda_mod.gads_apply_transformations)
+    + "\n\n".join(_inspect.getsource(_fn) for _fn in (
+        _eda_mod.gads_write_transformation_manifest,
+        _eda_mod.gads_apply_transformations,
+    ))
 )
 
 # Per-native source, for the opt-in local-fallback path (invoke ONE native on demand rather
@@ -513,8 +517,8 @@ _PREAMBLE_ROUTES = (
      lambda: RECOMMENDATION_PREAMBLE),
     ("model-audit", ("gads_audit_model", "EstimatorReport", "skore"),
      lambda: MODEL_AUDIT_PREAMBLE),
-    ("eda", ("gads_apply_transformations", "eda_transformations.meta.json",
-             "transformation_provenance"),
+    ("eda", ("gads_apply_transformations", "gads_write_transformation_manifest",
+             "eda_transformations.meta.json", "transformation_provenance"),
      lambda: EDA_PREAMBLE),
     ("survival", ("gads_make_surv_target", "gads_evaluate_survival", "gads_cox_ph_report",
                   "CoxPHFitter", "CoxPHSurvivalAnalysis", "RandomSurvivalForest",
