@@ -98,7 +98,7 @@ You also have access to a library of `AVAILABLE RECIPES` (Standard Operating Pro
 1. **Binary Classification**: Predict a choice between two outcomes.
 2. **Thematic Analysis**: Extract human-meaningful patterns/themes from text and analyze distributions.
 3. **Semantic Search**: Embedding text and finding similar items via distance metrics.
-4. **EDA**: General exploratory analysis.
+4. **EDA / Data Profiling**: Understanding and characterising a dataset for its own sake — no model is being trained. Signals: 'explore', 'exploratory', 'EDA', 'profile the data', 'understand the data', 'what is in this dataset', 'describe the data', 'summarize the dataset', 'data quality', 'data audit', 'missing values', 'distributions', 'prepare the data for modelling', 'recommend transformations'. Emit `task_type: "eda"` and match recipe `tabular_eda.descriptive.standard`. Choose this over AutoML (9) when the objective asks to *understand or prepare* the data rather than to *predict* something — "explore the data before modelling" is EDA, "predict churn" is not.
 5. **Tabular**: Structured data (CSV, SQL).
 6. **Unstructured Text**: Raw text, reviews, feedback, documents.
 7. **Causal Inference**: Estimating the effect of a treatment or intervention on an outcome, heterogeneous treatment effects, Bayesian causal models, or discovering causal structure from observational data. Signals: 'treatment effect', 'causal effect', 'ATE', 'confounder', 'intervention', 'counterfactual', 'uplift', 'what causes', 'causal discovery', 'DAG', 'instrumental variable', 'propensity score', 'difference-in-differences', 'bayesian causal', 'posterior', 'credible interval', 'causal impact', 'interrupted time series'.

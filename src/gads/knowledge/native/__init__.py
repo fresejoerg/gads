@@ -23,6 +23,9 @@ from .recommendation import (gads_build_interaction_matrix, gads_temporal_loo_sp
 from .model_audit import gads_audit_model
 from .survival import (gads_make_surv_target, gads_evaluate_survival, gads_cox_ph_report,
                        gads_kaplan_meier, gads_plot_survival_curves)
+from .eda import (gads_profile_dataframe, gads_assess_quality, gads_recommend_split,
+                  gads_recommend_transformations, gads_apply_transformations,
+                  gads_eda_summary)
 
 NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_automl_fit": gads_automl_fit,
@@ -46,6 +49,17 @@ NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_cox_ph_report": gads_cox_ph_report,
     "gads_kaplan_meier": gads_kaplan_meier,
     "gads_plot_survival_curves": gads_plot_survival_curves,
+    # EDA (approach_docs/021). Only gads_apply_transformations is auto-injected via the
+    # preamble — applying a manifest is a correctness operation whose ORDERING is a
+    # leakage guard. The profiling / quality / recommendation / summary natives are
+    # registered for the opt-in fallback path only, so the recipe's judgment nodes stay
+    # model-generated and their capability stays measured.
+    "gads_profile_dataframe": gads_profile_dataframe,
+    "gads_assess_quality": gads_assess_quality,
+    "gads_recommend_split": gads_recommend_split,
+    "gads_recommend_transformations": gads_recommend_transformations,
+    "gads_apply_transformations": gads_apply_transformations,
+    "gads_eda_summary": gads_eda_summary,
 }
 
 # Preamble injected into every sandbox execution when AutoGluon recipes are active.
@@ -462,6 +476,21 @@ SURVIVAL_PREAMBLE = (
     ))
 )
 
+
+# Preamble injected when transformation-manifest keywords are detected. Deliberately only
+# the APPLIER plus the vocabularies it validates against: applying a manifest has one right
+# answer and its ordering (split -> fit on train -> apply) is the leakage guard, so it must
+# not depend on generated code. The recommendation/profiling natives are fallback-only.
+from . import eda as _eda_mod
+
+EDA_PREAMBLE = (
+    "import warnings as _w_eda\n_w_eda.filterwarnings('ignore')\n\n"
+    + "_GADS_IMPUTE_VALUES = " + repr(_eda_mod._GADS_IMPUTE_VALUES) + "\n"
+    + "_GADS_SCALE_VALUES = " + repr(_eda_mod._GADS_SCALE_VALUES) + "\n"
+    + "_GADS_ENCODE_VALUES = " + repr(_eda_mod._GADS_ENCODE_VALUES) + "\n\n"
+    + _inspect.getsource(_eda_mod.gads_apply_transformations)
+)
+
 # Per-native source, for the opt-in local-fallback path (invoke ONE native on demand rather
 # than injecting the always-on preamble). Includes the demoted plotting natives.
 NATIVE_SOURCE = {name: _inspect.getsource(fn) for name, fn in NATIVE_REGISTRY.items()}
@@ -484,6 +513,9 @@ _PREAMBLE_ROUTES = (
      lambda: RECOMMENDATION_PREAMBLE),
     ("model-audit", ("gads_audit_model", "EstimatorReport", "skore"),
      lambda: MODEL_AUDIT_PREAMBLE),
+    ("eda", ("gads_apply_transformations", "eda_transformations.meta.json",
+             "transformation_provenance"),
+     lambda: EDA_PREAMBLE),
     ("survival", ("gads_make_surv_target", "gads_evaluate_survival", "gads_cox_ph_report",
                   "CoxPHFitter", "CoxPHSurvivalAnalysis", "RandomSurvivalForest",
                   "lifelines", "sksurv", "Surv.from_", "KaplanMeierFitter"),
