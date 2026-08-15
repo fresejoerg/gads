@@ -43,7 +43,7 @@ from gads.core.models import Artifact, Instruction, Project, Task
 from gads.core.execution_hub import ExecutionHub
 from gads.core.executor import ExecutionManager
 from gads.core.history_renderer import HistoryRenderer
-from gads.core.introspection import summarize_artifact
+from gads.core.introspection import summarize_artifact, looks_like_plotly_figure
 
 
 def _skills_context(registry, objective: str) -> Optional[str]:
@@ -202,7 +202,8 @@ async def run_followup(project_id: uuid.UUID, instruction_id: uuid.UUID, task_id
                                                  "instruction_id": str(instruction_id),
                                                  "followup": True},
                                    agent_id="FollowUp")
-                elif nf.lower().endswith(".json") and not nf.endswith(".meta.json"):
+                elif (nf.lower().endswith(".json") and not nf.endswith(".meta.json")
+                      and looks_like_plotly_figure(os.path.join(workspace_dir, nf))):
                     from gads.core.introspection import harden_json_artifact
                     harden_json_artifact(full)
                     art = Artifact(project_id=project_id, type="json_plot",

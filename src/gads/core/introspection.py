@@ -5,6 +5,33 @@ import pandas as pd
 import numpy as np
 from typing import Dict, Any, Optional
 
+def looks_like_plotly_figure(file_path: str) -> bool:
+    """True only if this .json file is actually a Plotly figure.
+
+    Workspace `.json` files were registered wholesale as `json_plot` artifacts and
+    rendered as interactive figures, so every structured-data JSON became a broken tile
+    in the dashboard — `metrics.json` on EVERY run, plus the native nodes' outputs
+    (`model_checks.json`, `survival_metrics.json`, `cox_report.json`,
+    `recommendation_profile.json`, `risk_profiles.json`, `km_summary.json`).
+
+    Detecting the content rather than allow-listing names: a filename list silently rots
+    as new natives are added, and the thing we actually care about is whether the file
+    carries a figure. A Plotly figure serialises to an object with `data` and/or `layout`;
+    a metrics/report file does not. Unreadable or non-object JSON is treated as not a
+    figure — failing closed here costs a preview, while failing open costs a broken tile.
+    """
+    try:
+        with open(file_path) as f:
+            obj = json.load(f)
+    except Exception:
+        return False
+    if not isinstance(obj, dict):
+        return False
+    if isinstance(obj.get("data"), list):
+        return True
+    return isinstance(obj.get("layout"), dict) and "data" in obj
+
+
 def harden_json_artifact(file_path: str):
     """
     Deterministically decodes Plotly 'bdata' (binary encoding) and re-saves

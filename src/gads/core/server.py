@@ -40,7 +40,7 @@ from gads.core.knowledge import KnowledgeRegistry
 from gads.core.dial import compiled_plan_dial, drafted_plan_dial, append_ledger
 from gads.core.reporting import create_master_reports
 from gads.core.notebook_exporter import export_python_script, export_notebook, copy_applied_recipe
-from gads.core.introspection import summarize_artifact
+from gads.core.introspection import summarize_artifact, looks_like_plotly_figure
 from gads.core.distiller import distill_dashboard_to_markdown
 from gads.core.history_renderer import HistoryRenderer
 from gads.core.prompts import prompt_registry
@@ -2402,7 +2402,11 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
 
                             new_files_names = set([f["name"] for f in files_after]) - set([f["name"] for f in current_files_meta])
                             
-                            has_explicit_plots = any(nf.lower().endswith((".json", ".html")) and not nf.endswith(".meta.json") and nf != "final_dashboard.html" for nf in new_files_names)
+                            has_explicit_plots = any(
+                                (nf.lower().endswith(".html") and nf != "final_dashboard.html")
+                                or (nf.lower().endswith(".json") and not nf.endswith(".meta.json")
+                                    and looks_like_plotly_figure(os.path.join(workspace_dir, nf)))
+                                for nf in new_files_names)
 
                             if not has_explicit_plots:
                                 for i, plot_b64 in enumerate(res.plots):
@@ -2423,7 +2427,8 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                                         session.commit()
                                         hub.create_outbox_event("ARTIFACT_CREATED", {"type": "plot", "description": art.description, "content_json": art.content_json})
                                     except Exception: pass
-                                elif nf.lower().endswith(".json") and not nf.endswith(".meta.json"):
+                                elif (nf.lower().endswith(".json") and not nf.endswith(".meta.json")
+                                      and looks_like_plotly_figure(full_path)):
                                     try:
                                         # Deterministic Server-Side Hardening (Purge Binary Data)
                                         from gads.core.introspection import harden_json_artifact
@@ -2662,7 +2667,8 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
             # hardened file (e.g. task 2 re-saves rating_distribution_chart.json), which
             # re-introduces bdata encoding. This pass runs once per attempt before synthesis.
             for _jf in _get_recursive_files(workspace_dir):
-                if _jf["name"].endswith(".json") and not _jf["name"].endswith(".meta.json"):
+                if (_jf["name"].endswith(".json") and not _jf["name"].endswith(".meta.json")
+                        and looks_like_plotly_figure(os.path.join(workspace_dir, _jf["name"]))):
                     try:
                         harden_json_artifact(os.path.join(workspace_dir, _jf["name"]))
                     except Exception:
