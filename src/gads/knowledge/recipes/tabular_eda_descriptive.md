@@ -1,6 +1,6 @@
 ---
 id: tabular_eda.descriptive.standard
-version: 1.1.0
+version: 1.1.1
 schema_version: 1
 author: gads-core
 
@@ -40,7 +40,12 @@ dag:
     required_metrics: [n_rows, n_cols, missing_cell_rate]
     attached_skills: [tabular_profiling]
     fallback_native: gads_profile_dataframe
-    fallback_call: "profile = gads_profile_dataframe(df); n_rows = profile['n_rows']; n_cols = profile['n_cols']; missing_cell_rate = profile['missing_cell_rate']"
+    # Self-sufficient by necessity: this node LOADS df, so when its retries are exhausted
+    # by pre-sandbox codegen failures nothing has executed and `df` does not exist. A
+    # fallback_call referencing df would NameError and the safety net would silently no-op
+    # in exactly the state it exists for. Downstream nodes may reference their upstream's
+    # `produces` variables, which are guaranteed by contract; this one may not.
+    fallback_call: "import glob as _g, pandas as _pd; _d = globals().get('df'); _fs = sorted([f for f in _g.glob('*.csv') + _g.glob('*.parquet') if not f.startswith('transformed')]); df = _d if _d is not None else (_pd.read_parquet(_fs[0]) if _fs[0].endswith('.parquet') else _pd.read_csv(_fs[0])); profile = gads_profile_dataframe(df); n_rows = profile['n_rows']; n_cols = profile['n_cols']; missing_cell_rate = profile['missing_cell_rate']"
     postconditions:
       - "n_rows > 0"
       - "n_cols > 0"
