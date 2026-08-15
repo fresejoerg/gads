@@ -729,8 +729,26 @@ class ExecutionManager:
                 try:
                     ast.parse(current_code)
                 except SyntaxError as _se:
+                    # Report the error the model must actually FIX. When a generation has
+                    # both a uniform-indent artifact and a real syntax error, the repair
+                    # above is discarded (it only commits a repair that parses), so the
+                    # surfaced error is the indent — a harness-fixable formatting artifact.
+                    # The model then "fixes" indentation, hits the same message, and the
+                    # same-reason guard stops it, with the true defect never mentioned.
+                    # Re-check against a best-effort dedent: if that yields a DIFFERENT
+                    # error, that residual is the honest diagnosis.
+                    _msg, _line = _se.msg, _se.lineno
+                    _lines = current_code.split("\n")
+                    _dedented = "\n".join(
+                        [_lines[0]] + [ln[4:] if ln.startswith("    ") else ln
+                                       for ln in _lines[1:]])
+                    try:
+                        ast.parse(_dedented)
+                    except SyntaxError as _se2:
+                        if _se2.msg != _se.msg:
+                            _msg, _line = _se2.msg, _se2.lineno
                     _err = CodeGenerationError(
-                        f"generated text is not valid Python ({_se.msg} at line {_se.lineno})",
+                        f"generated text is not valid Python ({_msg} at line {_line})",
                         content_chars=len(current_code),
                     )
                     _err.text = current_code
