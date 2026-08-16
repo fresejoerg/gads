@@ -207,6 +207,9 @@ class ProjectSpecMetadata(BaseModel):
     filters: Optional[str] = None
     domain: Optional[str] = None
     save_model: bool = False
+    # Reuse a finished project's outputs: its artifacts are linked into `upstream/`
+    # (approach_docs/021 §6). The value is that project's UUID.
+    artifacts_from: Optional[str] = None
     # Force the drafted-plan lane (no recipe pin, no Router match) — used by
     # delegation-dial D0/D1 specs so the rung doesn't depend on a launch flag.
     disable_recipes: bool = False
@@ -3154,6 +3157,33 @@ async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundT
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Recipe not found: {recipe}")
 
+    # 3. Upstream project (artifacts_from). Validated BEFORE the workspace is created so a
+    # bad reference fails the launch cleanly rather than mid-transaction.
+    upstream_id: Optional[uuid.UUID] = None
+    if meta.artifacts_from:
+        try:
+            upstream_id = uuid.UUID(str(meta.artifacts_from))
+        except ValueError:
+            raise HTTPException(status_code=400,
+                                detail=f"artifacts_from is not a UUID: {meta.artifacts_from}")
+        with Session(engine) as _s:
+            _up = _s.get(Project, upstream_id)
+            if not _up:
+                raise HTTPException(status_code=400,
+                                    detail=f"artifacts_from project not found: {upstream_id}")
+            # Require it to have produced something. A run still in flight would be linked
+            # mid-write, and its manifest may not exist yet.
+            _running = _s.exec(select(Task).where(Task.project_id == upstream_id,
+                                                  Task.status.in_(["pending", "running"]))).first()
+            if _running:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"artifacts_from project {upstream_id} still has work in flight; "
+                           "wait for it to finish.")
+        if not os.path.isdir(f"{WORKSPACE_ROOT}/{upstream_id}"):
+            raise HTTPException(status_code=400,
+                                detail=f"artifacts_from workspace missing on disk: {upstream_id}")
+
     # Transactional Execution
     with Session(engine) as session:
         project_name = meta.name or f"Project {datetime.now().strftime('%m-%d %H:%M')} (from spec)"
@@ -3175,6 +3205,11 @@ async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundT
             for ds in meta.datasets:
                 ds_path = (datasets_root / ds).resolve()
                 _mount_external_dataset(workspace_dir, str(ds_path))
+
+            # Upstream artifacts land in `upstream/`, after the datasets so a name clash
+            # cannot overwrite one of them (they are in different directories anyway).
+            if upstream_id is not None:
+                _mount_upstream_artifacts(workspace_dir, upstream_id)
             
             # If fast_mode is enabled, inject sample_rows: 50000 into frontmatter
             spec_content_to_write = content
@@ -3391,6 +3426,58 @@ def _mount_external_dataset(workspace_dir: str, host_path: str):
         print(f"  [Dataset] Copied '{filename}' (outside the read-only datasets root)", flush=True)
     except Exception as e:
         raise Exception(f"Failed to copy dataset: {e}")
+
+#
+
+# Noise from the upstream run that a downstream task never needs: the rendered report,
+# the replay notebook/script, and the spec/recipe copies. Data and manifests are what
+# make a run reusable.
+_UPSTREAM_SKIP = ("final_dashboard.html", "workflow_execution.ipynb",
+                  "workflow_execution.py", "workflow_spec.md")
+
+
+def _mount_upstream_artifacts(workspace_dir: str, upstream_id: uuid.UUID) -> List[str]:
+    """Expose a finished project's artifacts inside `<workspace>/upstream/`.
+
+    Linked with RELATIVE symlinks (`../../<upstream_id>/<file>`), which is what makes this
+    work at all: the sandbox bind-mounts the whole workspaces root, but at a DIFFERENT path
+    inside the container (`/app/workspaces`) than on the host. An absolute host symlink
+    would therefore dangle in the sandbox — only the relative form resolves identically in
+    both. (Datasets can use absolute links because that root is mounted at the same path;
+    workspaces cannot.) Verified in-container before this was built.
+
+    Mounted under `upstream/` rather than the workspace root so an upstream file can never
+    shadow the downstream spec's own `datasets:` entry — an EDA workspace still contains the
+    source CSV it profiled, so a flat mount would collide by construction.
+
+    Read-only by convention, not by permission: these are symlinks into a live workspace, so
+    downstream code MUST NOT write through them. The transform recipe writes its outputs to
+    the downstream workspace root.
+    """
+    src_dir = f"{WORKSPACE_ROOT}/{upstream_id}"
+    if not os.path.isdir(src_dir):
+        raise FileNotFoundError(f"Upstream workspace not found: {upstream_id}")
+
+    dest_dir = os.path.join(workspace_dir, "upstream")
+    os.makedirs(dest_dir, exist_ok=True)
+
+    linked: List[str] = []
+    for name in sorted(os.listdir(src_dir)):
+        if name in _UPSTREAM_SKIP or name.startswith("."):
+            continue
+        if not os.path.isfile(os.path.join(src_dir, name)):
+            continue
+        target = os.path.join(dest_dir, name)
+        if os.path.lexists(target):
+            os.unlink(target)
+        os.symlink(os.path.join("..", "..", str(upstream_id), name), target)
+        linked.append(name)
+
+    print(f"  [Upstream] Linked {len(linked)} artifact(s) from {upstream_id} "
+          f"into upstream/ ({', '.join(linked[:6])}{'…' if len(linked) > 6 else ''})",
+          flush=True)
+    return linked
+
 
 async def _probe_file_schema(executor: ExecutionManager, project_id: uuid.UUID, filename: str) -> Optional[Dict[str, Any]]:
     """Rich, time-capped schema + distribution profiling for CSV, Parquet, and text files."""
