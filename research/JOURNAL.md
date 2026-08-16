@@ -609,6 +609,90 @@ stays N/A, so H1's "≥4/5" reads against 4 benchmarks. Config parity with the b
 `routing_mode: local`, `local_fallback: none`, gemma-4-12b (the fallback legs landed 2026-07-30,
 two weeks *after* the baseline, so it was fallback-free by construction).
 
+## 2026-08-15 — `[build]` The EDA recipe: a descriptive intent, and a reusable transformation contract
+
+Built `tabular_eda.descriptive.standard` (approach_docs/021, Phase 1). GADS had 26 recipes and
+none did exploratory data analysis, though `taxonomy.yaml` names `descriptive` as its **first**
+intent — so "explore this dataset" matched nothing and fell to the drafted lane, the rung where
+the local engine is weakest. Six nodes: profile → quality → univariate → bivariate → recommend
+transformations → summary.
+
+**The deliverable is the manifest, not the charts.** `eda_transformations.meta.json` records, per
+column, an imputation / scaling / encoding strategy drawn from closed vocabularies, plus quality
+flags and — when the data is ML-destined — a split block. A later run consumes it via
+`gads_apply_transformations`, so judgment made once during exploration is applied consistently
+afterwards. The `.meta.json` suffix is load-bearing: any other `.json` in a workspace was being
+auto-registered as an interactive Plotly artifact.
+
+**Division of labour, per the 019 rule.** *Recommending* a transformation is judgment that
+depends on the data, so it stays model-generated and measured. *Applying* one is invariant
+mechanics, so it is deterministic native code — and the ordering inside it is the reason it must
+be: the applier splits FIRST, fits on the training partition only, then applies those fitted
+parameters to every partition, persisting them to `transformation_provenance.meta.json` so a
+second file reuses rather than refits. Fitting before splitting leaks held-out statistics into
+training. Proven rather than asserted: on data where `age` trends with time, the fitted median is
+41.021 (train) and not 49.970 (full) — identical numbers would mean the guard had failed.
+
+**Three data-corrupting bugs the unit tests caught before they shipped.** Continuous float
+columns were flagged `id_like` and DROPPED (uniqueness alone condemns nearly every continuous
+feature). Datetime columns were flagged `id_like`, and separately frequency-encoded, turning
+timestamps into codes that carry no signal and do not transfer. And a time-ordered split whose
+time column had been dropped silently degraded to row order — it looked correct only because the
+test data happened to be in date order; it now raises, and split columns are protected from the
+drop pass.
+
+**Cloud e2e — the first run passed its contracts while producing nothing.** `3fc0ec86`: all six
+nodes "completed"; neither deliverable existed. `recommend_transformations` printed a manifest to
+stdout, never wrote the file, and invented its own key names (`impute` not `recommended_impute`,
+`strategy`/`train_fraction` not `method`/`ratios`) — unusable by the applier regardless.
+`univariate_distributions` made **zero savefig calls**, emitting a dict *describing* figures that
+never existed. Both passed because the contracts were written on **variables, not artifacts**.
+
+Remedy (v1.1.0): a native `gads_write_transformation_manifest` — the model decides per column,
+the native serializes the schema, so the format cannot drift (a *cloud* model got it wrong; a 12B
+never had a chance). Plus a `required_metrics` scalar on every artifact-producing node
+(`n_manifest_columns`, `n_univariate_figures`, `n_bivariate_figures`), which is hard-fail where
+recipe `postconditions` are advisory. `5b30faa6` then produced a correct manifest, 6 real
+figures, and all 7 metrics; applying it to the full 48,842-row Adult extract yields a stratified
+34,188 / 7,326 / 7,328 split, 15 → 106 columns, zero residual nulls, class balance preserved.
+
+**Local (gemma-4-12b) — not viable for this recipe, and that is the finding.** Unaided
+(`5f2740ba`, `319e8d4e`): `exec_nodes: 0`. The generated code was *substantively correct* pandas
+profiling carrying a uniform 4-space indent plus a real unmatched paren; because the stray-indent
+repair only commits when the result parses, the model was told `unexpected indent at line 2` — a
+harness-fixable artifact — while the true defect went unmentioned. Fixed (`bc10b39`): the gate
+now reports the **residual** error after a best-effort dedent. With honest diagnoses the model
+still failed, at lines 17/16/9/24/29 — five *different* paren bugs that
+`normalize_error_reason` collapses to one reason, so the same-reason guard stopped it at two
+attempts (→ issue #33). With `local_fallback: native` (`8dd73299`): `exec_nodes: 2`,
+`fallback_pass: 2`, **`pass_at_model: 0.0`** — the two natives carried nodes 1–2 and the model
+did nothing unaided. Nodes 3–4 (plotting) then blocked the run, and they deliberately have no
+`fallback_native` so capability stays measured. A latent defect surfaced here too: node 1's
+`fallback_call` referenced `df`, but in this failure mode nothing ever executed, so the safety
+net would have NameError'd and silently no-opped in exactly the state it exists for (fixed
+v1.1.1, proven from an empty namespace).
+
+**Reuse works, and on the local model.** Follow-up `b1f055ba` on `5b30faa6`: keyword routing
+injected the EDA preamble, `gads_apply_transformations` ran, and the transformed train/val/test
+parquets plus provenance were written — `status: completed, model_used: local_model,
+mode: followup`. Calling the native is within the 12B's reach even though authoring the recipe's
+nodes is not, which is a clean illustration of what nativizing buys. Method note: an earlier
+apparent pass was **my own manual applier run** left in the workspace; the stale files were
+deleted and the test re-run before this claim was made.
+
+**Two bugs found in passing, both pre-existing.** Every workspace `.json` was registered as a
+Plotly figure, so `metrics.json` — and the natives' `model_checks.json`,
+`survival_metrics.json`, `cox_report.json`, `risk_profiles.json`, `km_summary.json`,
+`recommendation_profile.json` — rendered as broken tiles on **every** run; now detected by
+content rather than an allow-list that would rot (`2851e24`, validated against 3 real figures and
+all 89 historical `metrics.json` files). And the follow-up lane wrote the model *object* into the
+JSON column, so every follow-up failure persisted an **empty** `result_json`, destroying the
+diagnostics exactly when they matter (`b989a52`).
+
+**Open:** the follow-up lane never calls `resolve_stage_model` — `ExecutionManager()` takes the
+Coder's hardcoded `local_model` default — so it ignores `routing_mode` entirely; in `cloud` mode
+a user silently gets the local engine. Not yet filed.
+
 ---
 
 *Add entries above this line. Keep the evidence discipline: UUID or it didn't happen.*
