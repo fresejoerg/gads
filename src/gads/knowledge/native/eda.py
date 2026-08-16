@@ -413,6 +413,16 @@ def gads_write_transformation_manifest(decisions, df=None, target_column=None, s
     """
     import json
 
+    # Defined INSIDE the function on purpose: natives are injected by
+    # `inspect.getsource`, and the opt-in fallback path injects the function ALONE
+    # (NATIVE_SOURCE[name]), without any module-level constants. Referencing a module
+    # global here worked under the always-on preamble and NameError'd under the
+    # fallback — i.e. it broke in exactly the state the fallback exists for.
+    _GADS_IMPUTE_VALUES = ("median", "mean", "mode", "constant", "forward_fill",
+                           "drop_rows", "drop_column", None)
+    _GADS_SCALE_VALUES = ("standard", "minmax", "robust", "log1p", "quantile_normal", None)
+    _GADS_ENCODE_VALUES = ("onehot", "ordinal", "target", "frequency", None)
+
     # The profiling helpers are fallback-only, so they may not be defined in the kernel.
     # Their absence only costs the enrichment statistics — never the manifest itself.
     try:
@@ -510,12 +520,6 @@ def gads_write_transformation_manifest(decisions, df=None, target_column=None, s
     return manifest
 
 
-_GADS_IMPUTE_VALUES = ("median", "mean", "mode", "constant", "forward_fill",
-                       "drop_rows", "drop_column", None)
-_GADS_SCALE_VALUES = ("standard", "minmax", "robust", "log1p", "quantile_normal", None)
-_GADS_ENCODE_VALUES = ("onehot", "ordinal", "target", "frequency", None)
-
-
 def gads_apply_transformations(df, manifest, source_file=None, apply_flags=True,
                                reuse_params_from=None,
                                provenance_path="transformation_provenance.meta.json",
@@ -538,6 +542,16 @@ def gads_apply_transformations(df, manifest, source_file=None, apply_flags=True,
     import json
     import numpy as np
     import pandas as pd
+
+    # Defined INSIDE the function on purpose: natives are injected by
+    # `inspect.getsource`, and the opt-in fallback path injects the function ALONE
+    # (NATIVE_SOURCE[name]), without any module-level constants. Referencing a module
+    # global here worked under the always-on preamble and NameError'd under the
+    # fallback — i.e. it broke in exactly the state the fallback exists for.
+    _GADS_IMPUTE_VALUES = ("median", "mean", "mode", "constant", "forward_fill",
+                           "drop_rows", "drop_column", None)
+    _GADS_SCALE_VALUES = ("standard", "minmax", "robust", "log1p", "quantile_normal", None)
+    _GADS_ENCODE_VALUES = ("onehot", "ordinal", "target", "frequency", None)
 
     if isinstance(manifest, str):
         with open(manifest) as f:

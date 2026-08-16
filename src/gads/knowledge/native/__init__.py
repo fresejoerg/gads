@@ -486,9 +486,6 @@ from . import eda as _eda_mod
 
 EDA_PREAMBLE = (
     "import warnings as _w_eda\n_w_eda.filterwarnings('ignore')\n\n"
-    + "_GADS_IMPUTE_VALUES = " + repr(_eda_mod._GADS_IMPUTE_VALUES) + "\n"
-    + "_GADS_SCALE_VALUES = " + repr(_eda_mod._GADS_SCALE_VALUES) + "\n"
-    + "_GADS_ENCODE_VALUES = " + repr(_eda_mod._GADS_ENCODE_VALUES) + "\n\n"
     + "\n\n".join(_inspect.getsource(_fn) for _fn in (
         _eda_mod.gads_write_transformation_manifest,
         _eda_mod.gads_apply_transformations,
