@@ -64,12 +64,38 @@ class SandboxClient:
         self.base_url = base_url
         self.client = httpx.AsyncClient(timeout=720.0) # Must exceed sandbox's 300s execution limit + buffer
 
-    def list_workspace_files(self, project_id: uuid.UUID) -> List[str]:
-        """Lists files available in the project's host workspace directory."""
+    def list_workspace_files(self, project_id: uuid.UUID, subdir_cap: int = 40) -> List[str]:
+        """Lists files available in the project's host workspace directory.
+
+        Descends ONE level into subdirectories, so entries appear as `upstream/manifest.json`
+        rather than a bare `upstream`. This list is what the Coder is shown as its available
+        files: a plain `os.listdir` presented a mounted upstream run (approach_docs/021 §6) as
+        one opaque directory name, so the model could not see the artifact it was being asked
+        to read and had to trust a path quoted in the recipe intent.
+
+        One level, not full recursion, and capped per directory: the list goes into every
+        Coder prompt, and a workspace can hold hundreds of generated files. Directories are
+        listed by their contents rather than by name — a bare directory name tells the model
+        nothing it can act on.
+        """
         host_path = f"/home/joergf/projects/MyLocalStack/data/workspaces/{project_id}"
         if not os.path.exists(host_path):
             return []
-        return os.listdir(host_path)
+        out: List[str] = []
+        for name in sorted(os.listdir(host_path)):
+            full = os.path.join(host_path, name)
+            if os.path.isdir(full):
+                try:
+                    children = sorted(c for c in os.listdir(full)
+                                      if os.path.isfile(os.path.join(full, c)))
+                except OSError:
+                    continue
+                out.extend(f"{name}/{c}" for c in children[:subdir_cap])
+                if len(children) > subdir_cap:
+                    out.append(f"{name}/… (+{len(children) - subdir_cap} more)")
+            else:
+                out.append(name)
+        return out
 
     async def poll_logs(self, session_id: str, offset_out: int = 0, offset_err: int = 0) -> Optional[Dict[str, Any]]:
         """Polls the sandbox for incremental stdout and stderr."""
