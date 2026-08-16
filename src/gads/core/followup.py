@@ -150,7 +150,12 @@ async def run_followup(project_id: uuid.UUID, instruction_id: uuid.UUID, task_id
     files_before = {f["name"] for f in srv._get_recursive_files(workspace_dir)}
     hb = asyncio.create_task(_heartbeat())
     try:
-        res, model_used = await executor.run_task(
+        # `run_task` returns the coder's model OBJECT, not its name. It goes straight into
+        # `result_json`, which is a JSON column — an OpenAIModel is not serializable, so the
+        # UPDATE raised and the task row was written with an EMPTY result_json, destroying
+        # the stdout/code/error needed to diagnose the failure. The main workflow already
+        # coerces with str() at each use site; this lane did not. Coerce once, here.
+        res, _model_obj = await executor.run_task(
             objective,
             project_id=project_id,
             session_id=session_id,
@@ -160,6 +165,7 @@ async def run_followup(project_id: uuid.UUID, instruction_id: uuid.UUID, task_id
             stream_callback=_reasoning,
             state_summary=state_summary,
         )
+        model_used = getattr(_model_obj, "model_name", None) or str(_model_obj)
     finally:
         hb.cancel()
         try:
