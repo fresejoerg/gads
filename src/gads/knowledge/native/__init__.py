@@ -12,9 +12,11 @@ Usage in executor.py telemetry_preamble:
 Each function prints progress lines that appear in task stdout.
 """
 
+import inspect as _inspect
 from typing import Callable, Dict
 
 # Import all native modules — functions are registered at module level
+from . import ml as _ml_mod
 from .ml import gads_automl_fit, gads_automl_predict, gads_timeseries_fit, gads_timeseries_predict, gads_calibrate_threshold
 from .causal import gads_causal_estimate_ate, gads_causal_bayesian_ate
 from .recommendation import (gads_build_interaction_matrix, gads_temporal_loo_split,
@@ -26,6 +28,11 @@ from .survival import (gads_make_surv_target, gads_evaluate_survival, gads_cox_p
 from .eda import (gads_profile_dataframe, gads_assess_quality, gads_recommend_split,
                   gads_recommend_transformations, gads_write_transformation_manifest,
                   gads_apply_transformations, gads_eda_summary)
+from .model_selection import (gads_load_prepared_split, gads_dataset_facts,
+                              gads_default_shortlist, gads_candidate_bakeoff,
+                              gads_tune_model, gads_evaluate_holdout,
+                              gads_feature_importance, gads_audit_model_choice,
+                              gads_model_card)
 
 NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_automl_fit": gads_automl_fit,
@@ -61,69 +68,33 @@ NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_write_transformation_manifest": gads_write_transformation_manifest,
     "gads_apply_transformations": gads_apply_transformations,
     "gads_eda_summary": gads_eda_summary,
+    # Model selection (approach_docs/022). Split along the 019 line: the four PROTOCOL
+    # natives below are auto-injected via MODEL_SELECTION_PREAMBLE because the recipe's
+    # intents tell the Coder to call them by name (identical folds, budgeted HPO, held-out
+    # permutation importance, the choice gate — all single-right-answer operations). The
+    # five JUDGMENT natives (load, facts, shortlist, holdout evaluation, model card) are
+    # registered for the opt-in fallback path ONLY and deliberately absent from the
+    # preamble, so those nodes stay model-generated and their capability stays measured.
+    "gads_candidate_bakeoff": gads_candidate_bakeoff,
+    "gads_tune_model": gads_tune_model,
+    "gads_feature_importance": gads_feature_importance,
+    "gads_audit_model_choice": gads_audit_model_choice,
+    "gads_load_prepared_split": gads_load_prepared_split,
+    "gads_dataset_facts": gads_dataset_facts,
+    "gads_default_shortlist": gads_default_shortlist,
+    "gads_evaluate_holdout": gads_evaluate_holdout,
+    "gads_model_card": gads_model_card,
 }
 
 # Preamble injected into every sandbox execution when AutoGluon recipes are active.
 # Defines the native functions directly in the kernel so the Coder can call them.
-AUTOGLUON_PREAMBLE = '''
-import warnings
-warnings.filterwarnings("ignore")
-
-def gads_calibrate_threshold(y_true, y_prob, metric="f1"):
-    """
-    Finds the optimal decision threshold for binary classification.
-    """
-    import numpy as np
-    import pandas as pd
-    from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score
-    
-    # Extract positive class probabilities if y_prob is a DataFrame or 2D array
-    if hasattr(y_prob, "ndim") and y_prob.ndim == 2:
-        if hasattr(y_prob, "iloc"):
-            y_prob = y_prob.iloc[:, 1]
-        else:
-            y_prob = y_prob[:, 1]
-    elif isinstance(y_prob, pd.DataFrame):
-        y_prob = y_prob.iloc[:, 1]
-    elif isinstance(y_prob, list):
-        y_prob = np.array(y_prob)
-        if y_prob.ndim == 2:
-            y_prob = y_prob[:, 1]
-            
-    y_true = np.array(y_true)
-    y_prob = np.array(y_prob)
-
-    # Binarize non-{0,1} targets (e.g. string labels '<=50K'/'>50K'): the positive
-    # class is the lexicographically last unique value, matching the ordering of
-    # AutoGluon's predict_proba columns from which callers take iloc[:, 1].
-    uniq = sorted(np.unique(y_true).tolist())
-    if len(uniq) == 2 and uniq != [0, 1] and uniq != [False, True]:
-        y_true = (y_true == uniq[-1]).astype(int)
-
-    thresholds = np.linspace(0.01, 0.99, 99)
-    best_threshold = 0.5
-    best_score = -1.0
-    
-    for t in thresholds:
-        preds = (y_prob >= t).astype(int)
-        if metric == "f1":
-            score = float(f1_score(y_true, preds, zero_division=0))
-        elif metric == "precision":
-            score = float(precision_score(y_true, preds, zero_division=0))
-        elif metric == "recall":
-            score = float(recall_score(y_true, preds, zero_division=0))
-        elif metric == "accuracy":
-            score = float(accuracy_score(y_true, preds))
-        else:
-            score = float(f1_score(y_true, preds, zero_division=0))
-            
-        if score > best_score:
-            best_score = score
-            best_threshold = float(t)
-            
-    print(f"[gads_calibrate_threshold] Best threshold: {best_threshold:.4f} with {metric} score: {best_score:.4f}")
-    return {"best_threshold": best_threshold, "best_score": best_score}
-
+#
+# NOTE: gads_calibrate_threshold is NOT a literal here — it is spliced in from ml.py via
+# inspect.getsource (see the composition below). It used to be duplicated as a literal,
+# which meant the kernel got a working copy while NATIVE_SOURCE exported the raising stub
+# from ml.py. One source of truth now; the AutoGluon wrappers below stay literal because
+# their ml.py counterparts are deliberately stubs.
+_AUTOGLUON_REST = '''
 def gads_automl_fit(df, target_col, time_limit=120, presets="good_quality", eval_metric=None, problem_type=None):
     """
     Train an AutoGluon TabularPredictor on df. Handles all preprocessing internally.
@@ -291,6 +262,13 @@ def gads_timeseries_predict(predictor_ts, ts_df):
     return forecasts
 '''
 
+AUTOGLUON_PREAMBLE = (
+    'import warnings\nwarnings.filterwarnings("ignore")\n\n'
+    + _inspect.getsource(_ml_mod.gads_calibrate_threshold)
+    + "\n"
+    + _AUTOGLUON_REST
+)
+
 # Preamble injected when causal keywords are detected in task code.
 # Defines gads_causal_estimate_ate and gads_causal_bayesian_ate in the kernel.
 CAUSAL_PREAMBLE = '''
@@ -432,7 +410,6 @@ def gads_causal_bayesian_ate(df, treatment_col, outcome_col, confounder_cols, ma
 # Preamble injected when recommendation / collaborative-filtering keywords are detected.
 # Built from the recommendation module source (single source of truth — no duplicated copy)
 # so the injected functions can never drift from the importable/testable definitions.
-import inspect as _inspect
 from . import recommendation as _rec_mod
 
 RECOMMENDATION_PREAMBLE = (
@@ -492,6 +469,24 @@ EDA_PREAMBLE = (
     ))
 )
 
+# Preamble injected when model-selection keywords are detected. Only the PROTOCOL natives
+# (approach_docs/022 §3): comparing candidates on identical folds, running HPO inside the
+# training partition under a budget the RuntimeOracle provably cannot see (§7), measuring
+# importance on held-out data by permutation rather than impurity, and adjudicating the
+# choice. The judgment natives are fallback-only — see the NATIVE_REGISTRY note above.
+from . import model_selection as _ms_mod
+
+MODEL_SELECTION_PREAMBLE = (
+    "import warnings as _w_ms\n_w_ms.filterwarnings('ignore')\n\n"
+    + "\n\n".join(_inspect.getsource(_fn) for _fn in (
+        _ms_mod.gads_candidate_bakeoff,
+        _ms_mod.gads_tune_model,
+        _ms_mod.gads_feature_importance,
+        _ms_mod.gads_audit_model_choice,
+    ))
+)
+
+
 # Per-native source, for the opt-in local-fallback path (invoke ONE native on demand rather
 # than injecting the always-on preamble). Includes the demoted plotting natives.
 NATIVE_SOURCE = {name: _inspect.getsource(fn) for name, fn in NATIVE_REGISTRY.items()}
@@ -517,6 +512,10 @@ _PREAMBLE_ROUTES = (
     ("eda", ("gads_apply_transformations", "gads_write_transformation_manifest",
              "eda_transformations.meta.json", "transformation_provenance"),
      lambda: EDA_PREAMBLE),
+    ("model-selection", ("gads_candidate_bakeoff", "gads_tune_model",
+                         "gads_audit_model_choice", "gads_feature_importance",
+                         "model_choice_checks"),
+     lambda: MODEL_SELECTION_PREAMBLE),
     ("survival", ("gads_make_surv_target", "gads_evaluate_survival", "gads_cox_ph_report",
                   "CoxPHFitter", "CoxPHSurvivalAnalysis", "RandomSurvivalForest",
                   "lifelines", "sksurv", "Surv.from_", "KaplanMeierFitter"),

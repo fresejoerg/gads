@@ -14,6 +14,15 @@ applies_when:
     - temporal_ordering_required: true
     - task: causal_inference
     - task: anomaly_detection
+    # This recipe's signals are deliberately broad, which made it swallow objectives whose
+    # deliverable is a *defended* choice of algorithm rather than an accurate model. Those
+    # belong to `tabular_supervised.selection.classification` (approach_docs/022 §6). The
+    # distinction is the deliverable, not the data: "predict churn" is AutoML, "compare
+    # models and tell me which to use and why" is model selection.
+    - objective_contains: [compare models, model selection, which model, which algorithm,
+                           choose a model, model comparison, best algorithm,
+                           hyperparameter tuning, tune the model, justify the model,
+                           why this model]
 
 # ——— SCHEMA CONTRACT ———
 requires:

@@ -28,6 +28,7 @@ KNOWN_CAPABILITIES = {
     "sentence-transformers", "nltk", "textblob",
     "matplotlib", "seaborn", "plotly", "kaleido", "networkx",
     "lifelines", "scikit-survival", "sksurv", "skore",
+    "optuna", "catboost", "implicit", "scipy",
 }
 
 # Triggers this short/common would over-fire on ordinary code (the list->tolist() class

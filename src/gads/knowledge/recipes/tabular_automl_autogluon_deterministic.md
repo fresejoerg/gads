@@ -15,6 +15,12 @@ applies_when:
     - temporal_ordering_required: true
     - task: causal_inference
     - task: anomaly_detection
+    # Mirrors tabular_automl.autogluon.standard: objectives whose deliverable is a defended
+    # choice of algorithm route to tabular_supervised.selection.classification instead.
+    - objective_contains: [compare models, model selection, which model, which algorithm,
+                           choose a model, model comparison, best algorithm,
+                           hyperparameter tuning, tune the model, justify the model,
+                           why this model]
 
 # ——— SCHEMA CONTRACT ———
 requires:
