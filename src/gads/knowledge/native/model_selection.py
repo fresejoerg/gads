@@ -510,7 +510,10 @@ def gads_candidate_bakeoff(X_train, y_train, candidates, cv=5, seed=42, scoring=
               f"({table.loc[1, 'candidate']}): {margin:.4f} "
               f"(fold std {table.loc[0, 'std_score']:.4f})")
 
-    return {"bakeoff_table": table, "best_candidate": best, "best_cv_score": best_score,
+    # Short-name aliases alongside the canonical keys (022 v1.1 fix 1).
+    return {"bakeoff_table": table, "table": table,
+            "best_candidate": best, "best": best,
+            "best_cv_score": best_score, "score": best_score,
             "scoring": scoring, "n_candidates": len(rows), "failures": failures,
             "folds": int(cv)}
 
@@ -776,7 +779,7 @@ def gads_tune_model(X_train, y_train, estimator_name, search_space=None, n_trial
         print("[gads_tune_model] Empty search space — returning the untuned estimator")
         model = _wrap(_mk({}))
         model.fit(X, y)
-        return {"tuned_model": model, "best_params": {},
+        return {"tuned_model": model, "model": model, "best_params": {}, "params": {},
                 "best_cv_score_tuned": baseline_cv_score, "n_trials_completed": 0,
                 "timed_out": False, "baseline_cv_score": baseline_cv_score,
                 "search_space_used": {}, "scoring": scoring, "study": None}
@@ -849,7 +852,7 @@ def gads_tune_model(X_train, y_train, estimator_name, search_space=None, n_trial
         print("[gads_tune_model] WARNING: no trial completed — falling back to defaults")
         model = _wrap(_mk({}))
         model.fit(X, y)
-        return {"tuned_model": model, "best_params": {},
+        return {"tuned_model": model, "model": model, "best_params": {}, "params": {},
                 "best_cv_score_tuned": baseline_cv_score, "n_trials_completed": 0,
                 "timed_out": timed_out, "baseline_cv_score": baseline_cv_score,
                 "search_space_used": search_space, "scoring": scoring, "study": study}
@@ -864,7 +867,8 @@ def gads_tune_model(X_train, y_train, estimator_name, search_space=None, n_trial
     print(f"[gads_tune_model] {scoring}: {baseline_cv_score:.4f} (defaults) -> "
           f"{best_cv:.4f} (tuned)")
     print(f"[gads_tune_model] Best params: {best_params}")
-    return {"tuned_model": model, "best_params": best_params,
+    return {"tuned_model": model, "model": model,
+            "best_params": best_params, "params": best_params,
             "best_cv_score_tuned": best_cv, "n_trials_completed": int(n_done),
             "timed_out": timed_out, "baseline_cv_score": baseline_cv_score,
             "search_space_used": search_space, "scoring": scoring, "study": study}
@@ -1016,7 +1020,10 @@ def gads_evaluate_holdout(model, X_train, y_train, X_test, y_test, task_kind=Non
     print(classification_report(yte, y_pred_enc, target_names=class_names,
                                 zero_division=0))
 
+    # `predictions`/`probabilities`/`threshold` are aliases (022 v1.1 fix 1).
     return {"macro_f1": macro_f1, "roc_auc": roc_auc, "log_loss": log_loss,
+            "predictions": y_pred, "probabilities": y_prob,
+            "threshold": best_threshold,
             "accuracy": accuracy, "baseline_macro_f1": baseline_macro_f1,
             "baseline_accuracy": baseline_accuracy,
             "beats_baseline": bool(macro_f1 > baseline_macro_f1),
@@ -1131,7 +1138,11 @@ def gads_feature_importance(model, X_test, y_test, n_repeats=5, seed=42, top_k=2
         except Exception:
             pass
 
-    return {"importance_table": table, "top_features": top["feature"].tolist(),
+    # `importance` is an ALIAS of importance_table — models reach for the short natural
+    # key name (022 v1.1 fix 1; result['importance'] cost feature_importance an attempt
+    # in the local A/B).
+    return {"importance_table": table, "importance": table,
+            "top_features": top["feature"].tolist(),
             "n_features_reported": n_report, "method": "permutation_holdout",
             "shap_available": shap_available}
 
@@ -1484,4 +1495,5 @@ def gads_model_card(chosen=None, dataset_facts=None, bakeoff_table=None,
         print(f"[gads_model_card] Could not write {write_path}: {e}")
 
     print(text[:1500])
-    return {"model_card_text": text, "card_path": write_path, "sections": sections}
+    return {"model_card_text": text, "text": text, "card_path": write_path,
+            "sections": sections}

@@ -24,7 +24,10 @@ FALLBACK_SRC = "\n\n".join(
                                "gads_default_shortlist", "gads_evaluate_holdout",
                                "gads_model_card"))
 
-PREAMBLE = (MODEL_SELECTION_PREAMBLE + "\n\n" + FALLBACK_SRC + "\n\n"
+# gads_calibrate_threshold lives in AUTOGLUON_PREAMBLE; real node-7 code routes BOTH
+# preambles (verified via preamble_for_code), so the harness must inject both too.
+PREAMBLE = (MODEL_SELECTION_PREAMBLE + "\n\n"
+            + NATIVE_SOURCE["gads_calibrate_threshold"] + "\n\n" + FALLBACK_SRC + "\n\n"
             "if '_gads_insights' not in globals(): _gads_insights = []\n"
             "def gads_emit_insight(artifact, insight, evidence=''):\n"
             "    _gads_insights.append({'artifact': artifact, 'insight': insight})\n")

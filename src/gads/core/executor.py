@@ -555,6 +555,24 @@ def _repair_stray_indent(code: str) -> str:
     return code
 
 
+def _truncate_error_msg(msg, limit=1200):
+    """Cap one attempt's error text before it is fed back to the Coder.
+
+    A single sklearn error can carry multi-KB of concatenated label values
+    ("Labels in y_true and y_pred ... Got y_true=[...]"), which crowds out the task
+    and the prior attempts on a small local context window. Keep the head (exception
+    type + the start of the message, where the actual cause is) and the tail (where
+    assertion detail usually sits), drop the middle.
+    """
+    msg = str(msg)
+    if len(msg) <= limit:
+        return msg
+    head = int(limit * 0.7)
+    tail = limit - head
+    return (msg[:head] + f"\n    … [{len(msg) - limit} chars of error text elided] …\n"
+            + msg[-tail:])
+
+
 class ExecutionManager:
     """Manages the Code-Execution-Feedback loop."""
 
@@ -935,7 +953,8 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                     # dead ends it has already hit, not just the latest one.
                     error_history.append(attempt_msg)
                     error_feedback = "\n".join(
-                        f"  Attempt {i + 1} — {m}" for i, m in enumerate(error_history)
+                        f"  Attempt {i + 1} — {_truncate_error_msg(m)}"
+                        for i, m in enumerate(error_history)
                     )
                     previous_code = current_code
 
@@ -983,7 +1002,8 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                     )
                 error_history.append(attempt_msg)
                 error_feedback = "\n".join(
-                    f"  Attempt {i + 1} — {m}" for i, m in enumerate(error_history)
+                    f"  Attempt {i + 1} — {_truncate_error_msg(m)}"
+                    for i, m in enumerate(error_history)
                 )
                 record_error(recipe_id, recipe_version, task_description,
                              "CodeGenerationError", str(e), self.coder.model)

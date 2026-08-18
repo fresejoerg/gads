@@ -1,6 +1,6 @@
 ---
 id: tabular_supervised.selection.classification
-version: 1.0.0
+version: 1.1.0
 schema_version: 1
 author: gads-core
 
@@ -221,6 +221,8 @@ invariants:
   - "PERMUTATION, NOT IMPURITY: feature importance is permutation importance on held-out data. `.feature_importances_` is impurity-based and biased toward high-cardinality and continuous features; it may be shown for contrast but never as the headline."
   - "BASELINE ALWAYS: every headline metric is reported next to the trivial baseline (majority class for classification). A model that does not beat it is a finding to report, not a failure to hide."
   - "CLASS WEIGHTS: the bakeoff and tuning natives apply class_weight='balanced' (or scale_pos_weight) uniformly. Do not set these in candidate params — doing so confounds the comparison."
+  - "STRING LABELS: class labels may be strings ('<=50K'/'>50K'), not 0/1. A thresholded probability yields 0/1, so comparing it against a string y_test raises \"Labels in y_true and y_pred should be of the same type\". Map thresholded predictions back to the original label dtype before ANY metric, confusion matrix or report — e.g. `classes = sorted(pd.Series(y_test).unique()); y_pred = np.where(y_prob >= threshold, classes[-1], classes[0])`. Never cast the labels themselves with int()."
+  - "NATIVE RETURN KEYS: read the exact keys a native documents. gads_calibrate_threshold returns `best_threshold`, gads_feature_importance returns `importance_table`, gads_candidate_bakeoff returns `bakeoff_table`/`best_candidate`. Short aliases (`threshold`, `importance`, `table`, `best`) are also provided, but print `sorted(result.keys())` if unsure rather than guessing a third name."
   - "THRESHOLD CALIBRATION: when n_classes == 2, calibrate the decision threshold via gads_calibrate_threshold before computing any label-based metric. For 3+ classes a single threshold is meaningless under argmax — use argmax, and never slice predict_proba to one column."
   - "REASONED CHOICE: shortlist_candidates must state why each candidate was nominated AND name at least one family ruled out. A choice without a defence is a failed node even when the code runs."
   - "RANDOM SEEDS: random_state=42 everywhere, so the run is reproducible."
@@ -268,6 +270,26 @@ Designed to run downstream of `tabular_eda.descriptive.standard` →
 in which case node 1 picks up `upstream/transformed_{train,test}.parquet` and does not
 re-split. It also runs standalone against a clean dataset, which is what makes a benchmark
 sweep one launch per dataset instead of three.
+
+## v1.1 — evidence-driven hardening
+
+The local A/B on `qwen3.8-27b` (2026-08-18, runs `ea7593b6` / `8fa512a0`) produced the first
+real evidence for the hardening ladder, and every v1.1 change is a promotion justified by it
+rather than by speculation:
+
+- **String labels: prose → invariant.** Thresholded predictions are `0/1` while `y_test`
+  holds `'<=50K'`/`'>50K'`; the resulting dtype clash caused 3 of 14 failures.
+  `binary_classification.tabular.standard` already carried this as an invariant — it should
+  have been carried across from the start.
+- **Native return keys: prose → invariant, plus short aliases in the natives.**
+  `result['threshold']` (canonical: `best_threshold`) killed `holdout_evaluation` in BOTH
+  runs — 5 failures, and the repeated-reason stop that ended run A. `result['importance']`
+  (canonical: `importance_table`) cost `feature_importance` an attempt. The model reaches
+  for the short natural name, so the natives now answer to both.
+
+Nodes 1–6 passed on the model's own code in both runs, including the reasoning node, the
+bakeoff and authoring a valid Optuna search space — so no selection rule (MS001–MS011) has
+earned promotion above `warn` yet. That distribution is still being collected.
 
 ## Key constraints
 

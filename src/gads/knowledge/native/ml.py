@@ -67,7 +67,8 @@ def gads_calibrate_threshold(y_true, y_prob, metric="f1"):
     Returns "best_threshold": None and a "class_weights" vector to apply.
 
     Returns dict with keys: best_threshold, best_score, mode, n_classes and — multiclass
-    only — class_weights, classes, baseline_score.
+    only — class_weights, classes, baseline_score. `threshold` and `score` are provided
+    as aliases of best_threshold/best_score: models reach for the short natural name.
     """
     import numpy as np
     import pandas as pd
@@ -136,7 +137,11 @@ def gads_calibrate_threshold(y_true, y_prob, metric="f1"):
               f"{baseline_score:.4f} (argmax) -> {best_score:.4f} (weighted argmax)")
         print(f"[gads_calibrate_threshold] Apply with: "
               f"preds = np.asarray(classes)[np.argmax(y_prob * class_weights, axis=1)]")
-        return {"best_threshold": None, "best_score": best_score, "mode": "multiclass",
+        # "threshold"/"score" are ALIASES: local models reach for the short natural key
+        # name and a KeyError there is fatal to the node (022 v1.1 fix 1 — `threshold`
+        # killed holdout_evaluation 5 times across the local A/B).
+        return {"best_threshold": None, "threshold": None,
+                "best_score": best_score, "score": best_score, "mode": "multiclass",
                 "n_classes": k, "class_weights": weights.tolist(),
                 "classes": [c.item() if hasattr(c, "item") else c for c in classes],
                 "baseline_score": baseline_score}
@@ -187,5 +192,6 @@ def gads_calibrate_threshold(y_true, y_prob, metric="f1"):
             best_threshold = float(t)
 
     print(f"[gads_calibrate_threshold] Best threshold: {best_threshold:.4f} with {metric} score: {best_score:.4f}")
-    return {"best_threshold": best_threshold, "best_score": best_score,
+    return {"best_threshold": best_threshold, "threshold": best_threshold,
+            "best_score": best_score, "score": best_score,
             "mode": "binary", "n_classes": 2}
