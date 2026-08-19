@@ -52,6 +52,14 @@ class RecipeTask(BaseModel):
     # (upstream kernel state — df, X_test, etc. — is still live). e.g.
     # "km = gads_kaplan_meier(df, time_col=time_col, event_col=event_col); km_median = km['overall_median']".
     fallback_call: Optional[str] = None
+    # Optional authoring control over how this node appears in the final dashboard.
+    # The dashboard skeleton is derived from the DAG itself (one section per node, in
+    # DAG order) — this only tunes presentation. Keys:
+    #   title (str)     — section heading; defaults to the prettified node id
+    #   summary (str)   — one-line description shown under the heading; defaults to the intent
+    #   collapsed (bool)— force the section into the collapsed "pipeline step" style even if
+    #                     it produced evidence (auto-collapse applies to empty nodes anyway)
+    report: Optional[Dict[str, Any]] = None
 
 class Recipe(BaseModel):
     id: str

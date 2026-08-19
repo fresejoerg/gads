@@ -21,10 +21,16 @@ def distill_dashboard_to_markdown(
     narrative: str,
     takeaways: List[str],
     cards: List[Dict[str, Any]],
-    nonce: str = None
+    nonce: str = None,
+    sections: List[Dict[str, Any]] = None,
 ) -> str:
     """
     Converts dashboard state into a compact, hardened Markdown representation.
+
+    `sections` is the recipe-driven structure the dashboard actually renders. Including it
+    is what lets the Critique judge the report as published — an empty or absent section is
+    a real defect in the deliverable, and previewing only the narrative and the charts hid
+    exactly that class of gap.
     """
     if not nonce:
         nonce = secrets.token_hex(4)
@@ -39,6 +45,19 @@ def distill_dashboard_to_markdown(
     for t in safe_takeaways:
         md += f"- {t}\n"
     
+    if sections:
+        md += "\n#### Pipeline Sections (the dashboard body, one per recipe step):\n"
+        for sec in sections:
+            status = "not executed" if sec.get("status") == "not_executed" else sec.get("status", "")
+            md += f"{sec.get('index')}. **{sanitize_for_prompt(str(sec.get('title', '')))}** ({status})\n"
+            note = sanitize_for_prompt(str(sec.get("note") or ""))[:600]
+            md += f"   - Commentary: {note if note else 'MISSING — this section has no write-up.'}\n"
+            if sec.get("metrics"):
+                md += ("   - Metrics: "
+                       + ", ".join(f"{k}={v}" for k, v in sec["metrics"].items()) + "\n")
+            if sec.get("cards"):
+                md += f"   - Charts: {len(sec['cards'])}\n"
+
     md += "\n#### Visual Artifacts:\n"
     for i, card in enumerate(cards):
         desc = sanitize_for_prompt(card.get('description', 'Unnamed'))

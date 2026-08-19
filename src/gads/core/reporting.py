@@ -4,10 +4,12 @@ import json
 from typing import List, Dict, Any, Optional
 import uuid
 import base64
+from datetime import datetime
 from jinja2 import Environment, FileSystemLoader
 from sqlmodel import Session, select
 from gads.core.database import engine
 from gads.core.models import Task
+from gads.core import report_sections
 
 def create_master_reports(
     project_id: uuid.UUID,
@@ -17,9 +19,18 @@ def create_master_reports(
     artifacts: List[Any],
     artifact_insights: Optional[List[Any]] = None,
     followups: Optional[List[Dict[str, Any]]] = None,
+    section_notes: Optional[List[Any]] = None,
 ):
     """
     Assembles the final integrated HTML dashboard and Markdown research report.
+
+    The body of the report is composed from the **recipe DAG**, not from the artifact list:
+    `report_sections.build_sections` produces one section per pipeline step, in order, and
+    every card, metric and insight is filed under the step that produced it (see that
+    module for why). Steps that drew no chart — the reasoning and audit nodes — therefore
+    appear in the report, and steps that never ran appear as gaps instead of vanishing.
+    Artifacts that cannot be attributed to any step are still rendered, in a trailing
+    section, so restructuring the report can never lose evidence.
 
     `followups` appends analyst-directed sections AFTER the autonomous result — each with its
     own instruction text, timestamp, optional narrative/stdout and its own cards. The main
@@ -36,32 +47,7 @@ def create_master_reports(
                 data = ins
             insights_map[data.get('artifact_id')] = data
 
-    # 1. Generate Markdown Report
-    takeaways_md = "\n".join([f"- {t}" for t in takeaways])
-    md_content = f"""# Research Report: Project {project_id}
-
-## Executive Summary
-{narrative}
-
-## Key Takeaways
-{takeaways_md}
-
-## Methodology & Findings
-The following artifacts were generated during this analysis:
-"""
-    for a in artifacts:
-        fname = a.content_json.get("filename")
-        if a.type in ("interactive_plot", "json_plot"):
-            md_content += f"- **{a.description}**: [View Plot]({fname})\n"
-        elif a.type == "plot":
-            md_content += f"- **{a.description}** (Static Image)\n"
-        elif a.type == "handover_bundle":
-            md_content += f"- **{a.description}**: [Download Offline Script]({fname})\n"
-
-    with open(os.path.join(workspace_dir, "research_report.md"), "w") as f:
-        f.write(md_content)
-
-    # 2. Generate Integrated HTML Dashboard using Jinja2
+    # 1. Generate Integrated HTML Dashboard using Jinja2
     template_dir = os.path.join(os.path.dirname(__file__), "..", "templates")
     env = Environment(loader=FileSystemLoader(template_dir))
     template = env.get_template("dashboard.html.j2")
@@ -94,10 +80,21 @@ The following artifacts were generated during this analysis:
                     if fn_l not in artifact_to_figure_label:
                         artifact_to_figure_label[fn_l] = fig_label
 
+        # The report's spine: one section per recipe DAG node, built while the tasks are
+        # still attached to their session.
+        sections = report_sections.build_sections(list(tasks))
+
     # We also need the inverse: Figure N -> Filename
     figure_label_to_artifact = {v.lower(): k for k, v in artifact_to_figure_label.items()}
 
     cards = _build_cards(artifacts, workspace_dir, insights_map, artifact_to_figure_label)
+
+    orphan_cards = report_sections.attach_cards(sections, cards)
+    report_sections.apply_section_notes(sections, section_notes)
+    report_sections.finalize(sections)
+    if orphan_cards:
+        print(f"  [Reporting] {len(orphan_cards)} artifact(s) could not be attributed to a "
+              f"pipeline step; rendering them in a trailing section.")
 
     # Load persisted metrics (written by the metrics guarantee probe)
     key_metrics: Dict[str, Any] = {}
@@ -107,9 +104,16 @@ The following artifacts were generated during this analysis:
             with open(metrics_path) as f:
                 raw_metrics = json.load(f)
             for k, v in raw_metrics.items():
-                key_metrics[k] = f"{v:.4f}" if isinstance(v, float) else str(v)
+                key_metrics[k] = report_sections.format_metric(v)
         except Exception as e:
             print(f"  [Reporting] Warning: could not load metrics.json: {e}")
+
+    # 2. Markdown research report — the same section order as the dashboard, so the two
+    # artefacts describe the run identically.
+    md_content = _build_markdown(project_id, narrative, takeaways, key_metrics,
+                                 sections, orphan_cards)
+    with open(os.path.join(workspace_dir, "research_report.md"), "w") as f:
+        f.write(md_content)
 
     # Follow-up sections: each carries its own cards, built with the same logic so they
     # render identically to the main run (approach_docs/020).
@@ -142,6 +146,8 @@ The following artifacts were generated during this analysis:
         narrative=narrative,
         takeaways=takeaways,
         cards=cards,
+        sections=sections,
+        orphan_cards=orphan_cards,
         key_metrics=key_metrics,
         followups=followup_views,
     )
@@ -150,6 +156,65 @@ The following artifacts were generated during this analysis:
         f.write(html_content)
 
     return html_content
+
+
+def _build_markdown(project_id, narrative, takeaways, key_metrics, sections, orphan_cards):
+    """Markdown twin of the dashboard: same sections, same order, same gaps."""
+    md = [f"# Research Report: Project {project_id}", "", "## Executive Summary", narrative, ""]
+    if key_metrics:
+        md += ["## Key Metrics", ""]
+        md += [f"- **{k.replace('_', ' ')}**: {v}" for k, v in key_metrics.items()]
+        md += [""]
+    md += ["## Key Takeaways", ""]
+    md += [f"- {t}" for t in takeaways]
+    md += ["", "## Methodology, Step by Step",
+           "", "Each step below is a node of the applied recipe, in execution order.", ""]
+
+    for sec in sections:
+        status = "not executed" if sec["status"] == "not_executed" else sec["status"]
+        md.append(f"### {sec['index']}. {sec['title']}  *({status})*")
+        if sec["summary"]:
+            md.append(f"*{sec['summary']}*")
+        md.append("")
+        if sec["note"]:
+            md += [sec["note"], ""]
+        if sec["metrics"]:
+            md += ["| Metric | Value |", "| --- | --- |"]
+            md += [f"| {k} | {v} |" for k, v in sec["metrics"].items()]
+            md.append("")
+        for ins in sec["insights"]:
+            md.append(f"- **{ins.get('artifact', 'insight')}**: {ins.get('insight', '')}")
+        if sec["insights"]:
+            md.append("")
+        if sec.get("state"):
+            shapes = ", ".join(f"`{st.get('artifact')}` "
+                               f"{str(st.get('insight', '')).split('(')[-1].rstrip(')')}"
+                               for st in sec["state"])
+            md += [f"New in the kernel after this step: {shapes}.", ""]
+        for c in sec["cards"]:
+            if c.get("type") == "handover_bundle":
+                md.append(f"- **{c['description']}**: [Download Offline Script]({c.get('filename')})")
+            elif c.get("source_filename"):
+                md.append(f"- **{c['description']}**: [View Plot]({c['source_filename']})")
+            else:
+                md.append(f"- **{c['description']}** (static image)")
+        if sec["cards"]:
+            md.append("")
+        if sec["error"]:
+            md += [f"> **Failed:** {sec['error']}", ""]
+        if sec["status"] == "not_executed":
+            md += ["> This step of the recipe did not run, so the analysis it was to "
+                   "contribute is missing from this report.", ""]
+        if sec["fallback"]:
+            md += [f"> Completed by the {sec['fallback']} fallback rather than by the "
+                   f"assigned model.", ""]
+
+    if orphan_cards:
+        md += ["### Additional Artifacts", "",
+               "Produced during the run but not attributable to a single recipe step.", ""]
+        md += [f"- **{c['description']}**" for c in orphan_cards]
+        md.append("")
+    return "\n".join(md)
 
 
 def _build_cards(artifacts, workspace_dir, insights_map, artifact_to_figure_label):
@@ -166,7 +231,13 @@ def _build_cards(artifacts, workspace_dir, insights_map, artifact_to_figure_labe
             "json_data": None,
             "html_content": None,
             "img_b64": None,
-            "filename": None
+            "filename": None,
+            # Provenance for section attribution (see report_sections.attach_cards).
+            # Absent on artifacts created before the stamp existed — those fall back to
+            # the filename match, and failing that render in the trailing section.
+            "task_id": (a.content_json or {}).get("task_id"),
+            "node_id": (a.content_json or {}).get("node_id"),
+            "source_filename": (a.content_json or {}).get("filename"),
         }
 
         actual_filename = ""
@@ -263,6 +334,12 @@ def rebuild_dashboard(project_id: uuid.UUID, workspace_dir: str) -> Optional[str
                     select(Instruction).where(Instruction.project_id == project_id)).all()
             }
             tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
+            # Recover the Synthesizer's prose so a rebuilt dashboard keeps its section
+            # commentary and captions instead of degrading to bare evidence.
+            synth_tasks = sorted([t for t in tasks if t.assigned_to == "Synthesizer"
+                                  and t.status == "completed"],
+                                 key=lambda t: t.created_at or datetime.min)
+            last_synth = (synth_tasks[-1].result_json or {}) if synth_tasks else {}
 
         main_artifacts, by_instruction = [], {}
         for a in artifacts:
@@ -324,6 +401,8 @@ def rebuild_dashboard(project_id: uuid.UUID, workspace_dir: str) -> Optional[str
             narrative=(project.narrative if project and project.narrative else ""),
             takeaways=(project.takeaways if project and project.takeaways else []),
             artifacts=main_artifacts,
+            artifact_insights=last_synth.get("artifact_insights") or [],
+            section_notes=last_synth.get("section_notes") or [],
             followups=followups,
         )
     except Exception as e:

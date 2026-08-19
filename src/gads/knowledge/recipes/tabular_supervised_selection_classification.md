@@ -1,6 +1,6 @@
 ---
 id: tabular_supervised.selection.classification
-version: 1.1.0
+version: 1.2.0
 schema_version: 1
 author: gads-core
 
@@ -27,6 +27,9 @@ requires:
 # ——— DAG TEMPLATE ———
 dag:
   - id: load_prepared_data
+    report:
+      title: Data and Split
+      summary: The modelling table, and the train/test partition every later step is bound by.
     intent: >
       Load the modelling table and bind `X_train`, `y_train`, `X_test`, `y_test`.
       PREFER a chained upstream transform run: if `upstream/transformed_train.parquet` and
@@ -48,6 +51,9 @@ dag:
       - "list(X_train.columns) == list(X_test.columns)"
 
   - id: characterize_task
+    report:
+      title: Task Characterisation
+      summary: The dataset facts the model-choice rules actually branch on.
     intent: >
       Derive the facts that drive model choice and store them in `dataset_facts` (a dict):
       n_rows, n_features, rows_per_feature, n_numeric, n_categorical, max_cat_cardinality,
@@ -66,6 +72,9 @@ dag:
       - "dataset_facts.get('n_rows') == len(X_train)"
 
   - id: shortlist_candidates
+    report:
+      title: Candidate Shortlist and Rationale
+      summary: Which estimators were nominated, which family was ruled out, and why.
     intent: >
       THE REASONING STEP — this is the node the recipe exists for. Using `dataset_facts` and
       the model-selection decision table, nominate 2 to 4 candidate estimators and justify
@@ -89,6 +98,9 @@ dag:
       - "len(selection_rationale) > 80"
 
   - id: bakeoff
+    report:
+      title: Cross-Validated Bake-off
+      summary: All candidates compared on identical folds under one protocol.
     intent: >
       Score every shortlisted candidate under ONE protocol by calling the native:
         result = gads_candidate_bakeoff(X_train, y_train, candidates, cv=5, seed=42)
@@ -110,6 +122,9 @@ dag:
       - "len(bakeoff_table) >= 2"
 
   - id: tune_best
+    report:
+      title: Hyperparameter Tuning
+      summary: A bounded search inside the training partition only.
     intent: >
       Define an Optuna search space for `best_candidate` — the width, the priors and which
       4 to 6 parameters matter are YOUR judgment — then hand it to the native:
@@ -133,6 +148,9 @@ dag:
       - "n_trials_completed >= 1"
 
   - id: selection_audit
+    report:
+      title: Selection Audit
+      summary: The methodological gates the choice had to survive.
     intent: >
       Run BOTH gates on what was chosen and fitted, and do not re-implement either:
         selection_audit = gads_audit_model_choice(best_candidate, dataset_facts,
@@ -155,6 +173,9 @@ dag:
       - "'n_selection_issues' in dir()"
 
   - id: holdout_evaluation
+    report:
+      title: Held-out Evaluation
+      summary: The single read of the test partition, against the trivial baseline.
     intent: >
       Refit the tuned model on the full training partition and evaluate it ONCE on the
       untouched test partition. Bind `macro_f1`, `roc_auc` and `log_loss` as top-level
@@ -175,6 +196,9 @@ dag:
       - "macro_f1 >= 0.0 and macro_f1 <= 1.0"
 
   - id: feature_importance
+    report:
+      title: What Drives the Prediction
+      summary: Permutation importance on held-out data, per original column.
     intent: >
       Measure what actually drives the predictions:
         importance = gads_feature_importance(tuned_model, X_test, y_test, n_repeats=5)
@@ -195,6 +219,9 @@ dag:
       - "len(importance_table) >= 1"
 
   - id: performance_report
+    report:
+      title: Model Card
+      summary: The defence of the choice, written to be checked.
     intent: >
       Write the model card to `model_card.md` and bind `model_card_text`. Cover, in order:
       what was chosen and WHY (quote the rationale), what it beat in the bakeoff and by how

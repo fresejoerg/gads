@@ -191,7 +191,17 @@ RULES:
    - `contextual_text`: Write a clear paragraph (3-4 sentences) that will appear DIRECTLY ABOVE the visualization in the dashboard. It should explain what the chart shows and why it matters.
    - `caption`: A one-sentence, professional caption for the chart (e.g., "Figure 1: Distribution of sentiment scores across product categories").
 8. NO HALLUCINATIONS: Do NOT refer to "Figure 2" if only one figure exists. Only refer to artifacts explicitly listed in the 'GENERATED ARTIFACTS' section of the context.
-9. CRITICAL: You MUST return a valid JSON object containing 'narrative', 'key_takeaways', AND 'artifact_insights'.
+9. PIPELINE SECTIONS (THE REPORT'S SPINE): the context contains a `PIPELINE SECTIONS` list — the steps of the
+   methodology that was executed, in order, each with the evidence it produced. The dashboard renders one section
+   per entry, so this list is the shape of the report and you cannot add to it, drop from it, or reorder it.
+   - Write ONE `section_notes` entry per listed step, using its `node_id` VERBATIM.
+   - `text`: 2-4 sentences saying what that step did and what it established. Use ONLY that step's own evidence
+     (its metrics, insights, files and output). If a step has no evidence listed, say plainly that it produced no
+     recorded output — do NOT invent a result for it.
+   - Steps marked NOT EXECUTED or FAILED must be described as such. They stay in the report: a partial run must
+     read as a partial run.
+10. CRITICAL: You MUST return a valid JSON object containing 'narrative', 'key_takeaways', 'artifact_insights',
+   AND 'section_notes'.
    Do NOT include any metadata, schema definitions, or 'properties' wrappers.
 
 ## PREVIOUS REPORT STATE

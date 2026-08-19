@@ -14,10 +14,21 @@ class ArtifactInsight(BaseModel):
     contextual_text: str = Field(description="Paragraph explaining what this visualization illustrates in the context of the objective.")
     caption: str = Field(description="A concise, descriptive caption for the visualization.")
 
+class SectionNote(BaseModel):
+    """Prose for one pipeline section of the dashboard.
+
+    The section *skeleton* is deterministic — it comes from the recipe DAG, not from the
+    model — so these notes only supply commentary. A missing or mis-keyed note leaves the
+    section rendering from its own ground-truth evidence rather than blanking it.
+    """
+    node_id: str = Field(description="The pipeline step id this note belongs to, copied EXACTLY from the PIPELINE SECTIONS list in the context.")
+    text: str = Field(description="2-4 sentences: what this step did, what it established, and what it means for the objective. Ground every claim in that step's listed evidence.")
+
 class SynthesizerOutput(BaseModel):
     narrative: str = Field(description="The final human-friendly response or story.")
     key_takeaways: List[str] = Field(description="Bullet points of the most important findings.")
     artifact_insights: List[ArtifactInsight] = Field(default_factory=list, description="Specific context and captions for each visualization generated.")
+    section_notes: List[SectionNote] = Field(default_factory=list, description="One entry per step in the PIPELINE SECTIONS list, in the same order — the per-section commentary of the dashboard.")
 
 class SynthesizerAgent(BaseAgent[SynthesizerInput, SynthesizerOutput]):
     def __init__(self, model: str = "local_model"):

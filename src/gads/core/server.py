@@ -39,6 +39,9 @@ from gads.core.registry import (
 from gads.core.knowledge import KnowledgeRegistry
 from gads.core.dial import compiled_plan_dial, drafted_plan_dial, append_ledger
 from gads.core.reporting import create_master_reports
+from gads.core.report_sections import (build_sections as build_report_sections,
+                                       format_for_prompt as format_sections_for_prompt,
+                                       apply_section_notes as apply_report_section_notes)
 from gads.core.notebook_exporter import export_python_script, export_notebook, copy_applied_recipe
 from gads.core.introspection import summarize_artifact, looks_like_plotly_figure
 from gads.core.distiller import distill_dashboard_to_markdown
@@ -913,6 +916,21 @@ def _merge_metrics_json(workspace_dir: str, new_metrics: Dict[str, Any]):
     with open(metrics_path, "w") as f:
         json.dump(existing, f, indent=2)
 
+def _artifact_origin(task_obj) -> Dict[str, Any]:
+    """Provenance stamped onto every artifact: which task made it, and which recipe node
+    that task was. The dashboard groups artifacts under their recipe section from this —
+    the alternative (regexing filenames out of the orchestrator summary, which is what the
+    'Figure N' matching in reporting.py still does for legacy projects) guesses, and guesses
+    wrong whenever two nodes touch the same file."""
+    if task_obj is None:
+        return {}
+    origin: Dict[str, Any] = {"task_id": str(task_obj.id)}
+    node_id = (task_obj.postcondition_json or {}).get("recipe_node_id")
+    if node_id:
+        origin["node_id"] = node_id
+    return origin
+
+
 def _get_recursive_files(workspace_dir: str) -> List[Dict[str, Any]]:
     """Helper to list all files in workspace recursively with size metadata as JSON-serializable dicts."""
     all_files = []
@@ -1599,6 +1617,11 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             # into a replan that recompiles the identical plan).
             if knowledge_report and knowledge_report.recommended_dag_nodes:
                 enforced_steps = []
+                # Dashboard skeleton: the recipe DAG *is* the report structure (one section
+                # per node, in order). Captured here, at compile time, and persisted on the
+                # Planner task so a later rebuild reproduces the sections of the run as it
+                # was compiled rather than of the recipe as it stands today.
+                recipe_sections = []
                 # Recipe invariants are global failure-mode guardrails; append a
                 # compact block to every task so each Coder call carries them.
                 invariants_block = ""
@@ -1625,6 +1648,19 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         postcondition["fallback_native"] = node["fallback_native"]
                     if node.get("fallback_call"):
                         postcondition["fallback_call"] = node["fallback_call"]
+                    # Links the Task row back to its recipe node so the dashboard can be
+                    # composed from the DAG. Deliberately a bare id: the contract is
+                    # JSON-dumped into the Coder prompt, so anything longer would be
+                    # context spent to say what the description already says.
+                    postcondition["recipe_node_id"] = node.get("id")
+
+                    recipe_sections.append({
+                        "id": node.get("id"),
+                        "title": (node.get("report") or {}).get("title"),
+                        "intent": (node.get("intent") or "").strip(),
+                        "produces": node.get("produces") or [],
+                        "report": node.get("report") or {},
+                    })
 
                     description = node.get("intent", node.get("id", "")).strip()
                     if idx == 0:
@@ -1727,7 +1763,9 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         heartbeat=datetime.now(),
                         result_json={
                             "stdout": f"Compiled {len(enforced_steps)} tasks from recipe DAG `{knowledge_report.recipe_id}` — no LLM call needed.",
-                            "model_used": "none (deterministic)"
+                            "model_used": "none (deterministic)",
+                            "recipe_id": knowledge_report.recipe_id,
+                            "recipe_sections": recipe_sections,
                         }
                     )
                     session.add(plan_task)
@@ -2282,7 +2320,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                                 project_id=project_id, 
                                 type="handover_bundle", 
                                 description=f"Reproducible Project Bundle", 
-                                content_json={"filename": bundle_file}, 
+                                content_json={"filename": bundle_file, **_artifact_origin(task_obj)},
                                 agent_id="CodeGenerator"
                             )
                             session.add(art)
@@ -2333,6 +2371,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                             orchestrator_summary = "; ".join(artifact_summaries) if artifact_summaries else "Task completed successfully with no new files."
 
                             # --- METRICS GUARANTEE ---
+                            found_metrics: Dict[str, Any] = {}
                             required_metrics = (task_obj.postcondition_json or {}).get("required_metrics", [])
                             if required_metrics:
                                 found_metrics = await _probe_kernel_for_metrics(
@@ -2369,7 +2408,15 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                                 "stdout": res.stdout,
                                 "model_used": model_used,
                                 "code": res.code,
-                                "orchestrator_summary": orchestrator_summary # Persist ground truth
+                                "orchestrator_summary": orchestrator_summary, # Persist ground truth
+                                # Per-node evidence for the recipe-driven dashboard sections
+                                # (core/report_sections.py). Insights and captured metrics were
+                                # previously consumed for contract validation and discarded, so
+                                # a node that reasoned but drew nothing left no trace in the
+                                # report at all.
+                                "metrics_captured": found_metrics,
+                                "semantic_insights": res.semantic_insights or [],
+                                "artifact_files": sorted(new_names),
                             })
 
                             # Fallback observability: when a node completed via a fallback
@@ -2413,7 +2460,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
 
                             if not has_explicit_plots:
                                 for i, plot_b64 in enumerate(res.plots):
-                                    art = Artifact(project_id=project_id, type="plot", description=f"In-memory plot {i+1}", content_json={"image_base64": plot_b64}, agent_id="CodeGenerator")
+                                    art = Artifact(project_id=project_id, type="plot", description=f"In-memory plot {i+1}", content_json={"image_base64": plot_b64, **_artifact_origin(task_obj)}, agent_id="CodeGenerator")
                                     session.add(art)
                                     session.commit()
                                     hub.create_outbox_event("ARTIFACT_CREATED", {"type": "plot", "description": art.description, "content_json": art.content_json})
@@ -2425,7 +2472,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                                     try:
                                         with open(full_path, "rb") as img_file:
                                             img_b64 = base64.b64encode(img_file.read()).decode("utf-8")
-                                        art = Artifact(project_id=project_id, type="plot", description=f"Workspace artifact: {nf}", content_json={"image_base64": img_b64}, agent_id="CodeGenerator")
+                                        art = Artifact(project_id=project_id, type="plot", description=f"Workspace artifact: {nf}", content_json={"image_base64": img_b64, "filename": nf, **_artifact_origin(task_obj)}, agent_id="CodeGenerator")
                                         session.add(art)
                                         session.commit()
                                         hub.create_outbox_event("ARTIFACT_CREATED", {"type": "plot", "description": art.description, "content_json": art.content_json})
@@ -2437,7 +2484,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                                         from gads.core.introspection import harden_json_artifact
                                         harden_json_artifact(full_path)
                                         
-                                        art = Artifact(project_id=project_id, type="json_plot", description=f"Interactive: {nf}", content_json={"filename": nf}, agent_id="CodeGenerator")
+                                        art = Artifact(project_id=project_id, type="json_plot", description=f"Interactive: {nf}", content_json={"filename": nf, **_artifact_origin(task_obj)}, agent_id="CodeGenerator")
                                         session.add(art)
                                         session.commit()
                                         hub.create_outbox_event("ARTIFACT_CREATED", {"type": "json_plot", "description": art.description, "content_json": art.content_json, "project_id": str(project_id)})
@@ -2721,6 +2768,14 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                               "\n\n### GENERATED ARTIFACTS (THE BLACKBOARD)\n" + \
                               ( "\n\n".join(artifact_evidence) if artifact_evidence else "NO ARTIFACTS GENERATED.")
 
+                    # The recipe DAG is the dashboard's structure (core/report_sections.py).
+                    # The Synthesizer is shown that structure and its per-step evidence so it
+                    # writes commentary *into* the sections rather than a free-form story the
+                    # report then has to be reverse-engineered from.
+                    _sections_brief = format_sections_for_prompt(build_report_sections(list(all_tasks)))
+                    if _sections_brief:
+                        context += "\n\n" + _sections_brief
+
                     try:
                         synthesizer = SynthesizerAgent(model=synthesizer_model)
                         # Analyst notes (user_notes.txt) are the human's own context for this
@@ -2753,6 +2808,9 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                             "narrative": final_synth.narrative, 
                             "takeaways": final_synth.key_takeaways,
                             "artifact_insights": [ins.dict() for ins in final_synth.artifact_insights],
+                            # Persisted so rebuild_dashboard reproduces the same sections
+                            # (a rebuild has no access to the synthesis call).
+                            "section_notes": [n.dict() for n in final_synth.section_notes],
                             "model_used": synthesizer_model
                         }
                         session.add(synth_task)
@@ -2782,10 +2840,18 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                         "metadata_summary": summarize_artifact(fpath) if fpath else ""
                     })
 
+                # Preview the dashboard as it will actually be composed: recipe sections
+                # with the Synthesizer's notes merged in, so the Critique can catch a step
+                # that was left without a write-up.
+                _preview_sections = build_report_sections(
+                    list(session.exec(select(Task).where(Task.project_id == project_id)).all()))
+                apply_report_section_notes(_preview_sections, final_synth.section_notes)
+
                 dashboard_md = distill_dashboard_to_markdown(
                     narrative=final_synth.narrative,
                     takeaways=final_synth.key_takeaways,
-                    cards=distiller_cards
+                    cards=distiller_cards,
+                    sections=_preview_sections,
                 )
 
             # 6. CRITIQUE
@@ -2874,7 +2940,8 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                 narrative=final_synth.narrative if final_synth else "Workflow halted.",
                 takeaways=final_synth.key_takeaways if final_synth else ["No takeaways."],
                 artifacts=filtered_artifacts,
-                artifact_insights=final_synth.artifact_insights if final_synth else []
+                artifact_insights=final_synth.artifact_insights if final_synth else [],
+                section_notes=final_synth.section_notes if final_synth else []
             )
 
             # Export code bundle: .py script and .ipynb notebook

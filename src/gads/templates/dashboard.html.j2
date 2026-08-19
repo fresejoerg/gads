@@ -24,6 +24,46 @@
         .metric-card { background: #ffffff; border: 1px solid #d1fae5; border-radius: 10px; padding: 20px 15px; }
         .metric-value { font-size: 2rem; font-weight: 700; color: #15803d; font-variant-numeric: tabular-nums; }
         .metric-name { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; margin-top: 4px; }
+
+        /* ——— Recipe-driven pipeline sections ——— */
+        .rail { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 30px; }
+        .rail a { text-decoration: none; display: flex; align-items: center; gap: 8px;
+                  border: 1px solid #e2e8f0; border-radius: 999px; padding: 6px 14px;
+                  background: #ffffff; color: #334155; font-size: 0.85rem; }
+        .rail a:hover { border-color: #94a3b8; }
+        .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; }
+        .dot-completed { background: #22c55e; }
+        .dot-failed    { background: #ef4444; }
+        .dot-bypassed  { background: #f59e0b; }
+        .dot-pending, .dot-not_executed { background: #cbd5e1; }
+        .step { border-top: 1px solid #e2e8f0; padding-top: 28px; margin-top: 36px; }
+        .step-num { display: inline-flex; align-items: center; justify-content: center;
+                    width: 30px; height: 30px; border-radius: 50%; background: #eff6ff;
+                    color: #1d4ed8; font-weight: 700; font-size: 0.9rem; margin-right: 12px; }
+        .step h3 { display: inline; font-size: 1.35rem; color: #0f172a; }
+        .step-summary { color: #64748b; margin: 10px 0 0 42px; font-size: 0.95rem; }
+        .badge-soft { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+                      border-radius: 6px; padding: 3px 8px; margin-left: 8px;
+                      background: #f1f5f9; color: #475569; vertical-align: middle; }
+        .badge-failed { background: #fee2e2; color: #b91c1c; }
+        .badge-skipped { background: #f1f5f9; color: #94a3b8; }
+        .badge-fallback { background: #fef3c7; color: #92400e; }
+        .step-body { margin-left: 42px; }
+        .chip-row { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0; }
+        .chip { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+                padding: 8px 14px; font-size: 0.9rem; }
+        .chip b { font-variant-numeric: tabular-nums; color: #0f172a; }
+        .chip span { color: #64748b; font-size: 0.78rem; text-transform: uppercase;
+                     letter-spacing: 0.05em; display: block; }
+        .insight-list { list-style: none; padding-left: 0; margin: 12px 0; }
+        .insight-list li { border-left: 3px solid #cbd5e1; padding: 4px 0 4px 14px;
+                           margin-bottom: 10px; color: #334155; }
+        .step details { margin-top: 14px; }
+        .step summary { cursor: pointer; color: #64748b; font-size: 0.88rem; }
+        .step-quiet { border-top: 1px dashed #e2e8f0; padding-top: 16px; margin-top: 20px; }
+        .step-quiet .step-summary { margin-left: 42px; }
+        .gap-note { background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412;
+                    border-radius: 8px; padding: 14px 18px; margin: 14px 0; }
     </style>
 </head>
 <body>
@@ -66,9 +106,6 @@
                     </div>
 
                     <hr class="my-5" style="border-top: 2px solid #f1f5f9; opacity: 1;">
-                    
-                    <h2>Supporting Data Visualizations</h2>
-                    <p class="text-muted mb-4">The following artifacts provide quantitative grounding for the summary above.</p>
                     
                     {# Card markup is a macro so follow-up sections render identically to the
                        main run. `uid` must be unique per card across the whole page: the
@@ -117,9 +154,118 @@
                     </div>
                     {% endmacro %}
 
+                    {# ——— PIPELINE SECTIONS ———
+                       Composed from the applied recipe's DAG, not from the artifact list:
+                       one section per node, in execution order, including the reasoning and
+                       audit nodes that draw nothing and the nodes that never ran. See
+                       core/report_sections.py. #}
+                    {% if sections %}
+                    <h2>How This Result Was Produced</h2>
+                    <p class="text-muted mb-4">
+                        Each step below is a node of the applied recipe, in execution order,
+                        with the evidence it produced.
+                    </p>
+
+                    <div class="rail">
+                        {% for sec in sections %}
+                        <a href="#step-{{ sec.index }}" title="{{ sec.status | replace('_', ' ') }}">
+                            <span class="dot dot-{{ sec.status }}"></span>{{ sec.index }}. {{ sec.title }}
+                        </a>
+                        {% endfor %}
+                    </div>
+
+                    {% for sec in sections %}
+                    {% set sec_i = loop.index %}{# outer index: `loop` is shadowed in the card loop #}
+                    <div class="{{ 'step-quiet' if sec.collapsed else 'step' }}" id="step-{{ sec.index }}">
+                        <div>
+                            <span class="step-num">{{ sec.index }}</span>
+                            <h3>{{ sec.title }}</h3>
+                            {% if sec.status == 'not_executed' %}<span class="badge-soft badge-skipped">not executed</span>
+                            {% elif sec.status == 'failed' %}<span class="badge-soft badge-failed">failed</span>
+                            {% elif sec.status == 'bypassed' %}<span class="badge-soft">handed over</span>
+                            {% elif sec.status == 'pending' %}<span class="badge-soft badge-skipped">never ran</span>
+                            {% endif %}
+                            {% if sec.fallback %}<span class="badge-soft badge-fallback">{{ sec.fallback }} fallback</span>{% endif %}
+                        </div>
+                        {% if sec.summary %}<div class="step-summary">{{ sec.summary }}</div>{% endif %}
+
+                        <div class="step-body">
+                            {% if sec.note %}
+                            <div class="insight-text">{{ sec.note }}</div>
+                            {% endif %}
+
+                            {% if sec.status == 'not_executed' or sec.status == 'pending' %}
+                            <div class="gap-note">
+                                This step of the recipe did not run, so the analysis it was to
+                                contribute is missing from this report.
+                            </div>
+                            {% elif sec.status == 'failed' %}
+                            <div class="gap-note">
+                                <strong>Step failed.</strong> {{ sec.error }}
+                            </div>
+                            {% endif %}
+
+                            {% if sec.metrics %}
+                            <div class="chip-row">
+                                {% for name, value in sec.metrics.items() %}
+                                <div class="chip"><b>{{ value }}</b><span>{{ name | replace("_", " ") }}</span></div>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+
+                            {% if sec.insights %}
+                            <ul class="insight-list">
+                                {% for ins in sec.insights %}
+                                <li>{% if ins.artifact %}<strong>{{ ins.artifact }}:</strong> {% endif %}{{ ins.insight }}
+                                    {% if ins.evidence %}<br><small class="text-muted">{{ ins.evidence }}</small>{% endif %}</li>
+                                {% endfor %}
+                            </ul>
+                            {% endif %}
+
+                            {% if sec.state %}
+                            <p class="text-muted" style="font-size: 0.85rem;">
+                                New in the kernel after this step:
+                                {% for st in sec.state %}<code>{{ st.artifact }}</code>&nbsp;{{ st.insight.split('(')[-1].rstrip(')') }}{% if not loop.last %}, {% endif %}{% endfor %}
+                            </p>
+                            {% endif %}
+
+                            {% for card in sec.cards %}
+                            {{ render_card(card, 's' ~ sec_i ~ '-' ~ loop.index) }}
+                            {% endfor %}
+
+                            {% if sec.stdout %}
+                            <details>
+                                <summary>Step output{% if sec.model_used %} · {{ sec.model_used }}{% endif %}</summary>
+                                <pre class="mt-2 p-3 bg-light border rounded" style="max-height: 260px; overflow: auto; font-size: 0.8rem;">{{ sec.stdout }}</pre>
+                            </details>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+
+                    {% if orphan_cards %}
+                    <div class="step" id="step-extra">
+                        <div><span class="step-num">+</span><h3>Additional Artifacts</h3></div>
+                        <div class="step-summary">
+                            Produced during the run but not attributable to a single recipe step.
+                        </div>
+                        <div class="step-body">
+                            {% for card in orphan_cards %}
+                            {{ render_card(card, 'x' ~ loop.index) }}
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% else %}
+                    {# No pipeline structure recorded (legacy project): fall back to the flat
+                       artifact list rather than showing nothing. #}
+                    <h2>Supporting Data Visualizations</h2>
+                    <p class="text-muted mb-4">The following artifacts provide quantitative grounding for the summary above.</p>
                     {% for card in cards %}
                     {{ render_card(card, 'm' ~ loop.index) }}
                     {% endfor %}
+                    {% endif %}
 
                     {# ——— FOLLOW-UP SECTIONS ———
                        Analyst-directed work done after the autonomous run. Appended, never
