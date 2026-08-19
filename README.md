@@ -66,7 +66,7 @@ Models are accessed only through the LiteLLM proxy, so *"which model"* is pure c
 | Tier | Role | Gemini | Anthropic | OpenAI | Kimi |
 |------|------|--------|-----------|--------|------|
 | **T1** | Architect | gemini-3.1-pro-preview | claude-opus-4.8, claude-fable-5 | gpt-5.6-sol | kimi-k3 |
-| **T2** | Coder | gemini-3.6-flash | claude-sonnet-5 | gpt-5.6-terra | kimi-k2.7-code |
+| **T2** | Coder | gemini-3.7-flash | claude-sonnet-5 | gpt-5.6-terra | kimi-k2.7-code |
 | **T3** | Worker | gemini-3.5-flash-lite | claude-haiku-4.5 | gpt-5.6-luna | kimi-k2.7-code-highspeed |
 | **T4** | Local | — | — | — | `local_model` (isolated; never escalates to cloud) |
 

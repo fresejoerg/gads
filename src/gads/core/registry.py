@@ -130,7 +130,7 @@ def resolve_stage_model(stage: str, tier_default: str) -> str:
 # intra-tier fallback covers interim 404s and the mapping self-heals.
 TIER_MAPPING = {
     "T1": ["gemini-3.1-pro-preview", "claude-opus-4.8", "claude-fable-5", "gpt-5.6-sol", "kimi-k3"],
-    "T2": ["gemini-3.6-flash", "claude-sonnet-5", "gpt-5.6-terra", "kimi-k2.7-code"],
+    "T2": ["gemini-3.7-flash", "claude-sonnet-5", "gpt-5.6-terra", "kimi-k2.7-code"],
     "T3": ["gemini-3.5-flash-lite", "claude-haiku-4.5", "gpt-5.6-luna", "kimi-k2.7-code-highspeed"],
     "T4": ["local_model"]
 }
