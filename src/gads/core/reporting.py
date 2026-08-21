@@ -83,6 +83,7 @@ def create_master_reports(
         # The report's spine: one section per recipe DAG node, built while the tasks are
         # still attached to their session.
         sections = report_sections.build_sections(list(tasks))
+        run_usage = report_sections.run_totals(list(tasks))
 
     # We also need the inverse: Figure N -> Filename
     figure_label_to_artifact = {v.lower(): k for k, v in artifact_to_figure_label.items()}
@@ -111,7 +112,7 @@ def create_master_reports(
     # 2. Markdown research report — the same section order as the dashboard, so the two
     # artefacts describe the run identically.
     md_content = _build_markdown(project_id, narrative, takeaways, key_metrics,
-                                 sections, orphan_cards)
+                                 sections, orphan_cards, run_usage)
     with open(os.path.join(workspace_dir, "research_report.md"), "w") as f:
         f.write(md_content)
 
@@ -148,6 +149,9 @@ def create_master_reports(
         cards=cards,
         sections=sections,
         orphan_cards=orphan_cards,
+        run_usage=run_usage,
+        fmt_cost=report_sections.format_cost_value,
+        fmt_tokens=report_sections.format_tokens_value,
         key_metrics=key_metrics,
         followups=followup_views,
     )
@@ -158,13 +162,26 @@ def create_master_reports(
     return html_content
 
 
-def _build_markdown(project_id, narrative, takeaways, key_metrics, sections, orphan_cards):
+def _build_markdown(project_id, narrative, takeaways, key_metrics, sections, orphan_cards,
+                    run_usage=None):
     """Markdown twin of the dashboard: same sections, same order, same gaps."""
+    from gads.core.usage import format_cost, format_tokens
     md = [f"# Research Report: Project {project_id}", "", "## Executive Summary", narrative, ""]
     if key_metrics:
         md += ["## Key Metrics", ""]
         md += [f"- **{k.replace('_', ' ')}**: {v}" for k, v in key_metrics.items()]
         md += [""]
+    if run_usage and run_usage.get("calls"):
+        md += ["## Run Cost", "",
+               f"- **Total tokens**: {format_tokens(run_usage.get('total_tokens'))} "
+               f"({run_usage.get('prompt_tokens', 0):,} in / "
+               f"{run_usage.get('completion_tokens', 0):,} out"
+               + (f", {run_usage['reasoning_tokens']:,} reasoning"
+                  if run_usage.get("reasoning_tokens") else "") + ")",
+               f"- **Total cost**: {format_cost(run_usage.get('cost_usd'))} "
+               f"across {run_usage.get('calls')} LLM call(s)",
+               f"- **Models**: {', '.join(run_usage.get('models') or []) or 'n/a'}",
+               ""]
     md += ["## Key Takeaways", ""]
     md += [f"- {t}" for t in takeaways]
     md += ["", "## Methodology, Step by Step",
@@ -175,6 +192,17 @@ def _build_markdown(project_id, narrative, takeaways, key_metrics, sections, orp
         md.append(f"### {sec['index']}. {sec['title']}  *({status})*")
         if sec["summary"]:
             md.append(f"*{sec['summary']}*")
+        prov = []
+        if sec["model_used"]:
+            prov.append(f"model `{sec['model_used']}`")
+        u = sec.get("usage")
+        if u:
+            prov.append(f"{format_tokens(u.get('total_tokens'))} tokens")
+            prov.append(f"{format_cost(u.get('cost_usd'))}")
+            if u.get("calls"):
+                prov.append(f"{u['calls']} call{'s' if u['calls'] != 1 else ''}")
+        if prov:
+            md.append("<sub>" + " · ".join(prov) + "</sub>")
         md.append("")
         if sec["note"]:
             md += [sec["note"], ""]
@@ -205,7 +233,13 @@ def _build_markdown(project_id, narrative, takeaways, key_metrics, sections, orp
         if sec["status"] == "not_executed":
             md += ["> This step of the recipe did not run, so the analysis it was to "
                    "contribute is missing from this report.", ""]
-        if sec["fallback"]:
+        if sec["fallback"] == "native (by policy)":
+            # Not a rescue: this run was configured native-first, so the model was never
+            # asked. Calling it a "fallback" would read as a model failure.
+            md += ["> Run in production mode: satisfied directly by the audited native "
+                   "implementation, by policy. The model was not asked to write this step.",
+                   ""]
+        elif sec["fallback"]:
             md += [f"> Completed by the {sec['fallback']} fallback rather than by the "
                    f"assigned model.", ""]
 

@@ -52,6 +52,18 @@ class RecipeTask(BaseModel):
     # (upstream kernel state — df, X_test, etc. — is still live). e.g.
     # "km = gads_kaplan_meier(df, time_col=time_col, event_col=event_col); km_median = km['overall_median']".
     fallback_call: Optional[str] = None
+    # Production mode (native-first) must NOT substitute the native for this node.
+    #
+    # Set it where the node's DELIVERABLE IS THE MODEL'S REASONING, not the computation —
+    # the defended shortlist, the model card. Their natives exist as a floor so a weak model
+    # cannot block a run, and a floor used as the ceiling defeats the node: `gads_default_
+    # shortlist` ruled out deep learning "due to the tabular nature of the data", which is
+    # true of every tabular dataset and therefore argues nothing, where the model named the
+    # 41-level categorical that actually decided it (run e64f1c50 vs e1282fce, 2026-08-20).
+    #
+    # The native stays available as a post-exhaustion rescue in BOTH modes; this only forbids
+    # pre-empting the model with it.
+    model_required: bool = False
     # Optional authoring control over how this node appears in the final dashboard.
     # The dashboard skeleton is derived from the DAG itself (one section per node, in
     # DAG order) — this only tunes presentation. Keys:
@@ -458,18 +470,78 @@ class KnowledgeRegistry:
         """Returns a list of available recipes with their IDs and rationale for agent awareness."""
         return [{"id": r.id, "rationale": r.rationale, "applies_when": r.applies_when} for r in self.recipes.values()]
 
-    def find_matches(self, intent_tags: Dict[str, Any]) -> List[Recipe]:
+    def find_matches(self, intent_tags: Dict[str, Any], objective: str = "") -> List[Recipe]:
+        """Every recipe whose `applies_when` covers these labels — the COVERAGE ORACLE.
+
+        This answers a question the Router's LLM choice cannot: *given these labels, does a
+        covering recipe exist at all?* That is what separates a genuine coverage gap (no
+        recipe covers the task) from a selection error (one did, and the Router missed it) —
+        see approach_docs/024. Deterministic, no LLM call.
+
+        `objective` is optional and only used to evaluate `objective_contains` anti-signals.
+        Recipes are returned ranked: signal hits first, then declaration order, so the head
+        of the list is the best deterministic guess rather than an arbitrary dict order.
+
+        NOTE the label vocabulary is not shared with `taxonomy.yaml` or with the Router's
+        prompt enum (approach_docs/024 §1). Matching here is only as good as the caller's
+        labels.
         """
-        Simple matching logic based on task_type and modality.
-        In Phase 2, this will be handled by the RouterAgent.
-        """
-        matches = []
         target_type = intent_tags.get("task_type")
         target_modality = intent_tags.get("data_modality")
-        
+        obj_low = (objective or "").lower()
+
+        scored = []
         for recipe in self.recipes.values():
-            applies = recipe.applies_when
-            if target_type in applies.get("task_type", []) and \
-               target_modality in applies.get("data_modality", []):
-                matches.append(recipe)
-        return matches
+            applies = recipe.applies_when or {}
+            if target_type not in (applies.get("task_type") or []):
+                continue
+            if target_modality not in (applies.get("data_modality") or []):
+                continue
+            # Anti-signals are what stop a broader recipe from swallowing a narrower one
+            # (the AutoGluon recipes anti-signal model-comparison objectives precisely so
+            # they do not grab them). Ignoring them here would over-report coverage.
+            if self._anti_signals_fire(applies.get("anti_signals") or [], intent_tags, obj_low):
+                continue
+            scored.append((self._signal_score(applies.get("signals") or [], obj_low), recipe))
+
+        scored.sort(key=lambda pair: -pair[0])
+        return [r for _score, r in scored]
+
+    @staticmethod
+    def _anti_signals_fire(anti_signals, intent_tags: Dict[str, Any], obj_low: str) -> bool:
+        """True when any anti-signal excludes this recipe for these labels/objective."""
+        for anti in anti_signals:
+            if not isinstance(anti, dict):
+                continue
+            for key, val in anti.items():
+                if key == "objective_contains":
+                    terms = val if isinstance(val, list) else [val]
+                    if any(str(t).lower() in obj_low for t in terms):
+                        return True
+                elif intent_tags.get(key) == val:
+                    return True
+        return False
+
+    @staticmethod
+    def _signal_score(signals, obj_low: str) -> int:
+        """How many positive `objective_contains` terms the objective hits."""
+        score = 0
+        for sig in signals:
+            if not isinstance(sig, dict):
+                continue
+            terms = sig.get("objective_contains") or []
+            terms = terms if isinstance(terms, list) else [terms]
+            score += sum(1 for t in terms if str(t).lower() in obj_low)
+        return score
+
+    def classify_routing(self, chosen_id: Optional[str], candidates: List[Recipe]) -> str:
+        """Verdict for one routing decision (approach_docs/024 §4).
+
+        `drafted_gap` means "a gap GIVEN THESE LABELS" — a Router misclassification produces
+        a phantom gap that looks identical here. Confirming a real gap needs a
+        label-independent signal (semantic near-miss); that is phase 3, not this function.
+        """
+        cand_ids = {r.id for r in candidates}
+        if chosen_id:
+            return "routed_consistent" if chosen_id in cand_ids else "routed_off_manifest"
+        return "drafted_miss" if cand_ids else "drafted_gap"

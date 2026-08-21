@@ -1,6 +1,6 @@
 ---
 id: tabular_supervised.selection.classification
-version: 1.2.0
+version: 1.5.0
 schema_version: 1
 author: gads-core
 
@@ -72,6 +72,10 @@ dag:
       - "dataset_facts.get('n_rows') == len(X_train)"
 
   - id: shortlist_candidates
+    # The deliverable here is the ARGUMENT, not the list. gads_default_shortlist is a
+    # conservative floor so a weak model cannot block the run; used as the ceiling it
+    # produces generically-true prose that defends nothing.
+    model_required: true
     report:
       title: Candidate Shortlist and Rationale
       summary: Which estimators were nominated, which family was ruled out, and why.
@@ -195,6 +199,30 @@ dag:
     postconditions:
       - "macro_f1 >= 0.0 and macro_f1 <= 1.0"
 
+  - id: diagnostic_curves
+    report:
+      title: ROC and Precision-Recall Curves
+      summary: How the model trades false positives against false negatives, against both baselines.
+    intent: >
+      Plot the ROC and precision-recall curves for the final model by calling the native:
+        curve_diagnostics = gads_plot_classification_curves(y_test, y_prob)
+      Do NOT hand-roll the curves. The native handles the binary/multiclass split, the
+      label dtype, the one-vs-rest expansion and the two baselines (the ROC chance
+      diagonal and the PR no-skill line at the positive rate), and writes both figures as
+      Plotly JSON the dashboard renders directly. Bind `average_precision` from the
+      result. Then state, in one or two sentences, what the PR curve says that the ROC
+      curve does not — under class imbalance the ROC baseline is fixed at 0.5 while the
+      PR baseline moves with prevalence, which is the whole reason both are plotted.
+    depends_on: [holdout_evaluation]
+    worker_tier: T3
+    produces: [curve_diagnostics, average_precision]
+    required_metrics: [average_precision]
+    attached_skills: [visualization_best_practices]
+    fallback_native: gads_plot_classification_curves
+    fallback_call: "curve_diagnostics = gads_plot_classification_curves(y_test, y_prob); average_precision = curve_diagnostics['average_precision']"
+    postconditions:
+      - "curve_diagnostics.get('roc_auc') is not None"
+
   - id: feature_importance
     report:
       title: What Drives the Prediction
@@ -219,6 +247,9 @@ dag:
       - "len(importance_table) >= 1"
 
   - id: performance_report
+    # The model card's value is that it can be DEFENDED — a templated card states the
+    # numbers without arguing from them.
+    model_required: true
     report:
       title: Model Card
       summary: The defence of the choice, written to be checked.
@@ -241,6 +272,7 @@ dag:
 
 # ——— GLOBAL INVARIANTS ———
 invariants:
+  - "NO MONKEY-PATCHING: never reassign a method on an estimator class or instance (`SomeClassifier.fit = ...`, `model.predict = ...`). Retries re-run your code in the SAME kernel, so the second run captures the already-patched function as the 'original' and recurses until RecursionError — and a patched CLASS corrupts every later step including the pre-written natives. If a model cannot consume a column type, route columns inside the Pipeline with ColumnTransformer + make_column_selector(dtype_include=...)."
   - "HOLDOUT DISCIPLINE: the test partition is read exactly once, in holdout_evaluation. No node before it may touch X_test or y_test; feature_importance may, because it runs after evaluation is final."
   - "ONE PROTOCOL: candidates are compared only via gads_candidate_bakeoff — identical folds, one seed (42), one metric. Never hand-write the comparison loop; a ranking produced on differently-shuffled folds reflects the split, not the model."
   - "PREPROCESSING INSIDE THE PIPELINE: the bakeoff, tuning and evaluation natives wrap every candidate in a Pipeline whose first step imputes and encodes, so preprocessing is refitted on each training fold. Never encode the feature matrix yourself before these calls — an encoder fitted once across all folds leaks fold statistics into the score. A consequence: `tuned_model` is a sklearn Pipeline, not a bare estimator, and permutation importance is reported per ORIGINAL column rather than per one-hot dummy."

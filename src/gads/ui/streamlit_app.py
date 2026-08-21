@@ -103,6 +103,8 @@ if "current_project_id" not in st.session_state:
     st.session_state.current_project_id = None
 if "routing_mode" not in st.session_state:
     st.session_state.routing_mode = "cloud"
+if "run_mode" not in st.session_state:
+    st.session_state.run_mode = "research"
 if "pinned_model" not in st.session_state:
     st.session_state.pinned_model = None
 
@@ -421,12 +423,14 @@ def render_orchestrator_panel():
         config = api_get("/config")
         if config:
             st.session_state.routing_mode = config.get("routing_mode", "cloud")
+            st.session_state.run_mode = config.get("run_mode", "research")
             st.session_state.pinned_model = config.get("pinned_model")
             st.session_state.available_models = config.get("available_models", [])
             st.session_state.random_routing_mode = config.get("random_routing", False)
             st.session_state.initial_config_synced = True
         else:
             st.session_state.routing_mode = "cloud"
+            st.session_state.run_mode = "research"
             st.session_state.pinned_model = None
             st.session_state.available_models = []
             st.session_state.random_routing_mode = False
@@ -464,7 +468,7 @@ def render_orchestrator_panel():
     # SYSTEM CONFIGURATION SECTION
     with st.container(border=True):
         st.markdown("**SYSTEM CONFIGURATION**")
-        cfg_col1, cfg_col2, cfg_col3, cfg_col4 = st.columns(4)
+        cfg_col1, cfg_col2, cfg_col3, cfg_col4, cfg_col5 = st.columns(5)
 
         _mode_options = ["cloud", "local", "hybrid", "cloud_pinned"]
         _mode_labels = {
@@ -506,6 +510,27 @@ def render_orchestrator_panel():
             value=st.session_state.fast_mode,
             help="Subsample large datasets to 50K rows to prevent execution timeouts."
         )
+        _run_mode_opts = ["research", "production"]
+        _run_mode_labels = {
+            "research": "Research (model-first)",
+            "production": "Production (native-first)",
+        }
+        _cur_run_mode = st.session_state.get("run_mode", "research")
+        st.session_state.run_mode = cfg_col5.selectbox(
+            "Run Mode",
+            options=_run_mode_opts,
+            index=_run_mode_opts.index(_cur_run_mode) if _cur_run_mode in _run_mode_opts else 0,
+            format_func=lambda m: _run_mode_labels.get(m, m),
+            help=(
+                "research: the model attempts every node itself; a node's native is only a "
+                "post-exhaustion safety net. Keeps pass@model meaningful — that metric is "
+                "undefined if the native runs first. Costs tokens and carries the "
+                "failed-attempt risks.\n\n"
+                "production: a node that declares a native uses it directly and the model is "
+                "never asked — deterministic and cheaper on nodes with one defensible "
+                "answer. Judgment nodes with no native stay model-generated either way."
+            )
+        )
         st.session_state.disable_recipes = cfg_col4.checkbox(
             "Disable Recipes",
             value=st.session_state.disable_recipes,
@@ -517,16 +542,19 @@ def render_orchestrator_panel():
         st.session_state.routing_mode,
         st.session_state.get("pinned_model"),
         st.session_state.random_routing_mode,
+        st.session_state.run_mode,
     )
     if _desired_config != st.session_state.get("last_synced_config"):
         resp = api_post("/config", {
             "routing_mode": st.session_state.routing_mode,
             "pinned_model": st.session_state.get("pinned_model"),
             "random_routing": st.session_state.random_routing_mode,
+            "run_mode": st.session_state.run_mode,
         })
         if resp:
             st.session_state.last_synced_config = _desired_config
-            st.toast(f"Routing mode: {st.session_state.routing_mode}")
+            st.toast(f"Routing: {st.session_state.routing_mode} · "
+                     f"Run mode: {st.session_state.run_mode}")
         else:
             st.warning("Failed to update backend config — check that the routing mode/pinned model is valid.")
 

@@ -49,6 +49,68 @@ def _tier_of(model: str) -> Optional[str]:
         pass
     return None
 
+async def _account(model: str, resp) -> None:
+    """Attribute one completion's tokens/cost to the current task (core/usage.py).
+
+    Best-effort by construction: accounting must never be able to fail a generation, so
+    every extraction is guarded and a miss simply means that call goes uncounted.
+    """
+    try:
+        from gads.core import usage as _usage
+        u = getattr(resp, "usage", None)
+        if u is None:
+            return
+        hidden = getattr(resp, "_hidden_params", None) or {}
+        cost = hidden.get("response_cost")
+        await _usage.record_call(model, u, response_cost=cost)
+    except Exception:
+        pass
+
+
+async def _account_stream(model: str, usage, cost=None) -> None:
+    """Streamed calls carry usage only in the final chunk (and no cost — see usage.py)."""
+    try:
+        if usage is None:
+            return
+        from gads.core import usage as _usage
+        await _usage.record_call(model, usage, response_cost=cost)
+    except Exception:
+        pass
+
+
+def _stream_usage_kwargs(kwargs: dict) -> dict:
+    """Ask the proxy to append a usage chunk to a stream.
+
+    Without this a streamed call reports nothing at all — and streaming is how every Coder
+    generation runs, so the most token-hungry calls in the system would be the ones missing
+    from the accounting.
+    """
+    out = dict(kwargs)
+    opts = dict(out.get("stream_options") or {})
+    opts["include_usage"] = True
+    out["stream_options"] = opts
+    return out
+
+
+async def _client_accounted(model: str, **call_kwargs):
+    """`client(...)` (instructor) returns the parsed Pydantic object, not the completion, so
+    usage has to come off the raw response instructor attaches to it."""
+    result = await client(model=model, **call_kwargs)
+    try:
+        raw = getattr(result, "_raw_response", None)
+        if raw is not None:
+            await _account(model, raw)
+    except Exception:
+        pass
+    return result
+
+
+def _chunk_usage(chunk, current):
+    """Pick the usage object out of a stream chunk, keeping the last one seen."""
+    u = getattr(chunk, "usage", None)
+    return u if u is not None else current
+
+
 def _prepare_llm_kwargs(model: str, messages: list, kwargs: dict):
     """Shared setup for every LiteLLM call: provider/base_url/api_key, token
     budget, trace-metadata injection, timeouts, and local-model hardening.
@@ -158,9 +220,14 @@ async def get_code_completion(model: str, messages: list, stream_callback=None, 
     full_content = ""
     full_reasoning = ""
     truncated = False  # finish_reason == 'length': budget exhausted mid-generation
+    _stream_usage = None
     if stream_callback:
-        resp = await acompletion(model=model, messages=messages, stream=True, **kwargs)
+        resp = await acompletion(model=model, messages=messages, stream=True,
+                                 **_stream_usage_kwargs(kwargs))
         async for chunk in resp:
+            _stream_usage = _chunk_usage(chunk, _stream_usage)
+            if not chunk.choices:      # the usage-only final chunk carries no choices
+                continue
             if chunk.choices[0].finish_reason == "length":
                 truncated = True
             delta = chunk.choices[0].delta
@@ -175,8 +242,10 @@ async def get_code_completion(model: str, messages: list, stream_callback=None, 
             active = content if content else reasoning
             if active:
                 await stream_callback(active)
+        await _account_stream(model, _stream_usage)
     else:
         resp = await acompletion(model=model, messages=messages, **kwargs)
+        await _account(model, resp)
         truncated = resp.choices[0].finish_reason == "length"
         msg = resp.choices[0].message
         full_content = msg.content or ""
@@ -256,13 +325,17 @@ async def get_structured_completion(model: str, response_model, messages: list, 
                 model=model,
                 messages=messages,
                 stream=True,
-                **kwargs
+                **_stream_usage_kwargs(kwargs)
             )
             
             full_content = ""
             full_reasoning = ""
+            _stream_usage = None
             
             async for chunk in resp:
+                _stream_usage = _chunk_usage(chunk, _stream_usage)
+                if not chunk.choices:      # usage-only final chunk
+                    continue
                 delta = chunk.choices[0].delta
                 content = getattr(delta, "content", "") or ""
                 
@@ -278,7 +351,9 @@ async def get_structured_completion(model: str, response_model, messages: list, 
                 active_token = reasoning if reasoning else content
                 if active_token:
                     await stream_callback(active_token)
-            
+
+            await _account_stream(model, _stream_usage)
+
             cleaned_text = re.sub(r'<think>.*?</think>', '', full_content, flags=re.DOTALL)
             
             # Find all JSON-like blocks and try them from largest to smallest
@@ -317,8 +392,8 @@ async def get_structured_completion(model: str, response_model, messages: list, 
 
             try:
                 _mark_path("stream_repair")
-                return await client(
-                    model=model,
+                return await _client_accounted(
+                    model,
                     response_model=response_model,
                     messages=repair_messages,
                     max_retries=1,
@@ -333,8 +408,8 @@ async def get_structured_completion(model: str, response_model, messages: list, 
             raise e
             
     try:
-        return await client(
-            model=model,
+        return await _client_accounted(
+            model,
             response_model=response_model,
             messages=messages,
             max_retries=0, 
@@ -380,6 +455,7 @@ async def get_structured_completion(model: str, response_model, messages: list, 
                 messages=fallback_messages,
                 **kwargs
             )
+            await _account(model, raw_resp)
             
             msg = raw_resp.choices[0].message
             content = getattr(msg, "content", "") or ""

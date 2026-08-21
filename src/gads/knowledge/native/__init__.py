@@ -33,6 +33,7 @@ from .model_selection import (gads_load_prepared_split, gads_dataset_facts,
                               gads_tune_model, gads_evaluate_holdout,
                               gads_feature_importance, gads_audit_model_choice,
                               gads_model_card)
+from .diagnostics import gads_plot_classification_curves
 
 NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_automl_fit": gads_automl_fit,
@@ -84,6 +85,9 @@ NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_default_shortlist": gads_default_shortlist,
     "gads_evaluate_holdout": gads_evaluate_holdout,
     "gads_model_card": gads_model_card,
+    # Cross-recipe: any classifier that yields probabilities. Auto-injected via
+    # DIAGNOSTICS_PREAMBLE and also declarable as a node's fallback_native.
+    "gads_plot_classification_curves": gads_plot_classification_curves,
 }
 
 # Preamble injected into every sandbox execution when AutoGluon recipes are active.
@@ -487,6 +491,18 @@ MODEL_SELECTION_PREAMBLE = (
 )
 
 
+# Diagnostic curves are recipe-agnostic — the model-selection, binary-classification,
+# AutoGluon and NLP-classification recipes all reach the same point of having probabilities
+# and labels — so they get their own small preamble rather than living inside any one of the
+# task-specific ones.
+from . import diagnostics as _diag_mod
+
+DIAGNOSTICS_PREAMBLE = (
+    "import warnings as _w_diag\n_w_diag.filterwarnings('ignore')\n\n"
+    + _inspect.getsource(_diag_mod.gads_plot_classification_curves)
+)
+
+
 # Per-native source, for the opt-in local-fallback path (invoke ONE native on demand rather
 # than injecting the always-on preamble). Includes the demoted plotting natives.
 NATIVE_SOURCE = {name: _inspect.getsource(fn) for name, fn in NATIVE_REGISTRY.items()}
@@ -516,6 +532,9 @@ _PREAMBLE_ROUTES = (
                          "gads_audit_model_choice", "gads_feature_importance",
                          "model_choice_checks"),
      lambda: MODEL_SELECTION_PREAMBLE),
+    ("diagnostics", ("gads_plot_classification_curves", "roc_curve", "precision_recall_curve",
+                     "figure_roc_curve", "figure_precision_recall"),
+     lambda: DIAGNOSTICS_PREAMBLE),
     ("survival", ("gads_make_surv_target", "gads_evaluate_survival", "gads_cox_ph_report",
                   "CoxPHFitter", "CoxPHSurvivalAnalysis", "RandomSurvivalForest",
                   "lifelines", "sksurv", "Surv.from_", "KaplanMeierFitter"),

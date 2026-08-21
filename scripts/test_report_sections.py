@@ -42,6 +42,10 @@ t2b = T("shortlist", "qwen", "completed", pc={"recipe_node_id": "shortlist_candi
 
 t3 = T("holdout", "qwen", "completed", pc={"recipe_node_id": "holdout_evaluation"},
        res={"model_used": "native_fallback:gads_evaluate_holdout", "stdout": "eval done",
+            "usage": {"calls": 3, "prompt_tokens": 12000, "completion_tokens": 2500,
+                      "reasoning_tokens": 900, "total_tokens": 14500, "cost_usd": 0.0234,
+                      "models": ["gemini-3.7-flash"], "cost_source": "computed",
+                      "unpriced_calls": 0},
             "orchestrator_summary": "Created roc.json | Metrics captured: macro_f1=0.8212, roc_auc=0.9255",
             "artifact_files": ["roc.json"]}, age=4)
 # performance_report never ran
@@ -76,6 +80,19 @@ assert secs[3]["collapsed"] is True, "a node with no evidence at all collapses"
 assert "SPEC HINTS" not in secs[0]["intent"] and "INVARIANTS" not in secs[0]["intent"]
 assert len(orphans) == 1
 
+# --- usage plumbing ---
+assert secs[2]["usage"]["total_tokens"] == 14500, secs[2]["usage"]
+assert secs[1]["usage"] is None, "a node with no recorded LLM call reports None, not zero"
+totals = rs.run_totals(tasks)
+assert totals["calls"] == 3 and totals["total_tokens"] == 14500, totals
+assert abs(totals["cost_usd"] - 0.0234) < 1e-9, totals
+from gads.core.usage import format_cost, format_tokens
+assert format_cost(0.0234) == "$0.02" and format_cost(0.0003) == "$0.0003"
+assert format_cost(None) == "n/a" and format_cost(0) == "$0.00"
+assert format_tokens(14500) == "14.5k" and format_tokens(0) == "0"
+print("usage plumbing OK:", totals["calls"], "calls,", format_tokens(totals["total_tokens"]),
+      "tokens,", format_cost(totals["cost_usd"]))
+
 print("\n=== PROMPT BRIEF ===")
 print(rs.format_for_prompt(secs)[:900])
 
@@ -84,17 +101,20 @@ from jinja2 import Environment, FileSystemLoader
 env = Environment(loader=FileSystemLoader("src/gads/templates"))
 html = env.get_template("dashboard.html.j2").render(
     project_id="test", narrative="N", takeaways=["a"], cards=cards, sections=secs,
-    orphan_cards=orphans, key_metrics={"macro_f1": "0.8212"}, followups=[])
+    orphan_cards=orphans, key_metrics={"macro_f1": "0.8212"}, followups=[],
+    run_usage=totals, fmt_cost=rs.format_cost_value, fmt_tokens=rs.format_tokens_value)
 out = os.path.join(os.environ.get("GADS_TEST_OUT", "/tmp"), "dash.html")
 open(out, "w").write(html)
 for needle in ["How This Result Was Produced", "Reasoned Shortlist", "not executed",
-               "native fallback", "Additional Artifacts", "Random Forest was preferred"]:
+               "native fallback", "Additional Artifacts", "Random Forest was preferred",
+               "Total run cost", "$0.02", "14.5k", "no LLM call", "900 reasoning"]:
     assert needle in html, f"missing from HTML: {needle}"
 print(f"\nHTML OK ({len(html)} bytes) -> {out}")
 
 # --- markdown twin ---
 from gads.core.reporting import _build_markdown
-md = _build_markdown("test", "N", ["a"], {"macro_f1": "0.8212"}, secs, orphans)
+md = _build_markdown("test", "N", ["a"], {"macro_f1": "0.8212"}, secs, orphans, totals)
+assert "## Run Cost" in md and "$0.02" in md, "markdown must carry the run cost too"
 print("\n=== MARKDOWN (excerpt) ===")
 print(md[md.index("## Methodology"):][:1200])
 

@@ -34,11 +34,14 @@ from gads.core.registry import (
     get_model_hierarchy, get_local_only, set_local_only, get_random_routing,
     set_random_routing, get_next_model_dynamic, get_routing_mode, set_routing_mode,
     get_pinned_model, resolve_stage_model, get_available_models, VALID_ROUTING_MODES,
-    get_local_fallback, set_local_fallback, VALID_LOCAL_FALLBACKS
+    get_local_fallback, set_local_fallback, VALID_LOCAL_FALLBACKS,
+    get_run_mode, set_run_mode, VALID_RUN_MODES,
 )
 from gads.core.knowledge import KnowledgeRegistry
-from gads.core.dial import compiled_plan_dial, drafted_plan_dial, append_ledger
+from gads.core.dial import (compiled_plan_dial, drafted_plan_dial, append_ledger,
+                            append_routing_ledger)
 from gads.core.reporting import create_master_reports
+from gads.core.usage import snapshot as usage_snapshot
 from gads.core.report_sections import (build_sections as build_report_sections,
                                        format_for_prompt as format_sections_for_prompt,
                                        apply_section_notes as apply_report_section_notes)
@@ -153,6 +156,8 @@ class ConfigUpdate(BaseModel):
     pinned_model: Optional[str] = None
     # Local retry-exhaustion fallback: none | native | cloud | native_then_cloud
     local_fallback: Optional[str] = None
+    # What the run is for: research (model-first) | production (native-first)
+    run_mode: Optional[str] = None
 
 class NotesRequest(BaseModel):
     notes: str = ""
@@ -470,6 +475,8 @@ def _config_payload() -> Dict[str, Any]:
         "valid_routing_modes": list(VALID_ROUTING_MODES),
         "local_fallback": get_local_fallback(),
         "valid_local_fallbacks": list(VALID_LOCAL_FALLBACKS),
+        "run_mode": get_run_mode(),
+        "valid_run_modes": list(VALID_RUN_MODES),
     }
 
 @app.get("/config")
@@ -491,6 +498,8 @@ def update_config(req: ConfigUpdate):
             set_local_only(req.local_only)
         if req.local_fallback is not None:
             set_local_fallback(req.local_fallback)
+        if req.run_mode is not None:
+            set_run_mode(req.run_mode)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     set_random_routing(req.random_routing)
@@ -916,6 +925,42 @@ def _merge_metrics_json(workspace_dir: str, new_metrics: Dict[str, Any]):
     with open(metrics_path, "w") as f:
         json.dump(existing, f, indent=2)
 
+async def _bind_spec_hints_in_kernel(executor, project_id, spec_hints: Dict[str, Any]) -> None:
+    """Bind the spec's data constraints as real kernel variables.
+
+    These constraints reach the MODEL as prose — the compiler appends "SAMPLING CONSTRAINT:
+    apply df.sample(20000...)" to the first node's description — and reach NATIVES as
+    `globals().get('sample_rows')`. Nothing ever bound that name, so the natives silently
+    saw None.
+
+    Harmless while a model was always in the loop to read the sentence and write the code.
+    Fatal in production mode, where there is no model: run e64f1c50 (2026-08-20) trained on
+    39,073 rows under a `sample_rows: 20000` spec, because the only thing enforcing the cap
+    was a sentence nobody read. `target_column`, `feature_columns` and `filters` share the
+    hole. Binding them makes the constraint independent of who executes the node.
+
+    Best-effort: a failure here must not take down the run.
+    """
+    binds = {}
+    for key in ("target_column", "sample_rows", "feature_columns", "filters", "domain"):
+        val = spec_hints.get(key)
+        if val is not None:
+            binds[key] = val
+    if not binds:
+        return
+    code = "\n".join(f"{k} = {v!r}" for k, v in binds.items())
+    code += ("\nprint('[SpecHints] bound: ' + ', '.join(["
+             + ", ".join(f"'{k}'" for k in binds) + "]))")
+    try:
+        await asyncio.wait_for(
+            executor.sandbox.execute(code, project_id=project_id, session_id=str(project_id)),
+            timeout=60.0)
+        print(f"  [Workflow] Spec hints bound in kernel: {', '.join(binds)}", flush=True)
+    except Exception as e:
+        print(f"  [Workflow] Warning: could not bind spec hints ({e}); natives will fall "
+              f"back to their own defaults.", flush=True)
+
+
 def _artifact_origin(task_obj) -> Dict[str, Any]:
     """Provenance stamped onto every artifact: which task made it, and which recipe node
     that task was. The dashboard groups artifacts under their recipe section from this —
@@ -1274,7 +1319,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         st.status = "completed"
                         st.result_json = {
                             "stdout": f"**Formalized Objective:**\n{formalized_objective}\n\n**Hints:**\n{json.dumps(spec_hints, indent=2)}",
-                            "model_used": spec_model
+                            "model_used": spec_model,
+                            "usage": usage_snapshot(spec_task.id),
                         }
                         session.add(st)
                         session.commit()
@@ -1451,7 +1497,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     route_task.status = "completed"
                     route_task.result_json = {
                         "stdout": f"**Decision Reasoning:**\n{intent.reasoning}\n\n**Intent Classification:**\n- Task Type: `{intent.task_type}`\n- Modality: `{intent.data_modality}`\n- Confidence: `{intent.confidence}`\n- Matched Recipe: `{intent.matched_recipe_id or 'None'}`\n\n--- KNOWLEDGE BASE ---\n{recipe_info}",
-                        "model_used": router_model
+                        "model_used": router_model,
+                        "usage": usage_snapshot(route_task.id),
                     }
                     session.add(route_task)
                     session.commit()
@@ -1472,6 +1519,41 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         continue
                     else:
                         raise e
+
+        # ——— ROUTING DECISION RECORD (approach_docs/024) ———————————————————————————
+        # The deterministic oracle answers what the LLM's choice cannot: given these labels,
+        # did a covering recipe EXIST? That is what separates a genuine coverage gap from a
+        # selection error, and it costs no LLM call.
+        try:
+            with Session(engine) as _rsession:
+                _rproj = _rsession.get(Project, project_id)
+                _routing_spec_name = ((_rproj.last_state_json or {}).get("spec_filename")
+                                      if _rproj else None)
+            _oracle = registry.find_matches(
+                {"task_type": getattr(intent, "task_type", None),
+                 "data_modality": getattr(intent, "data_modality", None)},
+                objective=(formalized_objective or objective or ""),
+            ) if intent else []
+            _verdict = registry.classify_routing(recipe_id, _oracle)
+            append_routing_ledger({
+                "project_id": str(project_id),
+                "spec": _routing_spec_name,
+                "objective": (formalized_objective or objective or "")[:400],
+                "task_type": getattr(intent, "task_type", None),
+                "data_modality": getattr(intent, "data_modality", None),
+                "confidence": getattr(intent, "confidence", None),
+                "reasoning": (getattr(intent, "reasoning", None) or "")[:400],
+                "chosen_recipe": recipe_id,
+                "oracle_candidates": [r.id for r in _oracle],
+                "verdict": _verdict,
+                # A spec pin overrides the Router, so the verdict describes the PIN, not the
+                # Router's own judgement — recorded so eval can exclude these.
+                "spec_pinned": bool(spec_pinned_recipe),
+                "disable_recipes": bool(disable_recipes),
+                "router_model": router_model,
+            })
+        except Exception as _re:
+            print(f"  [Routing] Warning: decision record failed: {_re}", flush=True)
 
         print(f"  [Router] Intent: {intent.task_type} (Recipe: {intent.matched_recipe_id})", flush=True)
 
@@ -1653,6 +1735,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     # JSON-dumped into the Coder prompt, so anything longer would be
                     # context spent to say what the description already says.
                     postcondition["recipe_node_id"] = node.get("id")
+                    if node.get("model_required"):
+                        postcondition["model_required"] = True
 
                     recipe_sections.append({
                         "id": node.get("id"),
@@ -1820,7 +1904,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         plan_task.status = "completed"
                         plan_task.result_json = {
                             "stdout": f"Successfully decomposed objective into {len(planner_res.content.steps)} discrete tasks.",
-                            "model_used": planner_model
+                            "model_used": planner_model,
+                            "usage": usage_snapshot(plan_task.id),
                         }
                         session.add(plan_task)
                         session.commit()
@@ -1908,7 +1993,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         pc_task.status = "completed"
                         pc_task.result_json = {
                             "stdout": f"**Plan Evaluation:**\n- Approved: `{plan_critique.is_approved}`\n- Terminal Failure: `{plan_critique.is_terminal_failure}`\n- Missing: `{', '.join(plan_critique.missing_requirements) if plan_critique.missing_requirements else 'None'}`\n\n**Feedback:**\n{plan_critique.feedback}",
-                            "model_used": plan_critique_model
+                            "model_used": plan_critique_model,
+                            "usage": usage_snapshot(pc_task.id),
                         }
                         session.add(pc_task)
                         session.commit()
@@ -2050,6 +2136,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             # reset (their descriptions vary run-to-run, so nothing is safely resumable).
             _reset_kernel = (workflow_attempt == 1) or (not plan_is_deterministic)
             await _cleanup_stale_sessions(executor.sandbox, project_id, reset_current=_reset_kernel)
+            # After the reset, so the bindings survive a replan that wiped the kernel.
+            await _bind_spec_hints_in_kernel(executor, project_id, spec_hints)
             for task_id in task_ids:
                 if await is_cancelled(): return
 
@@ -2226,12 +2314,14 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                     # deterministically after the model exhausts its retries.
                     _fb_mode = get_local_fallback()
                     _fb_native = _fb_call = None
+                    _model_required = False
                     if _fb_mode != "none":
                         with Session(engine) as _fbs:
                             _fbt = _fbs.get(Task, task_id)
                             _pc = (_fbt.postcondition_json or {}) if _fbt else {}
                         _fb_native = _pc.get("fallback_native")
                         _fb_call = _pc.get("fallback_call")
+                        _model_required = bool(_pc.get("model_required"))
 
                     _hb_task = asyncio.create_task(_heartbeat_loop(task_id))
                     try:
@@ -2249,6 +2339,8 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                             fallback_native=_fb_native,
                             fallback_call=_fb_call,
                             fallback_mode=_fb_mode,
+                            run_mode=get_run_mode(),
+                            model_required=_model_required,
                         )
                     finally:
                         _hb_task.cancel()
@@ -2404,6 +2496,14 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                                     session.commit()
                                     break
 
+                            # Freeze this node's declared outputs: from here on, a later node
+                            # that rebinds them without declaring them is a contract violation
+                            # (executor.check_state_drift). This is what stops a failed attempt
+                            # from silently swapping the test split out from under a downstream
+                            # node or a native fallback.
+                            executor.record_produced_state(
+                                (task_obj.postcondition_json or {}).get("required_variables") or [])
+
                             hub.complete_task(task_id, {
                                 "stdout": res.stdout,
                                 "model_used": model_used,
@@ -2422,7 +2522,8 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                             # Fallback observability: when a node completed via a fallback
                             # (not the assigned model), emit a distinct event so the UI can
                             # surface it and pass@model reporting can count it.
-                            if str(model_used).startswith(("native_fallback:", "cloud_fallback:")):
+                            if str(model_used).startswith(("native_fallback:", "cloud_fallback:",
+                                                           "native_primary:")):
                                 _fb_kind, _, _fb_model = str(model_used).partition(":")
                                 hub.create_outbox_event("TASK_FALLBACK", {
                                     "task_id": str(task_id), "description": desc[:120],
@@ -2649,7 +2750,8 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                                         if cv_out.missing_analyses else ""
                                     )
                                 ),
-                                "model_used": cv_model
+                                "model_used": cv_model,
+                                "usage": usage_snapshot(cv_task_id),
                             }
                             session.add(ct)
                             session.commit()
@@ -2811,7 +2913,8 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                             # Persisted so rebuild_dashboard reproduces the same sections
                             # (a rebuild has no access to the synthesis call).
                             "section_notes": [n.dict() for n in final_synth.section_notes],
-                            "model_used": synthesizer_model
+                            "model_used": synthesizer_model,
+                            "usage": usage_snapshot(synth_task.id),
                         }
                         session.add(synth_task)
                         session.commit()
@@ -2886,7 +2989,8 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                         span.end(output=critique.model_dump())
 
                         critique_task.status = "completed"
-                        critique_task.result_json = {"stdout": f"Approved: {critique.is_approved}", "model_used": critique_model}
+                        critique_task.result_json = {"stdout": f"Approved: {critique.is_approved}", "model_used": critique_model,
+                                                     "usage": usage_snapshot(critique_task.id)}
                         session.add(critique_task)
                         session.commit()
                         break 
@@ -3007,13 +3111,20 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
             _n_exec = len(_by_node)
             _n_native_fb = sum(1 for m in _by_node.values() if m.startswith("native_fallback:"))
             _n_cloud_fb = sum(1 for m in _by_node.values() if m.startswith("cloud_fallback:"))
+            # Production mode ran these natively BY POLICY — the model was never asked, so
+            # they are neither a model pass nor a rescue. Counted apart from both, and
+            # excluded from the pass@model denominator: a node the model never attempted
+            # cannot be evidence about the model either way.
+            _n_native_primary = sum(1 for m in _by_node.values() if m.startswith("native_primary:"))
             _n_fb = _n_native_fb + _n_cloud_fb
-            _n_model = _n_exec - _n_fb
-            _pass_at_model = round(_n_model / _n_exec, 3) if _n_exec else None
+            _n_attempted = _n_exec - _n_native_primary
+            _n_model = _n_attempted - _n_fb
+            _pass_at_model = round(_n_model / _n_attempted, 3) if _n_attempted else None
             if _n_exec:
-                print(f"  [Dial] pass@model={_n_model}/{_n_exec} ({_pass_at_model}) | "
-                      f"fallback-assisted: {_n_fb} ({_n_native_fb} native, {_n_cloud_fb} cloud)",
-                      flush=True)
+                print(f"  [Dial] run_mode={get_run_mode()} | pass@model="
+                      f"{_n_model}/{_n_attempted} ({_pass_at_model}) | fallback-assisted: "
+                      f"{_n_fb} ({_n_native_fb} native, {_n_cloud_fb} cloud) | "
+                      f"native-by-policy: {_n_native_primary}", flush=True)
 
             append_ledger({
                 "project_id": str(project_id),
@@ -3024,12 +3135,16 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                 "selection": (dial_info or {}).get("selection"),
                 "routing_mode": get_routing_mode(),
                 "pinned_model": get_pinned_model(),
+                "run_mode": get_run_mode(),
                 "outcome": "pass" if (workflow_succeeded and failed_count == 0) else "fail",
                 "workflow_succeeded": workflow_succeeded,
                 "failed_tasks": failed_count,
                 "workflow_attempts": workflow_attempt,
                 # pass@model reporting — model-only vs fallback-assisted (never collapsed).
                 "exec_nodes": _n_exec,
+                # Nodes the model was actually asked to do — the honest pass@model base.
+                "attempted_nodes": _n_attempted,
+                "native_primary": _n_native_primary,
                 "model_pass": _n_model,
                 "fallback_pass": _n_fb,
                 "native_fallback": _n_native_fb,

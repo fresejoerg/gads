@@ -1,6 +1,6 @@
 ---
 id: binary_classification.tabular.standard
-version: 1.2.0
+version: 1.4.0
 schema_version: 1
 author: gads-core
 
@@ -74,8 +74,33 @@ dag:
     postconditions:
       - "best_threshold is not None"
 
+  - id: diagnostic_curves
+    report:
+      title: ROC and Precision-Recall Curves
+      summary: How the model trades false positives against false negatives, against both baselines.
+    intent: >
+      Plot the ROC and precision-recall curves for the final model by calling the native:
+        curve_diagnostics = gads_plot_classification_curves(y_test, baseline_model.predict_proba(X_test))
+      Do NOT hand-roll the curves. The native handles the binary/multiclass split, the
+      label dtype, the one-vs-rest expansion and the two baselines (the ROC chance
+      diagonal and the PR no-skill line at the positive rate), and writes both figures as
+      Plotly JSON the dashboard renders directly. Bind `average_precision` from the
+      result. Then state, in one or two sentences, what the PR curve says that the ROC
+      curve does not — under class imbalance the ROC baseline is fixed at 0.5 while the
+      PR baseline moves with prevalence, which is the whole reason both are plotted.
+    depends_on: [train_baseline_model]
+    worker_tier: T2
+    produces: [curve_diagnostics, average_precision]
+    required_metrics: [average_precision]
+    attached_skills: [visualization_best_practices]
+    fallback_native: gads_plot_classification_curves
+    fallback_call: "curve_diagnostics = gads_plot_classification_curves(y_test, baseline_model.predict_proba(X_test)); average_precision = curve_diagnostics['average_precision']"
+    postconditions:
+      - "curve_diagnostics.get('roc_auc') is not None"
+
 # ——— GLOBAL INVARIANTS ———
 invariants:
+  - "NO MONKEY-PATCHING: never reassign a method on an estimator class or instance (`SomeClassifier.fit = ...`, `model.predict = ...`). Retries re-run your code in the SAME kernel, so the second run captures the already-patched function as the 'original' and recurses until RecursionError — and a patched CLASS corrupts every later step including the pre-written natives. If a model cannot consume a column type, route columns inside the Pipeline with ColumnTransformer + make_column_selector(dtype_include=...)."
   - "The target column must remain excluded from features (X)."
   - "Random seeds must be fixed for reproducibility (random_state=42)."
   - "CLASS WEIGHTS: always set class_weight='balanced' in sklearn classifiers (LogisticRegression, RandomForestClassifier, HistGradientBoostingClassifier) to safeguard against class imbalance."

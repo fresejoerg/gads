@@ -1,6 +1,6 @@
 ---
 id: nlp_classification.text.embedding_ensemble
-version: 1.1.0
+version: 1.2.0
 schema_version: 1
 author: gads-core
 
@@ -100,7 +100,7 @@ dag:
       - "ensemble_cv_scores is not None"
 
   - id: evaluation_plots
-    intent: "Generate and save: (1) a normalized confusion-matrix heatmap (Figure 1); (2) per-class ROC curves with AUC, one-vs-rest (Figure 2); (3) a bar chart of per-class F1 comparing baseline vs ensemble (Figure 3). Prefer Plotly JSON artifacts."
+    intent: "Generate and save: (1) a normalized confusion-matrix heatmap (Figure 1); (2) a bar chart of per-class F1 comparing baseline vs ensemble (Figure 2). Prefer Plotly JSON artifacts. Do NOT plot ROC curves here — the diagnostic_curves node produces them from the native, and two hand-rolled implementations of the same curve is how they end up disagreeing."
     worker_tier: T2
     depends_on: [ensemble_classifier]
     attached_skills: [visualization_best_practices]
@@ -122,6 +122,30 @@ dag:
     depends_on: [ensemble_classifier]
     postconditions:
       - "y_pred is not None"
+
+  - id: diagnostic_curves
+    report:
+      title: ROC and Precision-Recall Curves
+      summary: How the model trades false positives against false negatives, against both baselines.
+    intent: >
+      Plot the ROC and precision-recall curves for the ensemble by calling the native:
+        curve_diagnostics = gads_plot_classification_curves(y_test, y_prob)
+      Do NOT hand-roll the curves. The native handles the binary/multiclass split, the label
+      dtype, the one-vs-rest expansion and the two baselines (the ROC chance diagonal and the
+      PR no-skill line at the positive rate), and writes both figures as Plotly JSON the
+      dashboard renders directly. Bind `average_precision` from the result. Then state, in one
+      or two sentences, what the PR curve says that the ROC curve does not — under class
+      imbalance the ROC baseline is fixed at 0.5 while the PR baseline moves with prevalence,
+      which is the whole reason both are plotted.
+    depends_on: [ensemble_classifier]
+    worker_tier: T2
+    produces: [curve_diagnostics, average_precision]
+    required_metrics: [average_precision]
+    attached_skills: [visualization_best_practices]
+    fallback_native: gads_plot_classification_curves
+    fallback_call: "curve_diagnostics = gads_plot_classification_curves(y_test, y_prob); average_precision = curve_diagnostics['average_precision']"
+    postconditions:
+      - "curve_diagnostics.get('roc_auc') is not None"
 
 ---
 # NLP Text Classification with Embedding Ensemble

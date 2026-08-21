@@ -19,6 +19,56 @@ from gads.core.error_ledger import (
 from gads.core.llm import CodeGenerationError
 from sqlmodel import Session
 
+# Estimator methods whose reassignment rewrites behaviour for every user of the class.
+_PATCHABLE_METHODS = {"fit", "predict", "predict_proba", "transform", "fit_transform",
+                      "score", "fit_predict", "decision_function"}
+
+
+def _detect_kernel_poisoning(code: str):
+    """Reject monkey-patching of estimator methods before it reaches the kernel.
+
+    The pattern the model reaches for — save the original, then replace the class method —
+    is correct exactly once and catastrophic on the second run. GADS retries generated code
+    in the SAME persistent kernel, so attempt 2 re-executes the save line when the "original"
+    is already the patch: `_safe_fit` -> `_orig_fit` -> `_safe_fit`, forever. Observed on
+    2026-08-20, local run f4ebc44e: HistGradientBoostingClassifier.fit patched to drop
+    non-numeric columns, RecursionError at 2962 frames on the retry.
+
+    Worse than a failed node: patching a CLASS mutates global kernel state, so every later
+    caller inherits it — including the audited native invoked by the local fallback, which
+    died with the identical error and could not rescue the run. The kernel is also preserved
+    across replans for deterministic plans, so the poison outlives the replan that was meant
+    to recover from it.
+
+    Returns an actionable message, or None when the code is clean.
+    """
+    try:
+        tree = ast.parse(code)
+    except SyntaxError:
+        return None          # the honesty gate below reports syntax errors properly
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if (isinstance(target, ast.Attribute)
+                    and target.attr in _PATCHABLE_METHODS
+                    and isinstance(target.value, ast.Name)):
+                owner = target.value.id
+                return (
+                    f"line {getattr(node, 'lineno', '?')}: `{owner}.{target.attr} = ...` "
+                    f"monkey-patches an estimator method. This is banned: retries re-run "
+                    f"your code in the SAME kernel, so the second run captures the already-"
+                    f"patched function as the 'original' and recurses until RecursionError. "
+                    f"It also corrupts the class for every later step, including the "
+                    f"pre-written natives. "
+                    f"REMEDY: handle column selection or dtype conversion INSIDE a Pipeline "
+                    f"— use ColumnTransformer with make_column_selector(dtype_include=...) "
+                    f"to route columns, or pass the already-prepared matrix. Never reassign "
+                    f"a method on a class or an estimator instance."
+                )
+    return None
+
+
 def _sanitize_code(code: str) -> str:
     """Rewrite broken library imports to sandbox-compatible equivalents.
 
@@ -582,6 +632,58 @@ class ExecutionManager:
         self.handover = HandoverManager(sandbox_url=sandbox_url)
         self.authoritative_state: Dict[str, Any] = {}
         self.file_schemas: Dict[str, Any] = {}  # populated by server after schema probe
+        # Signatures of variables produced by COMPLETED upstream nodes. A later node may
+        # rebind a variable it declares in its own `produces`; silently rebinding someone
+        # else's output is a contract violation (see check_state_drift).
+        self.protected_state: Dict[str, str] = {}
+
+    @staticmethod
+    def _signature(var_info: Any) -> str:
+        """Cheap identity for a kernel variable: type plus shape/length where it has one.
+        Shape is what matters here — the failure this guards against swapped a 4,000-row
+        test split for a 46,842-row full dataset, which any shape check catches."""
+        if not isinstance(var_info, dict):
+            return str(type(var_info).__name__)
+        parts = [str(var_info.get("type", "?"))]
+        for key in ("shape", "length", "len"):
+            if var_info.get(key) is not None:
+                parts.append(f"{key}={var_info[key]}")
+        return "|".join(parts)
+
+    def record_produced_state(self, produces) -> None:
+        """Freeze the signatures of a completed node's declared outputs."""
+        for name in (produces or []):
+            info = self.authoritative_state.get(name)
+            if info is not None:
+                self.protected_state[name] = self._signature(info)
+
+    def check_state_drift(self, own_produces) -> list:
+        """Report upstream outputs this node changed without declaring them.
+
+        The rule is deliberately narrow so it cannot fire on legitimate work: a node may
+        rebind anything it lists in its own `produces` (holdout_evaluation genuinely refits
+        `tuned_model`), but rebinding an upstream node's output it never declared is a
+        contract violation.
+
+        This exists because of a SILENT correctness failure, not a crash (local run
+        22a8524e, 2026-08-20): a failed attempt at holdout_evaluation rebound `X_test` to
+        the full 46,842-row dataset — target column included — and the native fallback then
+        computed the run's headline metrics on it. macro_f1 came out at 0.8211, indis-
+        tinguishable from the legitimate cloud runs, and the CompletenessVerifier passed it
+        because completeness is not correctness. Nothing anywhere would have caught it.
+        """
+        declared = set(own_produces or [])
+        drifted = []
+        for name, before in self.protected_state.items():
+            if name in declared:
+                continue
+            info = self.authoritative_state.get(name)
+            if info is None:
+                continue
+            now = self._signature(info)
+            if now != before:
+                drifted.append(f"`{name}` changed from {before} to {now}")
+        return drifted
 
     async def run_task(
         self, 
@@ -599,6 +701,8 @@ class ExecutionManager:
         fallback_native: Optional[str] = None,
         fallback_call: Optional[str] = None,
         fallback_mode: str = "none",
+        run_mode: str = "research",
+        model_required: bool = False,
         max_attempts: int = 10,
     ) -> Tuple[ExecutionResult, str]:
         """
@@ -613,7 +717,44 @@ class ExecutionManager:
         # code — the error is the signal that nudges a different approach).
         # `max_attempts` is a parameter: the cloud fallback re-invokes run_task with a cloud
         # model and max_attempts=1 (a single escalated attempt, not another full retry loop).
+        # ——— PRODUCTION MODE: native-first ———————————————————————————————————————
+        # A node that declares a native has, by construction, one defensible answer — that
+        # is the criterion for writing the native at all (approach_docs/019). In a real
+        # analysis there is nothing to gain from having the model re-derive it: the model
+        # attempt costs tokens and latency, and its FAILED attempts are what corrupt kernel
+        # state (rebinding X_test, monkey-patching estimator classes — both observed
+        # 2026-08-20). So production runs the native directly and never asks the model.
+        #
+        # Research mode deliberately does the opposite, because pass@model is undefined if
+        # the native runs first — the measurement IS the model's attempt.
+        #
+        # Judgment nodes that declare no native are model-generated in BOTH modes; this
+        # short-circuit only ever applies where an audited implementation already exists.
+        if run_mode == "production" and fallback_native and fallback_call and not model_required:
+            print(f"    [Executor] ⚙ Production mode: invoking native '{fallback_native}' "
+                  f"directly (model attempt skipped).", flush=True)
+            _np_result = await self._run_native_fallback(
+                fallback_native, fallback_call, project_id, session_id)
+            if _np_result is not None:
+                return _np_result, f"native_primary:{fallback_native}"
+            # The native failed. Fall through to the model rather than failing the node —
+            # production cares about completing the analysis, and the model is now the
+            # backup. This is research mode's ladder, inverted.
+            print(f"    [Executor] ⚠ Native '{fallback_native}' failed; falling back to the "
+                  f"model for this node.", flush=True)
+
+        if run_mode == "production" and model_required and fallback_native:
+            print(f"    [Executor] ✍ Production mode: '{task_description[:40]}...' is a "
+                  f"reasoning node (model_required) — the model writes it; "
+                  f"'{fallback_native}' stays available only as a rescue.", flush=True)
+
         retry_count = 0
+        # Bound before the loop: the post-loop fallback block reads these, and a loop that
+        # never runs a full iteration (max_attempts exhausted by a caller, or an early exit)
+        # would otherwise leave them undefined and raise UnboundLocalError instead of
+        # reporting the real failure.
+        contract = None
+        exec_result = None
         error_feedback = None
         previous_code = ""
         error_history = []           # one human-readable error string per failed attempt
@@ -726,7 +867,15 @@ class ExecutionManager:
                         postcondition_contract=contract,
                         state_summary=state_summary
                     ), stream_callback=debounced_stream_callback),
-                    timeout=300.0
+                    # Model-aware, mirroring the sandbox timeout below: a 27B local model
+                    # generating a heavily-prompted node (skill body + recipe invariants +
+                    # kernel state) measured 190-300s on the bakeoff node, so a flat 300s cut
+                    # off generations that were still progressing and cost the whole node.
+                    # Execution already got the local allowance; generation had been left at
+                    # the cloud figure. Raising the ceiling is the right lever here — the
+                    # alternative, escalating to cloud, is the anti-pattern this project
+                    # exists to avoid.
+                    timeout=(600.0 if "local_model" in (self.coder.model_str or "") else 300.0)
                 )
                 
                 # Flush remaining reasoning
@@ -769,6 +918,16 @@ class ExecutionManager:
                         f"generated text is not valid Python ({_msg} at line {_line})",
                         content_chars=len(current_code),
                     )
+                    _err.text = current_code
+                    raise _err from None
+
+                # Kernel-poisoning gate: catch a class/instance method reassignment BEFORE it
+                # runs, since once it executes the damage outlives the task, the fallback and
+                # the replan (see _detect_kernel_poisoning).
+                _poison = _detect_kernel_poisoning(current_code)
+                if _poison:
+                    print(f"    [Executor] 🚫 Rejected monkey-patch: {_poison[:110]}...", flush=True)
+                    _err = CodeGenerationError(_poison, content_chars=len(current_code))
                     _err.text = current_code
                     raise _err from None
 
@@ -916,12 +1075,31 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                     if exec_result.kernel_state:
                         self.authoritative_state.update(exec_result.kernel_state)
                         print(f"    [Executor] Memory updated. Total variables: {len(self.authoritative_state)}", flush=True)
-                    # Step succeeded after ≥1 failure → record that its prior errors were
-                    # recoverable (distinguishes recurring-but-fixable from hard dead ends).
-                    if error_history:
-                        record_resolution(recipe_id, recipe_version, task_description,
-                                           coder_res.model_used)
-                    return exec_result, coder_res.model_used
+
+                    # STATE-DRIFT GATE: code that "succeeded" while clobbering an upstream
+                    # node's output has not succeeded — it has quietly changed what every
+                    # later node and every native fallback will compute on. Treated as a
+                    # normal execution failure so the retry loop feeds it back and the model
+                    # can fix it, rather than accepting plausible numbers built on the wrong
+                    # data (see check_state_drift).
+                    _own = list((contract or {}).get("required_variables") or [])
+                    _drift = self.check_state_drift(_own)
+                    if _drift:
+                        _msg = ("Contract violation: this step modified variables produced by "
+                                "EARLIER steps that it does not declare as its own outputs — "
+                                + "; ".join(_drift) +
+                                ". Those belong to the upstream step that created them. Do NOT "
+                                "reload, re-split or reassign them; read them as they are. If "
+                                "you need a different view, bind a NEW name.")
+                        print(f"    [Executor] 🚫 State drift: {'; '.join(_drift)}", flush=True)
+                        exec_result.error = {"ename": "StateDriftError", "evalue": _msg}
+                    else:
+                        # Step succeeded after ≥1 failure → record that its prior errors were
+                        # recoverable (distinguishes recurring-but-fixable from hard dead ends).
+                        if error_history:
+                            record_resolution(recipe_id, recipe_version, task_description,
+                                               coder_res.model_used)
+                        return exec_result, coder_res.model_used
                 else:
                     ename = exec_result.error.get("ename", "Error")
                     evalue = exec_result.error.get("evalue", "Unknown error")
@@ -1021,13 +1199,20 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                 retry_count += 1
                 continue
             except asyncio.TimeoutError:
+                # BREAK, don't return: an early return here jumped clean over the native
+                # fallback block below, so a node that timed out never got its declared
+                # safety net — and on a local model a slow generation is the single most
+                # likely way to fail, i.e. exactly the case the fallback exists for.
+                # `_run_native_fallback` carries its own timeout and swallows its own
+                # errors, so reaching it costs a bounded attempt and nothing else.
                 print(f"    [Executor] ❌ Timeout (LLM or sandbox execution)", flush=True)
-                return ExecutionResult(
+                exec_result = ExecutionResult(
                     stdout="", stderr="",
                     error={"ename": "TimeoutError", "evalue": "Operation timed out (LLM generation or sandbox execution exceeded limit)"},
                     execution_time_ms=600000,
                     kernel_state={}
-                ), self.coder.model
+                )
+                break
             except Exception as e:
                 print(f"    [Executor] ❌ Unexpected error: {e}", flush=True)
                 import traceback
@@ -1044,6 +1229,17 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
         # live kernel — one call, no replan. The model's capability was still MEASURED (it
         # tried first and failed); this only recovers the run. See approach_docs/019.
         if fallback_native and fallback_call and fallback_mode in ("native", "native_then_cloud"):
+            # The fallback's whole value is that it is deterministic and audited — but it runs
+            # in the LIVE kernel, so it inherits whatever the failed attempts left behind. If
+            # an upstream output has been clobbered, running it produces confident, wrong
+            # numbers; failing the node is strictly better.
+            _own_fb = list((contract or {}).get("required_variables") or [])
+            _fb_drift = self.check_state_drift(_own_fb)
+            if _fb_drift:
+                print(f"    [Executor] 🚫 Refusing native fallback '{fallback_native}': upstream "
+                      f"state was modified by the failed attempts ({'; '.join(_fb_drift)}). "
+                      f"Computing on it would yield plausible but wrong results.", flush=True)
+                return exec_result, self.coder.model
             fb_result = await self._run_native_fallback(
                 fallback_native, fallback_call, project_id, session_id)
             if fb_result is not None:
@@ -1052,6 +1248,12 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                                       f"native_fallback:{fallback_native}")
                 return fb_result, f"native_fallback:{fallback_native}"
 
+        if exec_result is None:
+            exec_result = ExecutionResult(
+                stdout="", stderr="",
+                error={"ename": "NoAttemptError",
+                       "evalue": "No execution attempt was made for this task."},
+                execution_time_ms=0, kernel_state={})
         return exec_result, self.coder.model
 
     async def _run_native_fallback(self, fallback_native, fallback_call, project_id, session_id):

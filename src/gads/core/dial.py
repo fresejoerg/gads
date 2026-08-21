@@ -66,6 +66,33 @@ def drafted_plan_dial(spec_hints: Dict[str, Any]) -> Dict[str, Any]:
     return {"rung": "D1" if framed else "D0", "task_rungs": {}, "selection": "drafted"}
 
 
+ROUTING_LEDGER_PATH = "research/routing_ledger.jsonl"
+
+
+def append_routing_ledger(record: Dict[str, Any], path: Optional[str] = None) -> None:
+    """Append one routing decision record (approach_docs/024 §4).
+
+    Separate from the dial ledger on purpose: a routing decision is made once per run, up
+    front, and is worth recording even for runs that later fail or are cancelled — the dial
+    ledger is only written on completion, so routing evidence would be lost exactly for the
+    runs most likely to have been misrouted.
+
+    Never raises: telemetry must not be able to fail a workflow.
+    """
+    try:
+        record = {"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"), **record}
+        target = path or ROUTING_LEDGER_PATH
+        os.makedirs(os.path.dirname(target) or ".", exist_ok=True)
+        with open(target, "a") as f:
+            f.write(json.dumps(record) + "\n")
+        print(f"  [Routing] {record.get('verdict')} | labels="
+              f"{record.get('task_type')}/{record.get('data_modality')} | "
+              f"chosen={record.get('chosen_recipe') or 'none'} | "
+              f"oracle={len(record.get('oracle_candidates') or [])} candidate(s)", flush=True)
+    except Exception as e:
+        print(f"  [Routing] Warning: ledger append failed: {e}", flush=True)
+
+
 def append_ledger(record: Dict[str, Any], path: Optional[str] = None) -> None:
     """Append one run record to the dial ledger (JSONL). Never raises — the ledger is
     telemetry; it must not be able to fail a workflow."""

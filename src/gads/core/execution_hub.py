@@ -208,10 +208,28 @@ class ExecutionHub:
             
         return False
 
+    def _attach_usage(self, task_id: uuid.UUID, result: Optional[dict]) -> Optional[dict]:
+        """Stamp the task's accumulated token/cost usage onto its result.
+
+        Done here rather than at each call site so every terminal path is covered — a node
+        that FAILED still spent tokens, and a cost report that silently omits the expensive
+        failures is worse than none. Cumulative across the node's retries (core/usage.py).
+        """
+        try:
+            from gads.core import usage as _usage
+            snap = _usage.snapshot(task_id)
+            if snap:
+                result = dict(result or {})
+                result["usage"] = snap
+        except Exception:
+            pass
+        return result
+
     def complete_task(self, task_id: uuid.UUID, result: dict):
         """Mark a task as completed."""
         task = self.session.get(Task, task_id)
         if task:
+            result = self._attach_usage(task_id, result)
             task.status = "completed"
             task.result_json = result
             self.session.add(task)
@@ -222,6 +240,7 @@ class ExecutionHub:
         """Mark a task as bypassed due to complexity."""
         task = self.session.get(Task, task_id)
         if task:
+            result = self._attach_usage(task_id, result)
             task.status = "bypassed"
             task.result_json = result
             self.session.add(task)
@@ -234,6 +253,7 @@ class ExecutionHub:
         if task:
             task.status = "failed"
             task.error = error
+            result = self._attach_usage(task_id, result)
             if result:
                 task.result_json = result
             self.session.add(task)

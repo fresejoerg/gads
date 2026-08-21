@@ -1,6 +1,6 @@
 ---
 id: tabular_automl.autogluon.deterministic
-version: 1.1.0
+version: 1.2.0
 schema_version: 1
 author: gads-core
 
@@ -96,6 +96,33 @@ dag:
     attached_skills: [autogluon_tabular, visualization_best_practices]
     postconditions:
       - "feature_importance_df is not None"
+
+  - id: diagnostic_curves
+    report:
+      title: ROC and Precision-Recall Curves
+      summary: How the model trades false positives against false negatives, against both baselines.
+    intent: >
+      CLASSIFICATION ONLY — if `problem_type` is 'regression', print that curves do not apply
+      and bind `curve_diagnostics = {}` and `average_precision = float("nan")` instead of
+      plotting anything. Otherwise plot the ROC and precision-recall curves by calling the
+      native:
+        curve_diagnostics = gads_plot_classification_curves(df_test[target_col], predictor.predict_proba(df_test))
+      Do NOT hand-roll the curves. The native handles the binary/multiclass split, the label
+      dtype, the one-vs-rest expansion and the two baselines (the ROC chance diagonal and the
+      PR no-skill line at the positive rate), and writes both figures as Plotly JSON the
+      dashboard renders directly. Bind `average_precision` from the result. Then state, in one
+      or two sentences, what the PR curve says that the ROC curve does not — under class
+      imbalance the ROC baseline is fixed at 0.5 while the PR baseline moves with prevalence,
+      which is the whole reason both are plotted.
+    depends_on: [train_automl_model]
+    worker_tier: T2
+    produces: [curve_diagnostics, average_precision]
+    attached_skills: [visualization_best_practices]
+    skippable_if: "problem_type == 'regression'"
+    fallback_native: gads_plot_classification_curves
+    fallback_call: "curve_diagnostics = gads_plot_classification_curves(df_test[target_col], predictor.predict_proba(df_test)); average_precision = curve_diagnostics.get('average_precision')"
+    postconditions:
+      - "curve_diagnostics is not None"
 
 # ——— GLOBAL INVARIANTS ———
 invariants:

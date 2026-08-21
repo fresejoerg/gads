@@ -62,6 +62,43 @@ def set_local_fallback(mode: str):
 def get_local_fallback() -> str:
     return _LOCAL_FALLBACK
 
+
+# ——— RUN MODE: what a run is FOR ———————————————————————————————————————————————
+# "research"   — model-first. Every node with a native still gets attempted by the model,
+#                and the native is only a post-exhaustion safety net. This is what makes
+#                pass@model meaningful: if the native ran first there would be nothing to
+#                measure. Costs tokens and carries the failed-attempt risks (state drift,
+#                kernel poisoning) on nodes whose answer is invariant anyway.
+# "production" — native-first. A node that declares a native uses it directly and the model
+#                is never asked. Deterministic, reproducible and cheaper on exactly the nodes
+#                where a model adds nothing (one defensible answer), while judgment nodes
+#                that declare no native are still model-generated.
+#
+# The distinction is deliberate: the same node can be worth measuring in a benchmark and
+# worth short-circuiting in a real analysis. See approach_docs/019.
+VALID_RUN_MODES = ("research", "production")
+
+
+def _initial_run_mode() -> str:
+    rm = os.getenv("GADS_RUN_MODE", "").strip().lower()
+    return rm if rm in VALID_RUN_MODES else "research"
+
+
+_RUN_MODE = _initial_run_mode()
+
+
+def set_run_mode(mode: str):
+    global _RUN_MODE
+    mode = (mode or "").strip().lower()
+    if mode not in VALID_RUN_MODES:
+        raise ValueError(f"Unknown run_mode '{mode}'. Valid: {VALID_RUN_MODES}")
+    _RUN_MODE = mode
+    print(f"  [Registry] Run mode set to '{_RUN_MODE}'", flush=True)
+
+
+def get_run_mode() -> str:
+    return _RUN_MODE
+
 # Stages that stay on cloud tiers in hybrid mode. Everything not listed here
 # (Coder execution tasks, CompletenessVerifier, any future stage) goes local.
 HYBRID_CLOUD_STAGES = {"SpecDrafter", "Router", "Planner", "PlanCritique", "Synthesizer", "Critique"}

@@ -215,10 +215,18 @@ def _split_insights(raw: List[Any]) -> tuple:
 
 
 def _fallback_kind(model_used: str) -> Optional[str]:
+    """How the node was satisfied, when it was not the assigned model's own code.
+
+    `native_primary` is deliberately distinct from `native_fallback`: one is policy (a
+    production run never asked the model), the other is a rescue (the model tried and
+    failed). Collapsing them would make a production run look like a run the model failed.
+    """
     if str(model_used).startswith("native_fallback:"):
         return "native"
     if str(model_used).startswith("cloud_fallback:"):
         return "cloud"
+    if str(model_used).startswith("native_primary:"):
+        return "native (by policy)"
     return None
 
 
@@ -268,6 +276,7 @@ def build_sections(tasks: List[Any], skeleton: Optional[List[Dict[str, Any]]] = 
             "error": None,
             "cards": [],
             "note": "",
+            "usage": None,
             "task_id": None,
             "forced_collapsed": bool(report_meta.get("collapsed")),
         }
@@ -291,6 +300,10 @@ def build_sections(tasks: List[Any], skeleton: Optional[List[Dict[str, Any]]] = 
                 "stdout": (res.get("stdout") or "").strip()[-STDOUT_TAIL_CHARS:],
                 "error": task.error,
                 "task_id": str(task.id),
+                # Tokens and spend for this node, summed over every attempt it took
+                # (core/usage.py). None when the node made no LLM call at all — a node
+                # completed by a native fallback, for instance.
+                "usage": res.get("usage"),
             })
 
         sections.append(section)
@@ -360,6 +373,28 @@ def finalize(sections: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         s["collapsed"] = s["forced_collapsed"] or not has_substance
         s["has_substance"] = has_substance
     return sections
+
+
+# Re-exported so the Jinja template can format numbers without importing a module.
+def format_cost_value(cost):
+    from gads.core.usage import format_cost
+    return format_cost(cost)
+
+
+def format_tokens_value(n):
+    from gads.core.usage import format_tokens
+    return format_tokens(n)
+
+
+def run_totals(tasks: List[Any]) -> Dict[str, Any]:
+    """Whole-run token/cost total, including the orchestration stages that are not sections.
+
+    Deliberately wider than the sum of the sections: planning, synthesis and critique are
+    real spend, and a report that totalled only the visible sections would understate what
+    the run cost.
+    """
+    from gads.core import usage as _usage
+    return _usage.aggregate([(t.result_json or {}).get("usage") for t in tasks])
 
 
 def format_for_prompt(sections: List[Dict[str, Any]], max_chars: int = 6000) -> str:
