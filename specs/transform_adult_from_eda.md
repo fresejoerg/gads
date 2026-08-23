@@ -8,7 +8,7 @@ taxonomy:
   modality: [tabular]
   domain: public_sector
   domain_detail: "US census income extract (Adult / UCI)"
-  deliverable: [dataset]
+  deliverable: [dataset_pipeline]
   validation: [data_quality]
 
 ---

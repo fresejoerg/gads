@@ -1,0 +1,27 @@
+{
+  "benchmark_id": "mortgages_gi_bill_v1",
+  "spec_file": "mortgages_gi_bill.md",
+  "recipe_id": null,
+  "external_source": "causaldata `mortgages` (Fetter 2013), via NickCH-K/causaldata (MIT) — external anchor: mortgage subsidies raised mid-century home-ownership rates, no scalar gold",
+  "reference_runs": {
+    "cloud": "99c1429a-9275-4f7e-a3a3-bdff5d167846"
+  },
+  "local_attempt": {
+    "project": "4a765cf1-a531-4735-a180-902e9f1ab2d9",
+    "outcome": "total failure — no data ever processed, all 3 workflow replan attempts exhausted",
+    "note": "Never got past dataset loading. Step 1 (load + apply mandatory sample constraint) itself exceeded the 600s sandbox limit on the first workflow attempt; Step 2 (gads_causal_estimate_ate) also timed out. The workflow replanned twice more (MAX_WORKFLOW_ATTEMPTS=3) — attempt 2 succeeded at loading the full 214,144x6 dataframe but never got a causal estimate before running out of replans; attempt 3's remaining steps are marked 'Workflow exhausted max planning attempts; task never ran.' No estimate, no artifacts beyond the loaded dataframe, ran roughly 2 hours 12 minutes end to end (launched ~03:22, resolved ~05:34) with each retry costing ~10-11 minutes because nothing sampled the 214,144-row dataset down before the native ATE call. Root cause: this spec's data (unlike every other spec in the batch) is large enough that an unsampled native call alone approaches the 600s sandbox timeout, so the model never got a fast-enough loop to iterate on the actual estimation logic. This is a resource/budgeting failure, not a reasoning failure — notably, even GADS's own CLOUD reference run for this same spec hit one timeout on the identical 214,144-row dataset during a robustness step (see notes.md), suggesting the row count itself is a systemic risk for this spec regardless of which model runs it, just one cloud recovered from with tokens/tries to spare and local did not. See notes.md."
+  },
+  "metrics": {
+    "estimate": {
+      "value": 0.2846,
+      "exact": false,
+      "tol": 0.11,
+      "note": "GADS canonical from cloud reference run (drafted lane, Fuzzy RDD / 2SLS using GI-bill eligibility as an instrument for actual veteran status `vet_wwko` on the `qob_minus_kw` cutoff): baseline LATE = 0.2846 (p<0.0001; first-stage -0.1923, t=-43.91; reduced-form -0.0547, t=-13.02), refined to 0.3938 (SE=0.0126) after adding race and state-of-birth fixed effects. Both positive and large — matches the published direction (Fetter 2013: subsidy eligibility raised home ownership). Range recorded via tol=0.11 to span both specifications rather than picking one arbitrarily; not an external scalar match since none exists."
+    }
+  },
+  "artifacts": {
+    "required": ["final_dashboard.html", "research_report.md", "workflow_execution.py"],
+    "forbidden_stdout": ["mock data", "simulating data"]
+  },
+  "methodology": {}
+}

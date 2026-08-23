@@ -6,11 +6,11 @@ target_column: class
 recipe_id: tabular_eda.descriptive.standard
 taxonomy:
   intent: descriptive
-  task: [eda]
+  task: [analytics.exploratory]
   modality: [tabular]
   domain: public_sector
   domain_detail: "US census income extract (Adult / UCI)"
-  deliverable: [report, dataset]
+  deliverable: [report_narrative, dataset_pipeline]
   validation: [data_quality]
 
 ---

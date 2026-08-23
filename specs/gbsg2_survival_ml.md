@@ -10,7 +10,7 @@ taxonomy:
   modality: [tabular]
   domain: healthcare
   domain_detail: "GBSG2 breast cancer trial; predict individual recurrence risk with censoring-aware evaluation"
-  deliverable: [model_artifact, diagnostic_report]
+  deliverable: [model_artifact, report_narrative]
   validation: [holdout_metric]
 ---
 Predict which breast-cancer patients are at highest risk of early recurrence, and measure

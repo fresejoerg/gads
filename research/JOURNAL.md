@@ -693,6 +693,306 @@ diagnostics exactly when they matter (`b989a52`).
 Coder's hardcoded `local_model` default — so it ignores `routing_mode` entirely; in `cloud` mode
 a user silently gets the local engine. Not yet filed.
 
+## 2026-08-21 — `[build]` One controlled vocabulary, and what measuring it actually showed
+
+The Router's labels, recipe `applies_when` and spec `taxonomy:` blocks were three vocabularies
+naming the same things, and nothing reconciled them (approach_docs/024 §1). The Router's schema
+admitted 9 task terms; `taxonomy.yaml` already carried a 45-term crosswalk and a 24-family task
+tree. **11 of 29 recipes declared an `applies_when.task_type` that no Router label could equal** —
+survival (both), recommendation, LTR, causal discovery, anomaly detection, ordinal, transform and
+all three analytics suites — so the coverage oracle could never confirm them, and `unmapped_task_types`
+was non-empty for a third of the library.
+
+Everything is now derived from `taxonomy.yaml`: the schema field descriptions, the prompt's
+vocabulary blocks (`render_task_vocabulary`), the labels on the way out (`canonical_task` /
+`canonical_modality`), the oracle's comparison (`tasks_overlap` — a bare family covers its
+subtypes), and the SampleBudget training set (`training_task_families`). The vocabulary gained
+`analytics.exploratory`, a `data_preparation` family, a `data_quality` regime and the six terms
+recipes declared that nothing mapped. Six spec blocks were invalid; all 57 now validate.
+`scripts/test_vocabulary.py` asserts the whole chain with no LLM calls.
+
+**Second-order damage the drift was doing, beyond routing.** `intent.task_type` also feeds run
+taxonomy tagging and the SampleBudget threshold. A survival, ranking or recommendation run whose
+label fell outside the enum was not in `_TRAINING_TASK_TYPES`, so it got the **200K analysis row
+cap instead of the 50K training one** — the guard silently inverted for exactly the recipes most
+likely to time out.
+
+**Seven recipes said "never match" in prose that nothing evaluated.** `_anti_signals_fire` handles
+`objective_contains` and exact tag equality; a `routing:` key holding an English sentence fell
+through both, so the dial arms and AAH rungs were offered to the Router *and* returned as oracle
+candidates. Now `applies_when.pin_only: true` (legacy prose still honored), withheld from the
+agent catalogue and from the oracle.
+
+### The measurement, and three claims it killed
+
+`gemini-3.7-flash` — the baseline's Router — went down mid-session (a 14-token prompt hung past
+45s while haiku answered in 0.94s through the same proxy). Both arms were re-run on
+`claude-haiku-4.5` instead: the pre-change arm from a detached worktree at `f629e86`, the
+post-change arm from the working tree, then **both rescored by one scorer** with ground truth,
+canonicalization and the pin-only exclusion taken from the current tree. Two runs per arm.
+
+| | BEFORE (`f629e86`) | AFTER |
+|---|---|---|
+| task label correct | 90.7% / 88.9% | 94.4% / 94.4% |
+| modality correct | 92.6% / 92.6% | 98.1% / 96.3% |
+| selection (routable pins) | 19/19 | 19/19 |
+| pin-only instrument selected | **3** | **0** |
+
+**What the same-model comparison refuted.** (a) The selection improvement I expected does not
+exist — both arms select 100% correctly, and the old harness's 47.6% was entirely the
+arm-variant miscount. The Router was never getting those wrong. (b) The "8 specs classify as
+`unknown`" evidence is Gemini-specific: on haiku the old enum produced **zero** unknowns, because
+the model simply emitted terms outside its own declared enum (`recommendation`, `survival_ml`,
+`data_transformation`) that happened to be crosswalk keys. The enum was not blocking a capable
+model; it was being quietly violated by one. (c) The change was not a pure win — the richer
+vocabulary introduced a real misroute, `qrdata_hospital_treatment_d0` going from
+`causal_inference` + DoWhy to `regression.survival` + Cox, because adding survival to the menu
+created an attractive wrong answer for a treatment-effect objective. Remedied in the prompt
+(survival covers ML risk prediction *and* yields to causal when the question is about a
+treatment's effect); both targeted regressions cleared on re-run.
+
+**The noise floor, which is the methodological finding.** Two runs of the *identical* pre-change
+code disagree on 1 task label and **3 recipe choices** (5.6 pp) — `aah_rung2_star` is unstable in
+both arms. So a single-run selection number is not trustworthy better than ±5.6 pp, and the
+label gain (+2 to +3 specs, with both post-change runs landing identically at 51/54) is real but
+modest. Any future routing claim needs repeats; the harness has been reporting single runs.
+
+**Two harness defects found while measuring, both of which had corrupted numbers already
+reported.** `asyncio.TimeoutError` stringifies to `""`, and the scorer's `if r.get("error")`
+treated that as success — six transport failures were being counted as Router misclassifications.
+And `task`/`modality` are many-valued facets scored on their first value only, so `amlb_segment`
+(`[image, tabular]`, image-region features flattened into a table) had its correct `tabular`
+marked wrong. Both fixed; a circuit breaker now aborts after 5 consecutive failures rather than
+logging an outage as a result — it fired correctly on an Anthropic `InternalServerError` burst at
+spec 40 and wrote nothing.
+
+**Open:** the 23 arm-variant pins are excluded from selection scoring rather than scored against
+the arm the objective implies, which is right but leaves those specs unmeasured. Re-running both
+arms on `gemini-3.7-flash` when it recovers would confirm the label gain holds across models —
+the numbers above are haiku-only.
+---
+
+## 2026-08-21 — `[build]` A golden-task library: sourced, not yet validated
+
+Second piece of work this session (approach_docs/026): a library of "golden reference"
+specs — real datasets, an open hypothesis question, **no methodology named anywhere**,
+`disable_recipes: true` so the Router/Planner draft freely. Distinct from every other spec
+in `specs/`: 54 of the 60 pre-existing files name a method in the title or objective
+(`"...RFM + K-Means"`, `"Using Bayesian inference..."`) — correct for D3+ recipe-realization
+benchmarks, useless for measuring what the Planner *chooses*. The one prior exception,
+`qrdata_hospital_treatment_d0.md`, was the template: it already proves the shape works and
+is gradeable.
+
+**Sourced two ways, deliberately kept separate in what "ground truth" means.**
+
+QRData (10 new specs: LaLonde job training, billboard→deposits DiD, Prop 99 tobacco tax,
+NJ/PA minimum wage, growth-mindset RCT, drinking-age mortality RDD, trainee-earnings
+matching, India female-reservation policy, UK MPs' wealth RDD, Angrist-Krueger schooling
+IV) — **CC BY-NC 4.0**, confirmed by fetching the repo's actual LICENSE file rather than
+assuming (the sibling survey had flagged this unconfirmed). Each has QRData's own gold
+scalar as an external anchor. 406 of 411 questions remain untapped; ~200 more are
+causal-*discovery* shaped ("which direction is causal") rather than effect-estimation and
+were skipped as a different task type.
+
+causaldata / NickCH-K (6 new specs: Castle Doctrine self-defense laws, active-choice organ
+donation nudge, Chinese farmers' insurance take-up, Malawi HIV-incentive RCT, GI Bill
+mortgage subsidies, John Snow's 1854 cholera map) — **MIT**, new to the project (not in the
+2026-07-09 sibling survey at all). Three source files were Stata `.dta`; converted losslessly
+via `pandas.read_stata`, verified same row/column counts before and after.
+
+**The honest finding this pass produced: causaldata has no scalar ground truth, and pretending
+otherwise would be the same mistake as the routing-eval tolerance-fabrication caught earlier
+this session.** QRData is a graded benchmark with a paper-derived gold number; causaldata is
+*textbook example data* — there is no canonical scalar anywhere upstream. Every causaldata
+`expected.json.metrics` is empty by design; `notes.md` instead records the published paper's
+*directional* finding (Cheng & Hoekstra: Castle Doctrine laws → ~8% increase in homicide;
+Thornton: any cash incentive roughly doubled HIV-result pickup from a 34% baseline). Writing
+in a fabricated tolerance band around a number nobody had produced would have looked more
+complete and been less true.
+
+**One spec (`ak91_schooling_wages`) documents its own trap.** The QRData gold (8.53%) is
+specifically a 2SLS estimate using quarter-of-birth as an instrument; naive OLS is confounded
+by ability bias and gives a different, larger number. The spec deliberately doesn't name the
+instrument — whether a run even recognizes the identification problem, not just whether it
+hits the number, is part of what this one measures.
+
+**`castle_doctrine_homicide` trimmed 139 upstream columns to 17.** Cheng & Hoekstra's original
+regression carries region-by-quarter fixed effects and per-state linear time trends —
+regression plumbing that would hand the identification strategy away through column names
+alone, the same failure mode as naming the method in the objective text.
+
+**All 16 pass `scripts/test_vocabulary.py`** (taxonomy blocks resolve — the guard built
+earlier this session caught nothing wrong, which is the point of having it) and every
+dataset was reloaded post-write to confirm no truncation from the copy/convert step.
+
+**Explicitly not done: no reference runs.** Every `expected.json` here is sourced-but-
+unvalidated — QRData's tolerance bands are provisional placeholders around an external
+number, not derived from observed GADS run variance, and every notes.md says so. Launching
+reference runs and tightening against them is the immediate next step, same discipline
+`research/benchmarks/README.md` already requires everywhere else in this repo.
+
+---
+
+## 2026-08-21 — `[method]` The golden-task batch, validated — and what broke while validating it
+
+Third piece of work this session: reference runs for all 16 golden hypothesis-investigation
+specs sourced earlier (approach_docs/026 §5), cloud mode, `Task.assigned_to` verified on
+every launch. Two sections, deliberately separate — one is evidence about GADS, the other
+is evidence about the local stack this session ran on top of.
+
+### The findings
+
+**Exact/near-exact matches, on a design that names no method.** `billboard_deposits`
+(6.52 = gold 6.52), `women_reservation_water` (9.2524 ≈ gold 9.25, plus an unprompted
+2SLS structural estimate nobody asked for), `learning_mindset_achievement` (AIPW
+0.3925 / LinearDML 0.3955 ≈ gold 0.39, full refutation checks), `thornton_hiv_incentive`
+(ATE 0.4395, matching "34% baseline roughly doubled," plus a dose-response and a distance
+heterogeneity finding nobody asked for), `mortgages_gi_bill` (Fuzzy RDD/2SLS, correct
+sign, unprompted instrument recognition). Five specs where a freely-drafted plan reached
+the right number by a route nobody dictated — the entire premise of building this library
+D0 rather than D3.
+
+**The framing/scale divergences are the actual research payoff of this pass, not noise
+to average away.** `minwage_employment`: GADS modeled employment as a level, the gold is
+a proportion — different outcome quantities. `prop99_cigarette_sales`: the *same run's*
+Synthetic Control estimate (-41.71, matching the gold's direction) and its own TWFE
+regression (+7.68) disagreed on SIGN, and its own narrative never noticed. `drinking_age_mortality`:
+right direction, ~77x the gold's magnitude — the spec never restricted the RDD bandwidth
+the way the gold's methodology did, and D0 specs, correctly, don't tell it to.
+`mps_wealth`: identical method to the gold (sharp RDD) but reported on a log-points scale
+instead of a wealth level. `trainee_program_earnings`: a genuine sign flip — regression
+adjustment (-1021.94) vs. the gold's matching estimator (+2457.89) — on the exact class of
+tiny confounded dataset the Dehejia-Wahba/LaLonde literature is *about*, reproducing a
+known instability rather than exhibiting a new one. `social_insurance_takeup`: correct
+but shallow — found the right near-zero direct effect, never touched the source paper's
+actual social-network-spillover story, because nothing in the column list hinted at it.
+
+**One reproducible failure**: `jobs_lalonde_training` hit the identical
+`'numpy.ndarray' object has no attribute 'iloc'` error twice, the second time surviving a
+full 5-model escalation ladder before giving up. Real, repeatable weak spot on a
+17-column undifferentiated covariate block — not a fluke worth a third retry.
+
+**One recognized-but-unexecuted trap, and probably the single most important result in
+the batch**: `ak91_schooling_wages` correctly identified, unprompted, that it needed an
+instrument (`linearmodels.IV2SLS`, no instrument named anywhere in the spec) — then
+failed to execute the 2SLS across the whole model ladder, gave up, and shipped the
+confounded naive OLS (6.73%) with a single caveat sentence buried in the prose
+("2SLS remains unexecuted"). Knowing the right method and failing to deliver it, while
+still producing a plausible-looking headline number, is a more dangerous failure mode
+than either outright failure or not recognizing the problem — a reader who skims gets
+the wrong answer with no obvious red flag.
+
+**One likely self-inflicted underpowering**: `castle_doctrine_homicide` got the sign
+right but lost significance — plausibly because trimming the source's 139 columns to 17
+(done to avoid leaking the identification strategy through fixed-effect column names)
+also removed the region-quarter FEs and state trends the original paper's power depends
+on. A real tension in *how to build these benchmarks*, not a finding about the model.
+
+`snow_cholera_water` (4 rows, the easiest case) passed as a sanity check. All 16
+`expected.json` files now carry a `reference_runs.cloud` entry (or, for the one failure,
+an honest record of two failed attempts); every number is n=1 and every tolerance is
+provisional pending a second run.
+
+### What broke while measuring it (infra, kept separate on purpose)
+
+Three distinct incidents, none of them evidence about GADS:
+
+1. **DB connection-pool exhaustion**, first launching all 13 remaining specs at once
+   (`QueuePool limit of size 5 overflow 10 reached` — untuned SQLAlchemy defaults), then
+   recurring at just 3-way concurrency — the recurrence at low concurrency is the
+   important part; it points at a slow leak in a background loop rather than a pure
+   oversubscription ceiling, and neither `pool_size`/`max_overflow` nor the leak were
+   fixed this session.
+2. **A full livelock** followed: 0% CPU, zero log growth, zero task progress across two
+   10-minute windows, nothing ever marked `failed`. GADS has no path to resume a stuck
+   project — the fix was a backend restart, which permanently abandoned every workflow
+   that was mid-flight. Switched to one-project-at-a-time launches afterward specifically
+   to make this diagnosable (a single stuck heartbeat is legible; thirteen interleaved
+   ones are not).
+3. **`routing_mode` reverts to the `.env` default on every restart** (already documented
+   in `CLAUDE.md`, re-learned expensively): the post-livelock restart silently reset
+   cloud mode back to local, and a batch of 4 specs launched and executed entirely on
+   `local_model` before anyone checked `Task.assigned_to` rather than trusting `/config`'s
+   self-report. That batch was discarded, not written up, and relaunched clean.
+
+All three are now in `project_local_stack_gotchas.md` (items 3 and its 2026-08-21
+update) so a future session inherits the lesson instead of re-discovering it at the same
+cost. Recommended, not done: give the DB engine explicit pool sizing and audit the
+executor's background loops for a session that isn't being closed.
+
+## 2026-08-22 — `[method]` Local vs. cloud on the golden batch: not uniformly worse, differently dangerous
+
+Re-ran all 16 golden specs from the 2026-08-21 cloud pass under `routing_mode=local`
+(`local_model` only, no escalation ladder) to get a genuine local-vs-cloud comparison on
+identical specs. Full write-up: `approach_docs/026_golden_hypothesis_task_sourcing.md`
+§5c; per-spec detail in each `research/benchmarks/<spec>_v1/{expected.json,notes.md}`.
+
+### What it showed
+
+Local is not uniformly worse than cloud. `jobs_lalonde_training` succeeded outright
+(ATE 0.0757 vs. gold 0.074) where BOTH cloud attempts failed identically on
+`'numpy.ndarray' object has no attribute 'iloc'` — though the run's own 95% CI is
+degenerate (`[0,0]`, a broken bootstrap the Synthesizer misread as reassuring precision,
+not a genuine second win). `trainee_program_earnings` matched cloud to 4 decimal places
+(-1021.9390 vs. -1021.94) — both engines called the identical deterministic native
+`gads_causal_estimate_ate`, proof that when the calling code correctly identifies the
+treatment/outcome/confounder roles, the computation itself is perfectly reproducible
+regardless of which LLM wrote the surrounding code.
+
+But three results — `prop99_cigarette_sales`, `castle_doctrine_homicide`, and
+`organ_donation_nudge` — are the most important finding in this pass, and arguably in
+the whole golden-batch effort so far: all three produced misidentified or inverted-sign
+causal estimates via that same native ATE call, reported with full confidence, and ALL
+THREE passed their own placebo/subset refutation checks with no visible warning.
+`castle_doctrine_homicide`'s -0.1973 and `organ_donation_nudge`'s +0.1327 are the exact
+opposite sign from both the published literature and GADS's own cloud run on the
+identical spec. `prop99_cigarette_sales` silently substituted the wrong treatment
+variable (`after_treatment` instead of `california`), measuring a nationwide trend
+instead of a state-specific policy effect. The mechanism is the same every time: the
+native function's arithmetic is exactly correct (as `trainee_program_earnings` proves),
+but locally-generated code sometimes wires the wrong variables into it, and refutation
+checks validate specification *robustness*, not specification *correctness* — a model
+can misidentify the causal contrast and still sail through every check it runs on
+itself. Worth naming as its own failure class: **confidently wrong, refutation-passing**.
+Related: `ak91_schooling_wages` used its own instrument as the treatment, producing an
+implausible 39% return with no caveat at all — more dangerous than cloud's honest "2SLS
+remains unexecuted" precisely because it looks methodologically complete.
+
+The remaining failures are a varied catalogue, not a single pattern: a Planner replan
+whose JSON exceeded `max_tokens` and halted the whole project rather than just failing
+the task (`billboard_deposits`); hallucinated nonexistent APIs
+(`women_reservation_water`, `organ_donation_nudge`'s second failure mode); a
+capability/complexity mismatch on trivial 4-row data (`snow_cholera_water`); the
+same-reason-stop retry guard failing to fire on an identically-repeating error twice
+(`minwage_employment`, `social_insurance_takeup`) while firing correctly elsewhere
+(`thornton_hiv_incentive`); a data-plumbing bug where an upstream step silently dropped
+a column a downstream step needed (`mps_wealth`); and a resource-budgeting failure
+distinct from all of the above — `mortgages_gi_bill` never sampled its 214,144-row
+dataset down before an expensive native call, so every retry cost ~10-11 minutes,
+exhausting all 3 workflow replans over ~2h12m with zero artifacts produced (notably,
+GADS's own cloud run on the identical spec hit the same unsampled-dataset timeout once
+and recovered only because it had a faster model and replan budget to spare).
+
+**Overall verdict**: the efficiency-boundary question this platform exists to measure
+isn't just "does local finish the task" — it's "when local is wrong, does it *know* it's
+wrong." Cloud's failures in the 2026-08-21 pass were mostly visible: crashes, or explicit
+caveats like ak91's "2SLS remains unexecuted." Local produced multiple silent,
+confidently-wrong, refutation-passing results (three inverted-sign) that would mislead a
+researcher with no cloud run or original paper to check against. On this evidence, the
+answer is usually no.
+
+### What broke while measuring it (infra, kept separate on purpose)
+
+Two operational footnotes, neither evidence about GADS's capability: an external
+systemd `--user` session process was found periodically and harmlessly attempting to
+restart the backend, failing on the port-8001 collision, throughout the pass —
+investigated, confirmed unrelated, no action taken. And `backend.log` turned out to be
+stdout-buffered rather than line-buffered once redirected to a file — it can sit frozen
+for 10+ minutes while the process is genuinely alive and working, making DB heartbeat
+freshness and the sandbox container's own access log (`docker logs sandbox`) the
+reliable liveness signals, not log-file growth or mtime. Worth remembering for future
+long-running-workflow monitoring.
+
 ---
 
 *Add entries above this line. Keep the evidence discipline: UUID or it didn't happen.*

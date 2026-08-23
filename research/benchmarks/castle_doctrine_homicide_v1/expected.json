@@ -1,0 +1,27 @@
+{
+  "benchmark_id": "castle_doctrine_homicide_v1",
+  "spec_file": "castle_doctrine_homicide.md",
+  "recipe_id": null,
+  "external_source": "causaldata `castle` (Cheng & Hoekstra 2013), via NickCH-K/causaldata (MIT) — external anchor is the published finding (direction + significance), not a scalar",
+  "reference_runs": {
+    "cloud": "450b37f1-a37e-4507-bd43-b1b4da40f132"
+  },
+  "local_attempt": {
+    "project": "214c60c4-afaa-4d15-9549-57ee6502b5e7",
+    "outcome": "SIGN CONTRADICTION — confidently reported, passes its own refutation checks",
+    "note": "Local's ATE is -0.1973, reported as 'a statistically significant reduction in homicide rates' — the OPPOSITE sign from both the published finding (Cheng & Hoekstra 2013: laws INCREASE homicide ~8%) and GADS's own cloud reference run on this identical spec (+0.1057). Placebo (0.0163) and subset (-0.1939) refutation checks both 'passed,' lending false confidence — those checks validate specification robustness, not whether the sign/direction is right. This is the second instance in this local-mode pass (after prop99_cigarette_sales) of a confidently-wrong, refutation-checked result with no visible warning sign. See notes.md."
+  },
+  "metrics": {
+    "estimate": {
+      "value": 0.1057,
+      "exact": false,
+      "tol": null,
+      "note": "GADS canonical from cloud reference run (drafted lane, TWFE DiD with state+year fixed effects, clustered SEs, poverty/unemployment/youth-demographic controls): +0.1057 homicides per 100,000, p=0.6037 — NOT statistically significant. The published finding (Cheng & Hoekstra 2013) is a significant ~8% increase. Same direction (positive) but the GADS run finds no significant effect, likely because this benchmark's CSV was deliberately trimmed from the source's 139 columns to 17 (dropping the region-by-quarter fixed effects and state-specific linear time trends the original paper's precision depends on) — see notes.md for a self-critical note on that trimming choice."
+    }
+  },
+  "artifacts": {
+    "required": ["final_dashboard.html", "research_report.md", "workflow_execution.py"],
+    "forbidden_stdout": ["mock data", "simulating data"]
+  },
+  "methodology": {}
+}

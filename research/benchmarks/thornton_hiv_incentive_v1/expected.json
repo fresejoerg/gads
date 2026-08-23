@@ -1,0 +1,27 @@
+{
+  "benchmark_id": "thornton_hiv_incentive_v1",
+  "spec_file": "thornton_hiv_incentive.md",
+  "recipe_id": null,
+  "external_source": "causaldata `thornton_hiv` (Thornton 2008), via NickCH-K/causaldata (MIT) — external anchor: 34% baseline pickup, any incentive roughly doubled it",
+  "reference_runs": {
+    "cloud": "46083e66-2888-41c0-b5b2-2f7422c95f85"
+  },
+  "local_attempt": {
+    "project": "4e55b6eb-9577-4223-8cd5-9d0d1375f4b5",
+    "outcome": "no estimate produced — outright timeout failure",
+    "note": "Causal effect estimation (propensity score matching / DiD) exceeded the 600s sandbox execution limit on both attempts; the adaptive retry loop's same-reason-stop guard correctly fired this time ('Same failure reason twice (Timeout) — stopping retries after 2 attempt(s)') and aborted the task rather than looping further. Only exploratory work survived: dataset load + sample constraint (N=100 of 4,820 rows), median/mode imputation, and five confounder/outcome visualizations (age, distance, HIV status, incentive amount vs. pickup). No ATE, no dose-response, no heterogeneity analysis — the report is explicit and honest about what failed ('critical execution failures... prevented the completion of core causal inference tasks'), unlike the confidently-wrong sign-flip failures seen elsewhere in this local-mode pass. This is a visible, self-reported failure, not a silent one. See notes.md."
+  },
+  "metrics": {
+    "estimate": {
+      "value": 0.4395,
+      "exact": false,
+      "tol": 0.05,
+      "note": "GADS canonical from cloud reference run (drafted lane, DoWhy + multivariable IPW regression, village-clustered SEs): ATE = 0.4395 (95% CI [0.3973, 0.4817]) — closely consistent with the external anchor (34% baseline, roughly doubled by any incentive implies an effect in the same ballpark). Backed by unprompted extras: a dose-response analysis (+17.71pp per incentive unit) and heterogeneity analysis showing the effect is stronger for people living further from the testing center (distance x incentive interaction +0.0141) — a substantively sensible finding nobody asked for."
+    }
+  },
+  "artifacts": {
+    "required": ["final_dashboard.html", "research_report.md", "workflow_execution.py"],
+    "forbidden_stdout": ["mock data", "simulating data"]
+  },
+  "methodology": {}
+}

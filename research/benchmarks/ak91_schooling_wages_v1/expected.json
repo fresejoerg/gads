@@ -1,0 +1,27 @@
+{
+  "benchmark_id": "ak91_schooling_wages_v1",
+  "spec_file": "ak91_schooling_wages.md",
+  "recipe_id": null,
+  "external_source": "QRData ak91.csv (Causal Inference for the Brave and True, ch.8), gold IV estimate (CC BY-NC 4.0, xxxiaol/QRData) — external anchor, no GADS recipe pinned (drafted lane by design)",
+  "reference_runs": {
+    "cloud": "8ed41bd2-b0be-41c4-8a6a-c3ffb5a4cd49"
+  },
+  "local_attempt": {
+    "project": "b797c4b8-c8cd-461e-8a59-8697915df977",
+    "outcome": "INSTRUMENT-TREATMENT CONFLATION — a third, more silent failure mode than cloud's",
+    "note": "Local never attempted 2SLS/IV at all (no mention of an instrument, first stage, or linearmodels anywhere in the run). It instead built a binary 'born in Q4' flag and used THAT flag directly as the treatment_col in a native ATE call against log_wage — substituting the instrument for the treatment itself, never touching years_of_schooling as a variable in the estimation. Result: 0.3920, reported with full confidence as 'the effect of an additional year of schooling on log wage' — an economically implausible ~39% return (no credible schooling-returns estimate is anywhere near this), and unlike cloud's honest '2SLS remains unexecuted' caveat, this report carries NO acknowledgment that a valid instrument/treatment distinction was never made. Worse than cloud's fallback because it looks methodologically complete. See notes.md."
+  },
+  "metrics": {
+    "estimate": {
+      "value": 0.0673,
+      "exact": false,
+      "tol": null,
+      "note": "GADS canonical from cloud reference run — but this is the CONFOUNDED NAIVE OLS estimate (6.73% return to schooling, fixed effects on birth year/state), NOT the IV-corrected causal estimate the gold (8.53%) represents. The run attempted Two-Stage Least Squares via linearmodels.IV2SLS (recognizing the identification problem unprompted, exactly as this spec was designed to test) but the IV implementation failed repeatedly across the full model escalation ladder and was abandoned; the report explicitly states '2SLS remains unexecuted.' Not scored against a tolerance against the IV gold — it is not attempting to answer the same question. See notes.md; this is the predicted trap this spec was sourced to test, and it fired."
+    }
+  },
+  "artifacts": {
+    "required": ["final_dashboard.html", "research_report.md", "workflow_execution.py"],
+    "forbidden_stdout": ["mock data", "simulating data"]
+  },
+  "methodology": {}
+}

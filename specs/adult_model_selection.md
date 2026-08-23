@@ -11,7 +11,7 @@ taxonomy:
   modality: [tabular]
   domain: public_sector
   domain_detail: "US census income (OpenML adult / AMLB)"
-  deliverable: [model_artifact, report]
+  deliverable: [model_artifact, report_narrative]
   validation: [holdout_metric]
 
 ---

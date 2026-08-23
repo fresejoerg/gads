@@ -1,0 +1,33 @@
+{
+  "benchmark_id": "prop99_cigarette_sales_v1",
+  "spec_file": "prop99_cigarette_sales.md",
+  "recipe_id": null,
+  "external_source": "QRData smoking2.csv (Causal Inference for the Brave and True, ch.25), gold DiD-ATT (CC BY-NC 4.0, xxxiaol/QRData) — external anchor, no GADS recipe pinned (drafted lane by design)",
+  "reference_runs": {
+    "cloud": "93b4cea9-074c-4340-9fc4-2ea684ad796b"
+  },
+  "local_attempt": {
+    "project": "e06bf428-74b4-4fcf-b84a-277df2b64472",
+    "outcome": "SILENT MISIDENTIFICATION — confidently wrong, not caught by its own refutation checks",
+    "note": "The local run called the native gads_causal_estimate_ate(treatment_col='after_treatment', outcome_col='cigsale', ...) — never using `california` as the treatment variable or as part of a group interaction anywhere. This drops the entire DiD comparison-group logic and measures the NATIONWIDE secular decline in cigarette sales across all 39 states, not California's policy-specific effect. Result: ATE=-6.3108, reported with full confidence, a chart, AND passing placebo (0.0961) and subset (-6.2787) refutation checks — because those checks validate robustness of a given specification, not whether the specification identifies the right causal contrast. This is arguably the single most important finding across the whole local-mode pass: a plausible-looking, internally-validated, wrong answer, with no signal in the report that would tip off a reader. See notes.md."
+  },
+  "metrics": {
+    "estimate": {
+      "value": -41.71,
+      "exact": false,
+      "tol": 15.0,
+      "note": "GADS canonical from cloud reference run (drafted lane, Synthetic Control Method, non-negative-least-squares donor weighting): -41.71 packs per capita/year post-1989. Same DIRECTION as the QRData gold (-27.35, same sign, larger magnitude) — the run independently concluded Prop 99 reduced sales, matching the substantive finding though not the exact number. Wide provisional tolerance reflects that Synthetic Control and QRData's restricted 3-variable DiD are genuinely different estimators, not the same method with sampling noise."
+    },
+    "twfe_did_coefficient": {
+      "value": 7.6829,
+      "exact": false,
+      "tol": null,
+      "note": "The SAME reference run ALSO fit a Two-Way Fixed Effects DiD regression (state + year FE, plus economic covariates) and got a POSITIVE, statistically significant coefficient (SE=2.2706, p=0.0007) — opposite sign from both the Synthetic Control estimate above and the QRData gold. Recorded as-is, unreconciled: the run's own narrative conclusion ('substantial decline') treats Synthetic Control as authoritative and does not flag the TWFE sign flip. Plausible explanation not yet verified: TWFE's added covariates and fixed effects estimate a materially different specification than QRData's DiD, which was restricted to exactly `cigsale`, `california`, `after_treatment` — same pattern as the minwage_employment divergence (adding structure changes the effective estimand). Not scored against `tol` (null) — this is a flagged inconsistency for follow-up, not a validated metric."
+    }
+  },
+  "artifacts": {
+    "required": ["final_dashboard.html", "research_report.md", "workflow_execution.py"],
+    "forbidden_stdout": ["mock data", "simulating data"]
+  },
+  "methodology": {}
+}

@@ -10,7 +10,7 @@ taxonomy:
   modality: [tabular]
   domain: healthcare
   domain_detail: "GBSG2 breast cancer trial; recurrence-free survival; interpretable hazard ratios + PH assumption test"
-  deliverable: [estimate, diagnostic_report]
+  deliverable: [estimate, report_narrative]
   validation: [statistical_inference]
 ---
 Which factors drive time to breast-cancer recurrence, and how defensible is the model?

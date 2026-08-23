@@ -1,0 +1,27 @@
+{
+  "benchmark_id": "mps_wealth_v1",
+  "spec_file": "mps_wealth.md",
+  "recipe_id": null,
+  "external_source": "QRData MPs.csv (Quantitative Social Science 4.3.4), gold estimate (CC BY-NC 4.0, xxxiaol/QRData) — external anchor, no GADS recipe pinned (drafted lane by design)",
+  "reference_runs": {
+    "cloud": "104379eb-982b-4acf-86ac-bb360b45221a"
+  },
+  "local_attempt": {
+    "project": "7dcf695b-a190-4de2-8557-64bf6277a594",
+    "outcome": "no estimate produced",
+    "note": "A Contract Violation ('margin' column not found) at step 7 suggests an earlier step dropped or renamed the column before a downstream step needed it — a state-tracking/data-plumbing failure, not a reasoning one. A separate step (creating the win/lose treatment indicator) failed twice more on syntax errors. Never reached causal estimation; only an exploratory scatter chart was produced. See notes.md."
+  },
+  "metrics": {
+    "estimate_log_points": {
+      "value": 0.842,
+      "exact": false,
+      "tol": null,
+      "note": "GADS canonical from cloud reference run (drafted lane, sharp RDD, local-linear at bandwidth h=0.10 with covariate-smoothness falsification checks): +0.842 LOG net-wealth points (~132% increase), p=0.089, robust across bandwidths/polynomial order/controls. Same identification strategy (sharp RDD) as the gold, but reported on a different SCALE — the gold (255051) is an absolute wealth-level change; this run stayed in log points and never back-transformed to a level. Not directly comparable without knowing the baseline wealth this run assumed (not reported); not scored against a tolerance. See notes.md."
+    }
+  },
+  "artifacts": {
+    "required": ["final_dashboard.html", "research_report.md", "workflow_execution.py"],
+    "forbidden_stdout": ["mock data", "simulating data"]
+  },
+  "methodology": {}
+}

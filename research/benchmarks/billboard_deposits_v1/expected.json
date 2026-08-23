@@ -1,0 +1,27 @@
+{
+  "benchmark_id": "billboard_deposits_v1",
+  "spec_file": "billboard_deposits.md",
+  "recipe_id": null,
+  "external_source": "QRData billboard_impact.csv (Causal Inference for the Brave and True, ch.13), gold DiD estimate (CC BY-NC 4.0, xxxiaol/QRData) — external anchor, no GADS recipe pinned (drafted lane by design)",
+  "reference_runs": {
+    "cloud": "e82d9d02-7d1d-4b97-8bc5-144e8a42dd2c"
+  },
+  "local_attempt": {
+    "project": "7d3c6732-5b39-4d42-a9a9-38c6bca2f2ad",
+    "outcome": "HALTED — fatal system error",
+    "note": "A Planner replan's structured-output JSON exceeded the configured max_tokens ceiling (Instructor retry exhaustion: 'output is incomplete due to a max_tokens length limit'), and the failure propagated as a fatal, unrecoverable halt rather than degrading gracefully. Two execution steps (data load, interaction-term creation) completed before the halt but produced no captured stdout and no causal estimate. No GADS-canonical local value exists for this benchmark. See notes.md."
+  },
+  "metrics": {
+    "estimate": {
+      "value": 6.52,
+      "exact": false,
+      "tol": 0.05,
+      "note": "GADS canonical from cloud reference run (drafted lane, deposits ~ poa + jul + poa:jul OLS DiD): ATE = +6.52, matching QRData's external gold to the reported precision (both 6.52). Tolerance tightened from the provisional band now that a reference run exists; kept non-zero (not exact) because the drafted plan's exact regression formulation is not contractually fixed the way a pinned recipe's would be, so a repeat run choosing an equivalent-but-differently-specified DiD model could differ in the last decimal."
+    }
+  },
+  "artifacts": {
+    "required": ["final_dashboard.html", "research_report.md", "workflow_execution.py"],
+    "forbidden_stdout": ["mock data", "simulating data"]
+  },
+  "methodology": {}
+}

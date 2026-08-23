@@ -1,0 +1,27 @@
+{
+  "benchmark_id": "snow_cholera_water_v1",
+  "spec_file": "snow_cholera_water.md",
+  "recipe_id": null,
+  "external_source": "causaldata `snow` (Snow 1855), via NickCH-K/causaldata (MIT) — external anchor is the historical finding (direction only), not a scalar",
+  "reference_runs": {
+    "cloud": "050b55a4-a054-4440-8d3b-7f967d507b7c"
+  },
+  "local_attempt": {
+    "project": "31d4e902-c3ce-437d-b517-eeba0889b31e",
+    "outcome": "no estimate produced",
+    "note": "Failed on complexity mismatch, not on the identification logic: the drafted plan reached for a full ML-style pipeline (categorical encoding of `supplier`/`treatment`, then the native gads_causal_estimate_ate DoWhy node) on a 4-row aggregated dataset, and the categorical-encoding transform failed on 'unknown categories in column 0' — a train/test-split-style failure mode that a 4-row table cannot support. Cloud, on this identical (and easiest-in-the-batch) spec, did a straightforward before/after DiD comparison and got the direction right. See notes.md."
+  },
+  "metrics": {
+    "estimate": {
+      "value": -56.9,
+      "exact": false,
+      "tol": 3.0,
+      "note": "GADS canonical from cloud reference run (drafted lane, DiD comparing 1849 vs 1854 across suppliers): clean water associated with a reduction of 56.9 deaths per 10,000 (40.13% relative to the counterfactual trend). This is a GADS-established reference value, not an external gold — causaldata carries no scalar answer for this case (see notes.md). Direction matches the historical finding (contaminated water increases mortality); magnitude has no external check."
+    }
+  },
+  "artifacts": {
+    "required": ["final_dashboard.html", "research_report.md", "workflow_execution.py"],
+    "forbidden_stdout": ["mock data", "simulating data"]
+  },
+  "methodology": {}
+}

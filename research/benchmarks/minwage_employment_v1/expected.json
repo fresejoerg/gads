@@ -1,0 +1,27 @@
+{
+  "benchmark_id": "minwage_employment_v1",
+  "spec_file": "minwage_employment.md",
+  "recipe_id": null,
+  "external_source": "QRData minwage.csv (Quantitative Social Science 2.5.3), gold DiD estimate (CC BY-NC 4.0, xxxiaol/QRData) — external anchor, no GADS recipe pinned (drafted lane by design)",
+  "reference_runs": {
+    "cloud": "fc9d384a-d9a3-4020-83ed-f0b0149f2ea0"
+  },
+  "local_attempt": {
+    "project": "22bf3670-df1b-45ed-88fb-e9ea44802df9",
+    "outcome": "no estimate produced",
+    "note": "The same one-line computation (delta_full = fullAfter - fullBefore) failed with a Python syntax error (mismatched parentheses) THREE separate times across three retried steps (3, 7, 10) — the identical bug recurring rather than being corrected by retries, similar to the sanitizer-repairable stray-indent pattern documented elsewhere in this codebase's error ledger. Never reached causal estimation. See notes.md."
+  },
+  "metrics": {
+    "estimate": {
+      "value": 2.93,
+      "exact": false,
+      "tol": 3.4,
+      "note": "GADS canonical from cloud reference run (drafted lane, OLS DiD, without chain fixed effects): +2.93 full-time EMPLOYEES (with chain FE: +2.82), 95% CI roughly ±3.4 so not statistically distinguishable from zero. NOT directly comparable to the QRData gold: the run modeled the outcome as an FTE employment LEVEL/count, while QRData's gold (-0.062) is defined on the PROPORTION of full-time employees. Different outcome scale, not just a sign disagreement — see notes.md. Do not treat this as a validated match or a contradiction of the external gold; it is a genuine framing divergence worth investigating, not yet reconciled."
+    }
+  },
+  "artifacts": {
+    "required": ["final_dashboard.html", "research_report.md", "workflow_execution.py"],
+    "forbidden_stdout": ["mock data", "simulating data"]
+  },
+  "methodology": {}
+}

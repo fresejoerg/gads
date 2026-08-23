@@ -1,0 +1,28 @@
+{
+  "benchmark_id": "jobs_lalonde_training_v1",
+  "spec_file": "jobs_lalonde_training.md",
+  "recipe_id": null,
+  "external_source": "QRData jobs_0.csv (Jobs dataset / LaLonde NSW), gold ATT (CC BY-NC 4.0, xxxiaol/QRData) — external anchor, no GADS recipe pinned (drafted lane by design)",
+  "reference_runs": {
+    "local": "df75510b-2786-4efb-b291-7f6cfce580ce"
+  },
+  "metrics": {
+    "estimate": {
+      "value": 0.0757,
+      "exact": false,
+      "tol": 0.02,
+      "note": "GADS canonical from LOCAL reference run (drafted lane, DoWhy ATE): 0.0757, closely matching QRData's gold (0.074) — the local engine SUCCEEDED here where cloud failed twice on the identical propensity-score bug ('numpy.ndarray' object has no attribute 'iloc'). This run hit a different, non-fatal error at an earlier step ('>' not supported between 'list' and 'int' during missing-value detection) and recovered via replan, apparently sidestepping whatever code shape triggers cloud's failure. HOWEVER the reported 95% CI is degenerate ([0.0000, 0.0000]) — almost certainly a broken bootstrap/CI computation, not genuine precision — and the Synthesizer's own narrative misread this as reassuring ('narrow confidence interval indicates some uncertainty') rather than flagging it as broken. Point estimate accuracy and uncertainty-quantification correctness are being tracked as separate axes here; see notes.md. No cloud canonical value exists (see the two documented cloud failures, still below)."
+    }
+  },
+  "cloud_attempts": {
+    "note": "TWO independent cloud reference-run attempts (2026-08-21) both failed with the identical error ('numpy.ndarray' object has no attribute 'iloc') at the propensity-score estimation step, surviving a full model escalation ladder on the second attempt. No cloud canonical value exists for this benchmark — see notes.md. This is the inverse of the usual cloud > local assumption and is itself the finding."
+  },
+  "artifacts": {
+    "required": [],
+    "forbidden_stdout": [
+      "mock data",
+      "simulating data"
+    ]
+  },
+  "methodology": {}
+}

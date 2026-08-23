@@ -1,0 +1,23 @@
+{
+  "benchmark_id": "trainee_program_earnings_v1",
+  "spec_file": "trainee_program_earnings.md",
+  "recipe_id": null,
+  "external_source": "QRData trainee_unique_on_age.csv (Causal Inference for the Brave and True, ch.10), gold ATT via matching estimator (CC BY-NC 4.0, xxxiaol/QRData) — external anchor, no GADS recipe pinned (drafted lane by design)",
+  "reference_runs": {
+    "cloud": "1328b558-152f-4acb-99e9-77a63fac2cd4",
+    "local": "b96f24ff-f1cf-4fb1-bc7e-a5be3dd796d4"
+  },
+  "metrics": {
+    "estimate": {
+      "value": -1021.94,
+      "exact": false,
+      "tol": null,
+      "note": "GADS canonical (agrees across BOTH engines): cloud found -1021.94, local independently found -1021.9390 — matching to 4 decimal places, almost certainly because both called the same deterministic native gads_causal_estimate_ate(treatment='trainees', outcome='earnings', confounders=['age']) rather than each hand-deriving a regression. OPPOSITE SIGN from the QRData gold (+2457.89, computed via a matching estimator, not regression-adjustment). Not scored against a tolerance — this is a genuine sign-flip divergence between estimators, not an error; see notes.md. Naive unadjusted difference was -4555.74 in both framings' direction (trainees earn less), so both analyses agree the raw comparison is confounded — they disagree on what adjusting for it reveals, and now do so identically regardless of engine."
+    }
+  },
+  "artifacts": {
+    "required": ["final_dashboard.html", "research_report.md", "workflow_execution.py"],
+    "forbidden_stdout": ["mock data", "simulating data"]
+  },
+  "methodology": {}
+}

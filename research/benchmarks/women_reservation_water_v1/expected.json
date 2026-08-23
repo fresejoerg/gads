@@ -1,0 +1,33 @@
+{
+  "benchmark_id": "women_reservation_water_v1",
+  "spec_file": "women_reservation_water.md",
+  "recipe_id": null,
+  "external_source": "QRData women.csv (Quantitative Social Science 4.3.1), gold estimate (CC BY-NC 4.0, xxxiaol/QRData) — external anchor, no GADS recipe pinned (drafted lane by design)",
+  "reference_runs": {
+    "cloud": "5cc60665-cc10-462c-84fd-5e3cde416cc7"
+  },
+  "local_attempt": {
+    "project": "550c5641-f6f0-4d5d-9122-fc4f24a2957e",
+    "outcome": "no estimate produced",
+    "note": "5 of 9 tasks failed: an invalid pandas kwarg on df.sample(), and two hallucinated Plotly calls (plotly.express.boxplot / plotly.express.table — neither exists in that API). Only the initial data-load step succeeded; no causal estimate of any kind was reached. Sharp contrast with the cloud run on this identical spec (9.2524, matching gold almost exactly) — this is the more expected direction per prior local-model drafted-lane evidence. See notes.md."
+  },
+  "metrics": {
+    "estimate": {
+      "value": 9.2524,
+      "exact": false,
+      "tol": 0.05,
+      "note": "GADS canonical from cloud reference run (drafted lane, OLS ITT with GP-clustered SEs): +9.2524 drinking-water facilities, matching QRData's external gold (9.25) to the reported precision. The run went further than the gold answer unprompted: it also fit a 2SLS IV model using `reserved` as an instrument for `female`, estimating a LATE of +23.99 (p<0.0001) — a structural estimate the QRData question never asked for. Both are recorded; `estimate` here tracks the ITT figure that matches the external gold."
+    },
+    "late_2sls": {
+      "value": 23.9907,
+      "exact": false,
+      "tol": 1.0,
+      "note": "2SLS LATE of female leadership (instrumented by reservation) on drinking-water facilities, from the same reference run. No external gold exists for this figure — QRData only asked for the reduced-form ITT effect. Recorded because the drafted plan produced it unprompted and it is methodologically the more complete answer to 'does becoming a female leader change water investment' (vs. the ITT's 'does the policy change it')."
+    }
+  },
+  "artifacts": {
+    "required": ["final_dashboard.html", "research_report.md", "workflow_execution.py"],
+    "forbidden_stdout": ["mock data", "simulating data"]
+  },
+  "methodology": {}
+}

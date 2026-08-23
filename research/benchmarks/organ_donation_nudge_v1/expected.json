@@ -1,0 +1,27 @@
+{
+  "benchmark_id": "organ_donation_nudge_v1",
+  "spec_file": "organ_donation_nudge.md",
+  "recipe_id": null,
+  "external_source": "causaldata `organ_donations` (Kessler & Roth 2014), via NickCH-K/causaldata (MIT) — external anchor is the published finding (direction: registration DECREASED), not a scalar",
+  "reference_runs": {
+    "cloud": "bf24de12-5f1c-4a12-8f68-187960cd46ad"
+  },
+  "local_attempt": {
+    "project": "2302a681-959b-44bc-943a-c68a6de2c519",
+    "outcome": "SIGN CONTRADICTION — third instance in this local-mode pass",
+    "note": "Estimate extracted from an earlier completed step's causal_effect_result.json (gads_causal_estimate_ate: treatment_col='treatment', outcome_col='Rate', confounders=['period','Year']): ATE = +0.1327 — the OPPOSITE sign from both the published finding (Kessler & Roth 2014: active-choice nudge DECREASED registration) and GADS's own cloud run (-0.0225). This is the THIRD local-mode result in this pass with an inverted causal sign via this same native node (after castle_doctrine_homicide's -0.1973 vs. published/cloud +), on top of prop99_cigarette_sales's separate omitted-comparison-group error — a pattern worth investigating as a systemic risk in how local-generated code constructs the treatment indicator before calling the native ATE function, not three unrelated coincidences. A later redundant verification step in this same run failed repeatedly on an unrelated ImportError (dowhy.LinearRegressionEstimator does not exist) and never produced a final report; the +0.1327 figure comes from the run's own earlier, successfully-executed step. See notes.md."
+  },
+  "metrics": {
+    "estimate": {
+      "value": -0.0225,
+      "exact": false,
+      "tol": 0.01,
+      "note": "GADS canonical from cloud reference run (drafted lane, TWFE DiD with state-clustered SEs): -0.0225 (a 2.25 percentage-point DECLINE in registration), p=0.0008 — matches the published direction (Kessler & Roth 2014: the active-choice nudge backfired) and is the first quantified GADS value for this benchmark (the source has no scalar gold). Backed by real robustness work the spec never asked for: an event-study confirming parallel pre-trends (max |pre-period coef| = 0.0063) and an in-space placebo test across 26 control states (only 4/26 placebos match or exceed the real effect's magnitude). The run's own report explicitly cites Kessler & Roth (2014) by name, correctly identifying its own external validation source."
+    }
+  },
+  "artifacts": {
+    "required": ["final_dashboard.html", "research_report.md", "workflow_execution.py"],
+    "forbidden_stdout": ["mock data", "simulating data"]
+  },
+  "methodology": {}
+}

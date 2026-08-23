@@ -1,0 +1,27 @@
+{
+  "benchmark_id": "social_insurance_takeup_v1",
+  "spec_file": "social_insurance_takeup.md",
+  "recipe_id": null,
+  "external_source": "causaldata `social_insure` (Cai, De Janvry & Sadoulet 2015), via NickCH-K/causaldata (MIT) — external anchor is the paper's focus (social-network spillovers via an IV design), not a scalar",
+  "reference_runs": {
+    "cloud": "173550fe-c163-4bf3-a92b-378938d7a648"
+  },
+  "local_attempt": {
+    "project": "d454a8af-8167-4fa5-afd6-b61ddc2cc691",
+    "outcome": "no estimate produced",
+    "note": "Stuck at exploratory data analysis (Step 2): 'Validation Error: sequence item 13: expected str instance, int found' recurred identically across four retried attempts — a type-coercion bug (likely a string-join or print statement mixing str and int values) rather than a statistical error. Never reached treatment-variable construction or ATE estimation. See notes.md."
+  },
+  "metrics": {
+    "estimate": {
+      "value": 0.0,
+      "exact": false,
+      "tol": 0.03,
+      "note": "GADS canonical from cloud reference run (drafted lane, regression with village fixed effects, covariate balance check, placebo + CATE robustness): the DIRECT effect of `intensive` on `takeup_survey` is statistically indistinguishable from zero, robust across specifications and subgroups. This is a NARROWER question than the source paper answers — Cai et al. (2015) study social-network SPILLOVER effects on take-up (an IV design using `intensive`/`default` as instruments for peer take-up rates), not the simple direct effect. GADS's near-zero direct-effect finding does not contradict the paper (a naive direct effect isn't what their headline result is about) but doesn't engage with the network/spillover mechanism either. See notes.md."
+    }
+  },
+  "artifacts": {
+    "required": ["final_dashboard.html", "research_report.md", "workflow_execution.py"],
+    "forbidden_stdout": ["mock data", "simulating data"]
+  },
+  "methodology": {}
+}

@@ -12,7 +12,7 @@ taxonomy:
   modality: [tabular]
   domain: public_sector
   domain_detail: "census income prediction (UCI Adult), interpretable baseline"
-  deliverable: [model_artifact, diagnostic_report]
+  deliverable: [model_artifact, report_narrative]
   validation: [holdout_metric]
 
 ---

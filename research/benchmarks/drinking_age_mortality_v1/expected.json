@@ -1,0 +1,27 @@
+{
+  "benchmark_id": "drinking_age_mortality_v1",
+  "spec_file": "drinking_age_mortality.md",
+  "recipe_id": null,
+  "external_source": "QRData drinking.csv (Causal Inference for the Brave and True, ch.16), gold estimate (CC BY-NC 4.0, xxxiaol/QRData) — external anchor, no GADS recipe pinned (drafted lane by design)",
+  "reference_runs": {
+    "cloud": "641e9649-3037-40b2-9253-7c6a5a24ed3f"
+  },
+  "local_attempt": {
+    "project": "4e9e2cec-da8d-4f50-875a-d23c5233e872",
+    "outcome": "no estimate produced",
+    "note": "Step 1 (data load) failed with a syntax error; recovered on retry, but the RDD/causal estimation step then failed with 'infinite or NaN values in the exogenous variables' — plausibly the source CSV's pre-computed `*fitted` columns (allfitted, internalfitted, etc.) or a running-variable transform producing non-finite values near the age-21 cutoff. Never produced an estimate; only exploratory distribution plots. See notes.md."
+  },
+  "metrics": {
+    "estimate": {
+      "value": 7.66,
+      "exact": false,
+      "tol": null,
+      "note": "GADS canonical from cloud reference run (drafted lane, sharp RDD via OLS with robust SE): +7.66, p=1.78e-09, correct DIRECTION (turning 21 increases mortality, matching QRData's positive gold of 0.10). Magnitude is roughly 77x the gold and NOT scored against a tolerance (tol: null) — see notes.md for the likely cause (full-sample RDD vs. the gold's ages-20-22-only restriction) and a units-labeling inconsistency in the run's own report."
+    }
+  },
+  "artifacts": {
+    "required": ["final_dashboard.html", "research_report.md", "workflow_execution.py"],
+    "forbidden_stdout": ["mock data", "simulating data"]
+  },
+  "methodology": {}
+}
