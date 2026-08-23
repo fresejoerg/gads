@@ -70,6 +70,11 @@ class ReconciliationReport(BaseModel):
     invariants: List[str] = []
     skippable_nodes: List[str] = []
     schema_warnings: List[str] = []
+    # True when the recipe was a WEAK Router match (confidence below the deterministic-
+    # compile threshold): the Planner LLM still runs and sees this report as advisory
+    # context, not a DAG to compile verbatim. False (default) preserves the original
+    # deterministic-report shape used when the Planner LLM is skipped entirely.
+    advisory: bool = False
 
 class PlannerTask(BaseModel):
     """Simplified task model for the Planner to output."""

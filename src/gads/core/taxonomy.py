@@ -100,12 +100,118 @@ def validate_tags(block: Any) -> Dict[str, List[str]]:
     return {"errors": errors, "warnings": warnings}
 
 
+def task_vocabulary() -> List[str]:
+    """Every canonical task term the vocabulary admits — each family, plus each
+    ``family.subtype`` — in declaration order. This is the closed set the Router may
+    emit and the set recipe ``applies_when`` labels are normalized into."""
+    out: List[str] = []
+    for fam, subs in (load_vocab().get("task") or {}).items():
+        out.append(fam)
+        for sub in (subs or []):
+            out.append(f"{fam}.{sub}")
+    return out
+
+
+def modality_vocabulary() -> List[str]:
+    """Every canonical modality term, in declaration order."""
+    return list((load_vocab().get("modality") or {}).keys())
+
+
+def render_task_vocabulary() -> str:
+    """The task vocabulary rendered for a prompt: one line per family, subtypes
+    pipe-separated. Grouped rather than flat because a 80-term flat enum degrades
+    small local models, and the grouping is itself the disambiguation hint."""
+    lines = []
+    for fam, subs in (load_vocab().get("task") or {}).items():
+        if subs:
+            lines.append(f"  {fam}: " + " | ".join(f"{fam}.{s}" for s in subs))
+        else:
+            lines.append(f"  {fam}")
+    return "\n".join(lines)
+
+
+def render_modality_vocabulary() -> str:
+    """The modality vocabulary rendered for a prompt: `term — description` lines."""
+    return "\n".join(f"  {k}: {v}" for k, v in (load_vocab().get("modality") or {}).items())
+
+
+def canonical_task(value: Any) -> Optional[str]:
+    """Normalize ANY task label to a canonical taxonomy task, or None.
+
+    Accepts all three vocabularies that historically diverged (approach_docs/024 §1):
+    a canonical term (``regression.survival``), a legacy Router enum value
+    (``binary_classification``) and a recipe ``applies_when`` alias (``cox_regression``,
+    ``time_to_event``). ``unknown`` and unmapped strings return None."""
+    if not value:
+        return None
+    v = str(value).strip().lower()
+    if not v or v == "unknown":
+        return None
+    vocab = load_vocab()
+    if _value_ok("task", v, vocab):
+        return v
+    mapped = (vocab.get("crosswalk") or {}).get(v)
+    if mapped and mapped.get("task"):
+        return str(mapped["task"])
+    return None
+
+
+def canonical_modality(value: Any) -> Optional[str]:
+    """Normalize any modality label (canonical term or alias) to a canonical
+    modality, or None for ``unknown`` / unmapped."""
+    if not value:
+        return None
+    v = str(value).strip().lower()
+    if not v or v == "unknown":
+        return None
+    vocab = load_vocab()
+    if v in (vocab.get("modality") or {}):
+        return v
+    return (vocab.get("modality_aliases") or {}).get(v)
+
+
+def tasks_overlap(a: Any, b: Any) -> bool:
+    """True if two task labels denote the same task at *some* level of specificity.
+
+    Canonicalizes both, then treats a bare family as covering all of its subtypes —
+    a recipe declaring ``classification`` covers ``classification.multiclass``, and a
+    Router that could only commit to the family still reaches the subtype's recipe."""
+    ca, cb = canonical_task(a), canonical_task(b)
+    if not ca or not cb:
+        return False
+    if ca == cb:
+        return True
+    return ca == _task_family(cb) or cb == _task_family(ca)
+
+
+def is_training_task(task_type: Any) -> bool:
+    """True if this task label denotes model FITTING over the raw rows, i.e. the
+    tighter SampleBudget row cap applies. Driven by ``training_task_families`` in
+    taxonomy.yaml so a new family cannot silently inherit the wrong budget."""
+    canon = canonical_task(task_type)
+    if not canon:
+        return False
+    fams = set(load_vocab().get("training_task_families") or [])
+    return _task_family(canon) in fams
+
+
 def canonicalize(task_type: str) -> Optional[Dict[str, str]]:
-    """Map a legacy free-text ``task_type`` string (recipe/Router) to a canonical
-    ``{"intent": ..., "task": ...}`` pair via the crosswalk. None if unmapped."""
+    """Map a task label to a canonical ``{"intent": ..., "task": ...}`` pair.
+
+    Resolves via the crosswalk first (it carries a hand-set intent — ``cox_regression``
+    is diagnostic where ``survival_ml`` is predictive), then falls back to a canonical
+    term whose intent comes from its family default. None if unmapped."""
     if not task_type:
         return None
-    return (load_vocab().get("crosswalk") or {}).get(task_type.strip().lower())
+    vocab = load_vocab()
+    hit = (vocab.get("crosswalk") or {}).get(str(task_type).strip().lower())
+    if hit:
+        return hit
+    canon = canonical_task(task_type)
+    if not canon:
+        return None
+    fd = (vocab.get("family_defaults") or {}).get(_task_family(canon)) or {}
+    return {"intent": fd.get("intent") or "descriptive", "task": canon}
 
 
 def _as_list(v: Any) -> List[str]:

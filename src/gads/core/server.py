@@ -36,10 +36,11 @@ from gads.core.registry import (
     get_pinned_model, resolve_stage_model, get_available_models, VALID_ROUTING_MODES,
     get_local_fallback, set_local_fallback, VALID_LOCAL_FALLBACKS,
     get_run_mode, set_run_mode, VALID_RUN_MODES,
+    get_recipe_confidence_threshold, set_recipe_confidence_threshold,
 )
 from gads.core.knowledge import KnowledgeRegistry
-from gads.core.dial import (compiled_plan_dial, drafted_plan_dial, append_ledger,
-                            append_routing_ledger)
+from gads.core.dial import (compiled_plan_dial, advisory_plan_dial, drafted_plan_dial,
+                            append_ledger, append_routing_ledger)
 from gads.core.reporting import create_master_reports
 from gads.core.usage import snapshot as usage_snapshot
 from gads.core.report_sections import (build_sections as build_report_sections,
@@ -158,6 +159,9 @@ class ConfigUpdate(BaseModel):
     local_fallback: Optional[str] = None
     # What the run is for: research (model-first) | production (native-first)
     run_mode: Optional[str] = None
+    # Router confidence (0.0-1.0) at/above which a matched recipe compiles deterministically;
+    # below it, the recipe is advisory context for the Planner instead. Default 0.7.
+    recipe_confidence_threshold: Optional[float] = None
 
 class NotesRequest(BaseModel):
     notes: str = ""
@@ -477,6 +481,7 @@ def _config_payload() -> Dict[str, Any]:
         "valid_local_fallbacks": list(VALID_LOCAL_FALLBACKS),
         "run_mode": get_run_mode(),
         "valid_run_modes": list(VALID_RUN_MODES),
+        "recipe_confidence_threshold": get_recipe_confidence_threshold(),
     }
 
 @app.get("/config")
@@ -500,6 +505,8 @@ def update_config(req: ConfigUpdate):
             set_local_fallback(req.local_fallback)
         if req.run_mode is not None:
             set_run_mode(req.run_mode)
+        if req.recipe_confidence_threshold is not None:
+            set_recipe_confidence_threshold(req.recipe_confidence_threshold)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     set_random_routing(req.random_routing)
@@ -1357,6 +1364,12 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         intent = None
         knowledge_report = None
         intent = None
+        # recipe_tier: "deterministic" (compile the DAG, Planner LLM skipped) |
+        # "advisory" (recipe matched but below confidence threshold — Planner LLM runs,
+        # sees the recipe as reference context) | "none" (no recipe at all).
+        recipe_id = None
+        recipe = None
+        recipe_tier = "none"
 
         # DETERMINISTIC ROUTING: when the spec pins a valid recipe, the Router LLM
         # call is redundant — the pin overrides its match anyway (see the HARD PIN
@@ -1372,9 +1385,16 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         return str(v[0]) if v else default
                     return str(v) if v else default
                 aw = pinned.applies_when or {}
+                # Canonicalize so a pinned run carries the same controlled-vocabulary
+                # labels a routed one would: recipes declare aliases ("cox_regression"),
+                # and everything downstream — taxonomy tagging, the SampleBudget
+                # threshold, the dial ledger — reads these labels.
+                from gads.core import taxonomy as _tx_pin
+                _pin_task = _first(aw.get("task_type"), "unknown")
+                _pin_mod = _first(aw.get("data_modality"), "tabular")
                 intent = RouterOutput(
-                    task_type=_first(aw.get("task_type"), "unknown"),
-                    data_modality=_first(aw.get("data_modality"), "tabular"),
+                    task_type=_tx_pin.canonical_task(_pin_task) or "unknown",
+                    data_modality=_tx_pin.canonical_modality(_pin_mod) or "tabular",
                     matched_recipe_id=pinned.id,
                     confidence=1.0,
                     reasoning=f"Deterministic route: spec pins recipe '{pinned.id}'. Router LLM call skipped."
@@ -1387,6 +1407,9 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     skippable_nodes=[],
                     schema_warnings=[]
                 )
+                recipe = pinned
+                recipe_id = pinned.id
+                recipe_tier = "deterministic"
                 trace_context.get().update({"recipe_id": pinned.id})
                 print(f"  [Router] Spec pins recipe '{pinned.id}' — deterministic route, LLM call skipped.", flush=True)
                 with Session(engine) as session:
@@ -1458,9 +1481,14 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     else:
                         recipe_id = intent.matched_recipe_id
                         recipe = registry.get_recipe(recipe_id) if recipe_id else None
+                        # An explicit override (spec pin, or the SpecDrafter's hint when the
+                        # Router found nothing) always compiles deterministically regardless
+                        # of the Router's own confidence — it wasn't the Router's choice to
+                        # begin with, so its confidence score doesn't describe this recipe.
+                        pin_forced = False
                         # HARD PIN: a recipe declared in the spec file wins over the
                         # Router's LLM classification. Without this, a Router mismatch
-                        # is fatal — the Recipe Enforcer replaces the Planner's tasks
+                        # is fatal — the deterministic compiler replaces the Planner's tasks
                         # with the wrong recipe's DAG on every replan attempt, so
                         # PlanCritique rejects identically until the workflow halts.
                         if spec_pinned_recipe:
@@ -1474,9 +1502,22 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                                 recipe_id = pinned.id
                                 recipe = pinned
                                 intent.matched_recipe_id = pinned.id
+                                pin_forced = True
                         if not recipe and spec_hints.get("recipe_id"):
                             recipe_id = spec_hints.get("recipe_id")
                             recipe = registry.get_recipe(recipe_id) if recipe_id else None
+                            pin_forced = recipe is not None
+
+                        if recipe is None:
+                            recipe_tier = "none"
+                        elif pin_forced:
+                            recipe_tier = "deterministic"
+                        else:
+                            recipe_tier = (
+                                "deterministic"
+                                if intent.confidence >= get_recipe_confidence_threshold()
+                                else "advisory"
+                            )
 
                     recipe_info = "No specific recipe found. Proceeding with general data science reasoning."
                     if disable_recipes:
@@ -1489,9 +1530,18 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                             recommended_dag_nodes=[node.dict() for node in recipe.dag],
                             invariants=recipe.invariants,
                             skippable_nodes=[],
-                            schema_warnings=[]
+                            schema_warnings=[],
+                            advisory=(recipe_tier == "advisory"),
                         )
-                        recipe_info = f"Applied SOP: {recipe.id}\nRationale: {recipe.rationale}"
+                        if recipe_tier == "advisory":
+                            recipe_info = (
+                                f"Advisory SOP (weak match, confidence {intent.confidence:.2f} < "
+                                f"{get_recipe_confidence_threshold():.2f}): {recipe.id}\n"
+                                f"Rationale: {recipe.rationale}\n"
+                                f"Passed to the Planner as reference context, not a required DAG."
+                            )
+                        else:
+                            recipe_info = f"Applied SOP: {recipe.id}\nRationale: {recipe.rationale}"
                         trace_context.get().update({"recipe_id": recipe.id})
 
                     route_task.status = "completed"
@@ -1603,11 +1653,10 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         # spec_hints so the Planner includes subsampling in its first task description.
         # Threshold: 50K rows for ML training recipes; 200K for lighter analysis.
         # Override: spec frontmatter `sample_rows: N` always takes precedence.
-        _TRAINING_TASK_TYPES = {
-            "binary_classification", "multiclass_classification", "regression",
-            "classification", "automl", "tabular_modeling", "time_series_forecasting",
-            "forecasting", "time_series", "causal_inference",
-        }
+        # Which tasks count as "training" is declared in taxonomy.yaml
+        # (`training_task_families`) and resolved canonically, so a label the old
+        # hardcoded set never listed — survival, ranking, recommendation — no longer
+        # falls through to the looser analysis budget.
         _SAMPLE_THRESHOLD_TRAINING = 50_000
         _SAMPLE_THRESHOLD_ANALYSIS = 200_000
 
@@ -1618,7 +1667,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 max_rows = max(max_rows, rc)
 
             if max_rows > 0:
-                is_training = intent.task_type in _TRAINING_TASK_TYPES
+                from gads.core import taxonomy as _tx_budget
+                is_training = _tx_budget.is_training_task(intent.task_type)
                 threshold = _SAMPLE_THRESHOLD_TRAINING if is_training else _SAMPLE_THRESHOLD_ANALYSIS
                 if max_rows > threshold:
                     spec_hints["sample_rows"] = threshold
@@ -1697,7 +1747,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             # Compile the plan directly from the DAG nodes instead, and skip
             # PlanCritique below (auditing a deterministic plan can only reject
             # into a replan that recompiles the identical plan).
-            if knowledge_report and knowledge_report.recommended_dag_nodes:
+            if recipe_tier == "deterministic" and knowledge_report and knowledge_report.recommended_dag_nodes:
                 enforced_steps = []
                 # Dashboard skeleton: the recipe DAG *is* the report structure (one section
                 # per node, in order). Captured here, at compile time, and persisted on the
@@ -1854,6 +1904,13 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     )
                     session.add(plan_task)
                     session.commit()
+            elif recipe_tier == "advisory" and knowledge_report:
+                print(
+                    f"  [Router] Recipe '{knowledge_report.recipe_id}' matched at confidence "
+                    f"{intent.confidence:.2f} (< threshold {get_recipe_confidence_threshold():.2f}) "
+                    f"— passing as advisory context, Planner drafts freely.",
+                    flush=True
+                )
 
             while planner_res is None:
                 # Create a Task for the Planner to show in the UI
@@ -1897,9 +1954,11 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                             user_hints={k: v for k, v in spec_hints.items() if k != "save_model"} or None
                         ), stream_callback=stream_planner_callback)
                         span.end(output=planner_res.content.model_dump())
-                        # NOTE: recipe-matched plans never reach this LLM path — they
-                        # are compiled deterministically above (RECIPE PLAN COMPILER),
-                        # which replaced the old post-Planner Recipe Enforcer.
+                        # NOTE: a HIGH-confidence recipe match never reaches this LLM path —
+                        # it is compiled deterministically above (RECIPE PLAN COMPILER). A
+                        # LOW-confidence match (recipe_tier == "advisory") does reach here,
+                        # with `knowledge_report` passed as reference context the Planner
+                        # may adapt or diverge from rather than a DAG to compile verbatim.
 
                         plan_task.status = "completed"
                         plan_task.result_json = {
@@ -2109,10 +2168,12 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             # DIAL RUNG (approach_docs/013): place this run on the delegation ladder
             # from the same inputs the plan was built from, and persist it on the
             # project so it is inspectable while the run is live.
-            if knowledge_report and knowledge_report.recommended_dag_nodes:
+            if recipe_tier == "deterministic" and knowledge_report and knowledge_report.recommended_dag_nodes:
                 _selection = "pinned" if spec_hints.get("recipe_id") == knowledge_report.recipe_id else "routed"
                 dial_info = compiled_plan_dial(knowledge_report.recommended_dag_nodes, _selection)
                 dial_info["recipe_id"] = knowledge_report.recipe_id
+            elif recipe_tier == "advisory" and knowledge_report:
+                dial_info = advisory_plan_dial(knowledge_report.recipe_id, intent.confidence)
             else:
                 dial_info = drafted_plan_dial(spec_hints)
             print(

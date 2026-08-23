@@ -5,10 +5,12 @@ The ladder (higher rung = more decisions moved from the model into curated artif
 
   D0  full delegation — no recipe, no spec hints; the model frames, plans, realizes
   D1  framed          — spec hints fix the framing (target column / features / filters)
-  D2  advised         — RESERVED: recipe suggested but deviatable. Operationally
-                        unreachable today: a Router-matched recipe is compiled exactly
-                        like a pinned one, so "advice" collapses into D3+. Selection
-                        provenance (pinned|routed|drafted) is recorded separately.
+  D2  advised         — recipe suggested but deviatable: a Router match below the
+                        deterministic-compile confidence threshold is passed to the
+                        Planner as advisory context (a knowledge base to draw on) rather
+                        than compiled verbatim, and the Planner drafts its own plan.
+                        Selection provenance (pinned|routed|advised|drafted) is recorded
+                        separately.
   D3  directed        — compiled plan; methodology fixed at decision level (invariants)
   D4  patterned       — + curated skills fix the code patterns per task
   D5  mechanized      — + a native kernel function replaces the step's mechanical core
@@ -52,6 +54,20 @@ def compiled_plan_dial(nodes: List[Dict[str, Any]], selection: str) -> Dict[str,
     }
     project = min(task_rungs.values(), key=RUNG_ORDER.index) if task_rungs else "D3"
     return {"rung": project, "task_rungs": task_rungs, "selection": selection}
+
+
+def advisory_plan_dial(recipe_id: str, confidence: float) -> Dict[str, Any]:
+    """Dial info for a Planner-drafted plan that received a weak-matched recipe as
+    advisory context (D2 — 'advised': recipe suggested but deviatable). No per-task
+    `task_rungs` — the Planner drafted its own tasks, not the recipe's DAG nodes, so
+    there is nothing to score node-by-node the way a compiled plan's nodes are."""
+    return {
+        "rung": "D2",
+        "task_rungs": {},
+        "selection": "advised",
+        "recipe_id": recipe_id,
+        "recipe_confidence": confidence,
+    }
 
 
 def drafted_plan_dial(spec_hints: Dict[str, Any]) -> Dict[str, Any]:

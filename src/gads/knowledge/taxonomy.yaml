@@ -55,7 +55,8 @@ task:
   simulation:     [monte_carlo, agent_based, discrete_event]
   bayesian_inference: [parameter_estimation, hierarchical]
   graph:          [node_classification, link_prediction, community_detection, centrality]
-  analytics:      [descriptive_stats, kpi_metrics, cohort, funnel, ab_test]
+  analytics:      [descriptive_stats, exploratory, kpi_metrics, cohort, funnel, ab_test]
+  data_preparation: [cleaning, transformation, feature_engineering]
 
 # --------------------------------------------------------------------------- #
 # Facet C — MODALITY  (structure of the input data; >=1 value, required)
@@ -119,6 +120,7 @@ validation:
   causal_identification: "DAG, identification strategy, refutation & sensitivity analysis."
   calibration:           "Probability calibration / reliability."
   qualitative_saturation: "Thematic saturation / inter-rater agreement."
+  data_quality:          "Schema, null, duplicate, leakage and partition-integrity checks."
 
 # --------------------------------------------------------------------------- #
 # NOT a taxonomy facet — recorded here to prevent conflation:
@@ -175,6 +177,27 @@ family_defaults:
   bayesian_inference:       {intent: causal, deliverable: [estimate], validation: [statistical_inference]}
   graph:                    {intent: structure_discovery, deliverable: [report_narrative], validation: []}
   analytics:                {intent: descriptive, deliverable: [report_narrative, dashboard_viz], validation: []}
+  data_preparation:         {intent: descriptive, deliverable: [dataset_pipeline], validation: [data_quality]}
+
+# --------------------------------------------------------------------------- #
+# Task families whose runs FIT a model over the raw rows. The SampleBudget guard
+# (server.run_agent_workflow) caps these at the *training* row threshold rather
+# than the looser analysis one. Declared here rather than hardcoded so a family
+# added above cannot silently fall through to the wrong budget.
+# --------------------------------------------------------------------------- #
+training_task_families:
+  - classification
+  - regression
+  - forecasting
+  - timeseries_classification
+  - causal
+  - ranking
+  - recommendation
+  - anomaly_detection
+  - nlp
+  - vision
+  - representation_learning
+  - graph
 
 # Router data_modality string -> controlled modality value
 modality_aliases:
@@ -253,7 +276,13 @@ crosswalk:
   time_series:                {intent: predictive, task: forecasting}
   time_series_forecasting:    {intent: predictive, task: forecasting}
   forecasting:                {intent: predictive, task: forecasting}
-  eda:                        {intent: descriptive, task: analytics.descriptive_stats}
+  eda:                        {intent: descriptive, task: analytics.exploratory}
+  exploratory_analysis:       {intent: descriptive, task: analytics.exploratory}
+  data_profiling:             {intent: descriptive, task: analytics.exploratory}
+  descriptive_analysis:       {intent: descriptive, task: analytics.descriptive_stats}
+  data_preparation:           {intent: descriptive, task: data_preparation}
+  data_transformation:        {intent: descriptive, task: data_preparation.transformation}
+  feature_preparation:        {intent: descriptive, task: data_preparation.feature_engineering}
   clustering:                 {intent: structure_discovery, task: clustering}
   anomaly_detection:          {intent: predictive, task: anomaly_detection}
   outlier_detection:          {intent: predictive, task: anomaly_detection}

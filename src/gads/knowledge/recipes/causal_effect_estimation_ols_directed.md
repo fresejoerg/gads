@@ -10,6 +10,7 @@ applies_when:
   data_modality: [tabular]
   signals:
     - treatment_outcome_pair: true
+  pin_only: true          # research instrument — reachable only by an explicit spec pin
   anti_signals:
     - task: heterogeneous_treatment_effects
     - routing: "never match this recipe — delegation-dial API-surface arm (approach_docs/014), selected only by an explicit spec pin"

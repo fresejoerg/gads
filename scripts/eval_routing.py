@@ -3,7 +3,11 @@
 Runs ONLY the Router stage over the tagged spec corpus — one LLM call per spec, no sandbox,
 no planner, no execution — and scores it against the ground truth the specs already carry:
 
-  * selection   — `matched_recipe_id` vs the spec's pinned `recipe_id`
+  * selection   — `matched_recipe_id` vs the spec's pinned `recipe_id`, EXCLUDING specs
+                  pinned to a pin-only research instrument (a delegation-dial arm, an AAH
+                  grounding rung). Those pins encode an operator's chosen experimental
+                  condition, not a routing target the objective could ever imply, so
+                  scoring them as misses measures the experiment design, not the Router.
   * coverage    — did the deterministic oracle cover the Router's own labels?
   * calibration — is `confidence` predictive of being right?
 
@@ -38,31 +42,18 @@ from gads.agents.router import DataScienceRouter, RouterInput
 from gads.core.knowledge import KnowledgeRegistry
 from gads.core.registry import resolve_stage_model
 
-# ——— VOCABULARY BRIDGE ————————————————————————————————————————————————————————————
-# DEBT, and deliberately visible: the spec taxonomy, the Router's prompt enum and recipe
-# `applies_when` are three different vocabularies (approach_docs/024 §1). Phase 0 replaces
-# this table with one controlled vocabulary derived from taxonomy.yaml. Until then every
-# number below is measured through this translation, so a mapping error reads as a Router
-# error. `None` means "the Router has no term for this" — those specs are UNSCORABLE on
-# classification rather than counted wrong, because the model cannot express the right answer.
-TAXONOMY_TO_ROUTER = {
-    "classification.binary": "binary_classification",
-    "classification.multiclass": None,          # Router enum has no multiclass term
-    "causal.effect_estimation": "causal_inference",
-    "regression.survival": "regression",
-    "clustering.partitional": "clustering",
-    "ranking.learning_to_rank": None,           # no term
-    "recommendation.collaborative": None,       # no term
-    "analytics.kpi_metrics": None,              # no term
-    "data_preparation": None,                   # no term
-    "eda": "eda",
-}
-MODALITY_TO_ROUTER = {
-    "tabular": "tabular",
-    "text": "text",
-    "image": "image",
-    "relational": "tabular",
-}
+# ——— ONE CONTROLLED VOCABULARY ————————————————————————————————————————————————————
+# There is no longer a hand-written bridge table here. The spec taxonomy, the Router's
+# labels and recipe `applies_when` are all normalized through `taxonomy.yaml`
+# (approach_docs/024 §1), so a number below is a routing measurement rather than a
+# measurement of a translation table. `canonical_task` returns None only for a label the
+# vocabulary genuinely does not contain — those specs are UNSCORABLE, not counted wrong.
+from gads.core import taxonomy as tx
+
+# Consecutive Router failures after which the run aborts rather than logging an
+# outage as a result. Distinct reasons would be data; the same transport error
+# repeating is a dead provider.
+FAILURE_LIMIT = 5
 
 FRONTMATTER = re.compile(r"^---\s*\n(.*?)\n---\s*\n(.*)", re.DOTALL)
 
@@ -81,16 +72,21 @@ def load_specs(spec_dir="specs"):
         except Exception:
             continue
         tax = fm.get("taxonomy") or {}
-        task = tax.get("task")
-        task = task[0] if isinstance(task, list) and task else task
-        mod = tax.get("modality")
-        mod = mod[0] if isinstance(mod, list) and mod else mod
+        # `task` and `modality` are MANY-valued facets. Scoring only the first value
+        # punishes a correct answer: amlb_segment declares `[image, tabular]` for
+        # image-region features flattened into a table, and "tabular" — the right answer
+        # for what the run actually reads — was being marked wrong against "image".
+        def _all(v):
+            return [str(x) for x in v] if isinstance(v, list) else ([str(v)] if v else [])
+        tasks, mods = _all(tax.get("task")), _all(tax.get("modality"))
         out.append({
             "spec": name,
             "objective": (m.group(2) or "").strip(),
             "true_recipe": fm.get("recipe_id"),
-            "true_task": task,
-            "true_modality": mod,
+            "true_task": tasks[0] if tasks else None,
+            "true_tasks": tasks,
+            "true_modality": mods[0] if mods else None,
+            "true_modalities": mods,
         })
     return out
 
@@ -98,27 +94,59 @@ def load_specs(spec_dir="specs"):
 async def evaluate(specs, registry, model):
     router = DataScienceRouter(model=model)
     rows = []
+    consecutive_failures = 0
     for i, sp in enumerate(specs, 1):
         rec = dict(sp)
-        try:
-            res = await asyncio.wait_for(
-                router.run(RouterInput(objective=sp["objective"],
-                                       available_recipes=registry.get_recipes_summary())),
-                timeout=180.0)
-            out = res.content
-            rec.update({
-                "pred_recipe": out.matched_recipe_id,
-                "pred_task": out.task_type,
-                "pred_modality": out.data_modality,
-                "confidence": out.confidence,
-                "error": None,
-            })
-        except Exception as e:
+        # One retry: the LiteLLM transport intermittently raises with an EMPTY message,
+        # and a dropped connection is not a routing result. Recording it as one made six
+        # specs read as misclassifications in the 2026-08-21 batch. `error` is never the
+        # empty string now, so a falsy check cannot mistake a failure for a success.
+        last_exc = None
+        for attempt in (1, 2):
+            try:
+                res = await asyncio.wait_for(
+                    router.run(RouterInput(objective=sp["objective"],
+                                           available_recipes=registry.get_recipes_summary())),
+                    timeout=180.0)
+                out = res.content
+                rec.update({
+                    "pred_recipe": out.matched_recipe_id,
+                    "pred_task": out.task_type,
+                    "pred_modality": out.data_modality,
+                    "confidence": out.confidence,
+                    "error": None,
+                })
+                last_exc = None
+                consecutive_failures = 0
+                break
+            except Exception as e:
+                last_exc = e
+                if attempt == 1:
+                    print(f"  [{i}/{len(specs)}] {sp['spec']}: transport error "
+                          f"({type(e).__name__}: {str(e)[:60] or 'no message'}) — retrying",
+                          flush=True)
+                    await asyncio.sleep(3)
+        if last_exc is not None:
+            detail = f"{type(last_exc).__name__}: {str(last_exc)[:160] or '(no message)'}"
             rec.update({"pred_recipe": None, "pred_task": None, "pred_modality": None,
-                        "confidence": None, "error": str(e)[:200]})
-            print(f"  [{i}/{len(specs)}] {sp['spec']}: ERROR {str(e)[:80]}", flush=True)
+                        "confidence": None, "error": detail})
+            print(f"  [{i}/{len(specs)}] {sp['spec']}: ERROR {detail[:90]}", flush=True)
             rows.append(rec)
+            # CIRCUIT BREAKER. When gemini-3.7-flash went down upstream on 2026-08-21 this
+            # loop spent 35 minutes on 6 specs (180s timeout x 2 attempts each) on its way
+            # to a five-hour run whose output would have been all errors. A run where the
+            # provider is unreachable is not a routing measurement, and pressing on turns a
+            # provider outage into a corrupted batch in the ledger. Fail loudly instead.
+            consecutive_failures += 1
+            if consecutive_failures >= FAILURE_LIMIT:
+                raise SystemExit(
+                    f"\nABORTED after {consecutive_failures} consecutive failures — "
+                    f"'{model}' looks unreachable, not badly calibrated. Last error: {detail}\n"
+                    f"Nothing was written to the ledger. Check the provider and re-run.")
             continue
+
+        pinned_recipe = registry.get_recipe(sp["true_recipe"]) if sp.get("true_recipe") else None
+        rec["arm_variant"] = bool(pinned_recipe and registry.is_pin_only(pinned_recipe.applies_when))
 
         oracle = registry.find_matches(
             {"task_type": rec["pred_task"], "data_modality": rec["pred_modality"]},
@@ -127,7 +155,9 @@ async def evaluate(specs, registry, model):
         rec["verdict"] = registry.classify_routing(rec["pred_recipe"], oracle)
 
         mark = "?"
-        if rec["true_recipe"]:
+        if rec["arm_variant"]:
+            mark = "ARM "
+        elif rec["true_recipe"]:
             mark = "OK " if rec["pred_recipe"] == rec["true_recipe"] else "MISS"
         print(f"  [{i}/{len(specs)}] {mark} {sp['spec'][:38]:<38} "
               f"pred={str(rec['pred_recipe'])[:34]:<34} {rec['verdict']}", flush=True)
@@ -135,19 +165,34 @@ async def evaluate(specs, registry, model):
     return rows
 
 
+def _declared(row, facet):
+    """Every value a spec declared for a many-valued facet, tolerating older ledger
+    rows that only carry the singular key."""
+    vals = row.get(f"true_{facet}s") or []
+    if not vals:
+        one = row.get(f"true_{facet}")
+        vals = [one] if one else []
+    return [v for v in vals if v]
+
+
 def report(rows):
     print("\n" + "=" * 78)
     print("ROUTING EVALUATION")
     print("=" * 78)
 
-    errs = [r for r in rows if r.get("error")]
-    ok = [r for r in rows if not r.get("error")]
+    errs = [r for r in rows if r.get("error") is not None]
+    ok = [r for r in rows if r.get("error") is None]
     print(f"specs evaluated: {len(ok)}   router errors: {len(errs)}")
 
-    # ——— selection accuracy (specs that pin a recipe) ———
-    pinned = [r for r in ok if r.get("true_recipe")]
+    # ——— selection accuracy (specs that pin a ROUTABLE recipe) ———
+    arms = [r for r in ok if r.get("arm_variant")]
+    pinned = [r for r in ok if r.get("true_recipe") and not r.get("arm_variant")]
     hits = [r for r in pinned if r["pred_recipe"] == r["true_recipe"]]
-    print(f"\nSELECTION  (specs pinning a recipe: {len(pinned)})")
+    print(f"\nSELECTION  (specs pinning a routable recipe: {len(pinned)})")
+    if arms:
+        print(f"  excluded: {len(arms)} spec(s) pinned to a pin-only research instrument "
+              f"(dial arm / AAH rung) — the pin is an experimental condition, not a "
+              f"routing target")
     print(f"  exact match: {len(hits)}/{len(pinned)} "
           f"({(len(hits)/len(pinned)*100 if pinned else 0):.1f}%)")
     near = [r for r in pinned
@@ -172,21 +217,44 @@ def report(rows):
         print(f"  MACRO-AVERAGED selection accuracy: {sum(accs)/len(accs)*100:.1f}%  "
               f"(the honest number — overall is dominated by one class)")
 
-    # ——— classification, only where the Router CAN express the answer ———
-    scorable = [r for r in ok
-                if r.get("true_task") and TAXONOMY_TO_ROUTER.get(r["true_task"]) is not None]
-    unscorable = [r for r in ok
-                  if r.get("true_task") and TAXONOMY_TO_ROUTER.get(r["true_task"]) is None]
-    t_hits = [r for r in scorable if r["pred_task"] == TAXONOMY_TO_ROUTER[r["true_task"]]]
-    print(f"\nCLASSIFICATION  (task_type)")
-    print(f"  scorable: {len(scorable)}   correct: {len(t_hits)} "
-          f"({(len(t_hits)/len(scorable)*100 if scorable else 0):.1f}%)")
+    # ——— classification, compared through the one controlled vocabulary ———
+    scorable = [r for r in ok if tx.canonical_task(r.get("true_task"))]
+    unscorable = [r for r in ok if r.get("true_task") and not tx.canonical_task(r["true_task"])]
+    exact_specs = {r["spec"] for r in scorable
+                   if any(tx.canonical_task(r["pred_task"]) == tx.canonical_task(t)
+                          for t in _declared(r, "task"))}
+    exact = [r for r in scorable if r["spec"] in exact_specs]
+    family = [r for r in scorable if r["spec"] not in exact_specs
+              and any(tx.tasks_overlap(r["pred_task"], t) for t in _declared(r, "task"))]
+    family_specs = {r["spec"] for r in family}
+    print(f"\nCLASSIFICATION  (task_type, compared canonically)")
+    print(f"  scorable: {len(scorable)}   exact: {len(exact)} "
+          f"({(len(exact)/len(scorable)*100 if scorable else 0):.1f}%)   "
+          f"right family, wrong subtype: {len(family)}")
+    wrong = [r for r in scorable if r["spec"] not in exact_specs | family_specs]
+    for r in wrong[:12]:
+        print(f"    MISLABEL {r['spec'][:38]:<38} "
+              f"true={'|'.join(_declared(r, 'task'))[:28]:<28} pred={str(r['pred_task'])[:26]}")
     if unscorable:
         missing = sorted({r["true_task"] for r in unscorable})
-        print(f"  UNSCORABLE: {len(unscorable)} spec(s) whose true task the Router enum "
-              f"cannot express — {', '.join(missing)}")
-        print(f"    These recipes are unreachable by classification; only a spec pin can "
-              f"select them. This is a routing DEFECT, not a model error (024 §1).")
+        print(f"  UNSCORABLE: {len(unscorable)} spec(s) whose true task is not in the "
+              f"vocabulary at all — {', '.join(missing)}")
+        print(f"    Fix taxonomy.yaml; do not count these against the model.")
+
+    # modality, same treatment
+    m_scorable = [r for r in ok if tx.canonical_modality(r.get("true_modality"))]
+    m_hit_specs = {r["spec"] for r in m_scorable
+                   if any(tx.canonical_modality(r["pred_modality"]) == tx.canonical_modality(m)
+                          for m in _declared(r, "modality"))}
+    m_hits = [r for r in m_scorable if r["spec"] in m_hit_specs]
+    print(f"\nCLASSIFICATION  (data_modality)")
+    print(f"  scorable: {len(m_scorable)}   correct: {len(m_hits)} "
+          f"({(len(m_hits)/len(m_scorable)*100 if m_scorable else 0):.1f}%)")
+    for r in m_scorable:
+        if r["spec"] not in m_hit_specs:
+            print(f"    MISLABEL {r['spec'][:38]:<38} "
+                  f"true={'|'.join(_declared(r, 'modality'))[:14]:<14} "
+                  f"pred={str(r['pred_modality'])[:14]}")
 
     # ——— verdict mix ———
     print("\nVERDICTS (against the Router's own labels)")
@@ -196,9 +264,10 @@ def report(rows):
     for v in ("routed_consistent", "routed_off_manifest", "drafted_miss", "drafted_gap"):
         print(f"  {v:<22} {counts.get(v, 0)}")
     if counts.get("drafted_gap"):
-        print("    NOTE drafted_gap here means 'a gap GIVEN THE ROUTER'S LABELS'. A "
-              "misclassification produces a phantom gap; phase 3 (semantic near-miss) is "
-              "what separates the two.")
+        print("    NOTE drafted_gap still means 'a gap GIVEN THE ROUTER'S LABELS' — a "
+              "misclassification produces a phantom gap. Cross-check it against the "
+              "CLASSIFICATION block above: a gap under a label that block scored correct "
+              "is a real gap.")
 
     # ——— calibration ———
     conf_rows = [r for r in pinned if r.get("confidence") is not None]
@@ -221,6 +290,10 @@ async def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--model", default=None, help="Router model (default: resolved stage model)")
     ap.add_argument("--out", default="research/routing_eval.jsonl")
+    ap.add_argument("--tag", default=None,
+                    help="Stamped on every row. Use it to distinguish arms of one "
+                         "experiment (e.g. pre_vocab / post_vocab) — router_model alone "
+                         "cannot tell two code versions apart.")
     args = ap.parse_args()
 
     registry = KnowledgeRegistry("src/gads/knowledge/recipes")
@@ -239,7 +312,8 @@ async def main():
         stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
         with open(args.out, "a") as f:
             for r in rows:
-                f.write(json.dumps({"ts": stamp, "router_model": model, **r}) + "\n")
+                f.write(json.dumps({"ts": stamp, "router_model": model,
+                                    "tag": args.tag, **r}) + "\n")
         print(f"\nwrote {len(rows)} record(s) to {args.out}")
 
 

@@ -4,6 +4,8 @@ import re
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 
+from gads.core import taxonomy as tx
+
 def _extract_rationale(body_str: str, fallback: str = "") -> str:
     """Pull the ## Rationale section from a recipe body.
 
@@ -466,9 +468,14 @@ class KnowledgeRegistry:
         triggers (for relevance pruning — strip triggers before serializing into prompts)."""
         return [{"id": s.id, "description": s.description, "triggers": s.triggers} for s in self.skills.values()]
 
-    def get_recipes_summary(self) -> List[Dict[str, Any]]:
-        """Returns a list of available recipes with their IDs and rationale for agent awareness."""
-        return [{"id": r.id, "rationale": r.rationale, "applies_when": r.applies_when} for r in self.recipes.values()]
+    def get_recipes_summary(self, include_pin_only: bool = False) -> List[Dict[str, Any]]:
+        """Recipes offered to a *selecting agent* (Router, SpecDrafter) — id, rationale,
+        applies_when. Pin-only research instruments are withheld by default: showing an
+        agent a recipe it must never choose can only produce a wrong choice. Spec pins
+        resolve through `get_recipe` and are unaffected."""
+        return [{"id": r.id, "rationale": r.rationale, "applies_when": r.applies_when}
+                for r in self.recipes.values()
+                if include_pin_only or not self.is_pin_only(r.applies_when)]
 
     def find_matches(self, intent_tags: Dict[str, Any], objective: str = "") -> List[Recipe]:
         """Every recipe whose `applies_when` covers these labels — the COVERAGE ORACLE.
@@ -482,9 +489,12 @@ class KnowledgeRegistry:
         Recipes are returned ranked: signal hits first, then declaration order, so the head
         of the list is the best deterministic guess rather than an arbitrary dict order.
 
-        NOTE the label vocabulary is not shared with `taxonomy.yaml` or with the Router's
-        prompt enum (approach_docs/024 §1). Matching here is only as good as the caller's
-        labels.
+        Labels are compared CANONICALLY, not as raw strings: both sides are normalized
+        through `taxonomy.yaml` first (approach_docs/024 §1), so a recipe declaring
+        `cox_regression` is found by a Router that said `regression.survival`, and a
+        recipe declaring the bare `classification` family covers `classification.binary`.
+        Before that normalization 11 of 29 recipes declared task_type terms no Router
+        label could ever equal, and their coverage was invisible to this oracle.
         """
         target_type = intent_tags.get("task_type")
         target_modality = intent_tags.get("data_modality")
@@ -493,9 +503,13 @@ class KnowledgeRegistry:
         scored = []
         for recipe in self.recipes.values():
             applies = recipe.applies_when or {}
-            if target_type not in (applies.get("task_type") or []):
+            if not self._label_covers(applies.get("task_type") or [], target_type, tx.tasks_overlap):
                 continue
-            if target_modality not in (applies.get("data_modality") or []):
+            if not self._label_covers(applies.get("data_modality") or [], target_modality,
+                                      lambda a, b: tx.canonical_modality(a) == tx.canonical_modality(b)):
+                continue
+            # A pin-only research instrument is never a routing candidate.
+            if self.is_pin_only(applies):
                 continue
             # Anti-signals are what stop a broader recipe from swallowing a narrower one
             # (the AutoGluon recipes anti-signal model-comparison objectives precisely so
@@ -506,6 +520,32 @@ class KnowledgeRegistry:
 
         scored.sort(key=lambda pair: -pair[0])
         return [r for _score, r in scored]
+
+    @staticmethod
+    def is_pin_only(applies_when: Dict[str, Any]) -> bool:
+        """True for a recipe that must never be *routed* to — a research instrument
+        (a delegation-dial arm, an AAH grounding rung) reachable only by an explicit
+        spec `recipe_id` pin. Seven recipes said this in anti-signal prose that nothing
+        evaluated, so the oracle offered them as candidates and every pinned arm spec
+        scored as a routing miss. `pin_only: true` is the declaration; the legacy
+        "never match" prose is still honored so an un-migrated recipe is not silently
+        routable."""
+        aw = applies_when or {}
+        if aw.get("pin_only"):
+            return True
+        for anti in (aw.get("anti_signals") or []):
+            if isinstance(anti, dict) and "never match" in str(anti.get("routing", "")).lower():
+                return True
+        return False
+
+    @staticmethod
+    def _label_covers(declared, target, matches) -> bool:
+        """True if any of a recipe's declared labels covers `target`. Exact string
+        equality is kept as a first path so a term the vocabulary does not yet know
+        still matches itself rather than silently dropping out of coverage."""
+        if not target:
+            return False
+        return any(d == target or matches(d, target) for d in declared)
 
     @staticmethod
     def _anti_signals_fire(anti_signals, intent_tags: Dict[str, Any], obj_low: str) -> bool:

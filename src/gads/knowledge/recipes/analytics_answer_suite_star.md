@@ -8,6 +8,7 @@ author: gads-core
 applies_when:
   task_type: [business_analytics]
   data_modality: [tabular]
+  pin_only: true          # research instrument — reachable only by an explicit spec pin
   anti_signals:
     - routing: "never match — aah grounding-axis instrument (rung 2 (star schema)); selected only by an explicit spec pin"
 

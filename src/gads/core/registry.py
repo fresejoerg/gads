@@ -99,6 +99,35 @@ def set_run_mode(mode: str):
 def get_run_mode() -> str:
     return _RUN_MODE
 
+# ——— RECIPE CONFIDENCE THRESHOLD: deterministic-compile vs advisory-context gate ————————
+# The Router always emits a `confidence` score (0.0-1.0) alongside any matched recipe.
+# At or above this threshold the plan is compiled mechanically from the recipe's DAG
+# (Planner LLM skipped). Below it, the recipe is still surfaced to the Planner as advisory
+# JSON context — a knowledge base to draw on, not a script to follow — and the Planner
+# drafts its own plan (D2 "advised" on the delegation dial, see core/dial.py).
+def _initial_recipe_confidence_threshold() -> float:
+    raw = os.getenv("GADS_RECIPE_CONFIDENCE_THRESHOLD", "").strip()
+    try:
+        return float(raw) if raw else 0.7
+    except ValueError:
+        return 0.7
+
+
+_RECIPE_CONFIDENCE_THRESHOLD = _initial_recipe_confidence_threshold()
+
+
+def set_recipe_confidence_threshold(value: float):
+    global _RECIPE_CONFIDENCE_THRESHOLD
+    value = float(value)
+    if not (0.0 <= value <= 1.0):
+        raise ValueError(f"recipe_confidence_threshold must be in [0.0, 1.0], got {value}")
+    _RECIPE_CONFIDENCE_THRESHOLD = value
+    print(f"  [Registry] Recipe confidence threshold set to {_RECIPE_CONFIDENCE_THRESHOLD}", flush=True)
+
+
+def get_recipe_confidence_threshold() -> float:
+    return _RECIPE_CONFIDENCE_THRESHOLD
+
 # Stages that stay on cloud tiers in hybrid mode. Everything not listed here
 # (Coder execution tasks, CompletenessVerifier, any future stage) goes local.
 HYBRID_CLOUD_STAGES = {"SpecDrafter", "Router", "Planner", "PlanCritique", "Synthesizer", "Critique"}
