@@ -17,6 +17,7 @@ from gads.core.error_ledger import (
     normalize_error_reason, record_error, record_resolution, common_pitfalls,
 )
 from gads.core.llm import CodeGenerationError
+from gads.core.stdout_clean import clean_stdout
 from sqlmodel import Session
 
 # Estimator methods whose reassignment rewrites behaviour for every user of the class.
@@ -805,17 +806,13 @@ class ExecutionManager:
                         accumulated_out += new_out
                         accumulated_err += new_err
                         combined = accumulated_out + "\n" + accumulated_err
-                        
-                        # Collapse carriage returns for tqdm
-                        lines = combined.split('\n')
-                        cleaned_lines = []
-                        for line in lines:
-                            if '\r' in line:
-                                line = line.split('\r')[-1]
-                            cleaned_lines.append(line)
-                        cleaned_text = '\n'.join(cleaned_lines)
-                        
-                        await stdout_callback(cleaned_text)
+
+                        # Collapse tqdm redraws AND drop internal telemetry lines. The
+                        # sentinel strip matters here specifically: the insights postamble
+                        # and the floor/metrics probes print to this SAME session while
+                        # this poller is alive, so without it a user watching a running
+                        # node sees raw GADS_*_JSON: spam in the final second.
+                        await stdout_callback(clean_stdout(combined))
 
         while retry_count < max_attempts:
             print(f"    [Executor] --- Step {retry_count + 1} for: {task_description[:30]}... ---", flush=True)
@@ -1005,6 +1002,7 @@ _gads_insights = [] # Clear for next task
 """
                 wrapped_code = telemetry_preamble + "\n" + current_code + "\n" + telemetry_postamble
 
+                exec_result = None
                 poller = asyncio.create_task(poll_logs_loop())
                 try:
                     _sandbox_timeout = 720.0 if "local_model" in (self.coder.model_str or "") else 360.0
@@ -1023,6 +1021,15 @@ _gads_insights = [] # Clear for next task
                             exec_result.stdout = parts[0] + "\n".join(parts[1].strip().split("\n")[1:])
                         except Exception as e:
                             print(f"    [Executor] Warning: Failed to parse semantic insights: {e}")
+
+                    # The persisted copy is captured separately from the polled live
+                    # stream, so it has to be cleaned separately too — otherwise a task
+                    # that looked tidy while running explodes back into hundreds of
+                    # duplicated progress-bar lines the moment it completes. Done AFTER
+                    # the insights parse above, and safe with respect to every other
+                    # sentinel parser: the floor / metrics / state-snapshot probes each
+                    # read their own separate execute result, never this one.
+                    exec_result.stdout = clean_stdout(exec_result.stdout)
 
                     # --- AUTOMATIC STRUCTURAL TELEMETRY (The 'Verification Floor') ---
                     # Probe kernel for DataFrames and extract deterministic stats
@@ -1065,10 +1072,14 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                     with contextlib.suppress(asyncio.CancelledError):
                         await poller
                         
-                    # Final flush
-                    if task_id:
-                        # Send a final update to ensure UI sees the end state before COMPLETE event
-                        pass
+                    # Final flush. The poller samples on a 1s tick and is cancelled the
+                    # instant execution returns, so up to a second of trailing output
+                    # never reached the live view. Push the authoritative stdout instead
+                    # of racing one more poll: it is already complete and already clean,
+                    # so the live view ends on exactly the text that gets persisted.
+                    if stdout_callback and exec_result is not None and exec_result.stdout:
+                        with contextlib.suppress(Exception):
+                            await stdout_callback(exec_result.stdout)
 
                 if exec_result.error is None:
                     print(f"    [Executor] ✅ Execution successful.", flush=True)

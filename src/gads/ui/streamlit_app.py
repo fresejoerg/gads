@@ -943,6 +943,16 @@ def render_orchestrator_panel():
                                         st.markdown(parts[1])
                             else:
                                 st.markdown(stdout)
+                        elif is_coder_task:
+                            # Raw sandbox output — render as code, matching the live view.
+                            # st.markdown mangles it (underscores italicise, `#` becomes a
+                            # heading, backticks eat text) and it loses continuity with the
+                            # st.code block the user was just watching while it ran.
+                            final_stdout = res["stdout"]
+                            if len(final_stdout) > 5000:
+                                final_stdout = "... [truncated] ...\n" + final_stdout[-5000:]
+                            st.markdown("**🖥️ Sandbox Output:**")
+                            st.code(final_stdout, language="text")
                         else:
                             st.markdown(res["stdout"])
                     if t.get("error"):

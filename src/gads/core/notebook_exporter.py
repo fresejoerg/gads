@@ -6,6 +6,7 @@ from typing import List, Optional
 from sqlmodel import Session, select
 from gads.core.database import engine
 from gads.core.models import Task
+from gads.core.stdout_clean import SENTINEL_PREFIXES
 
 # Agents that produce no executable code and should be excluded from the bundle
 _SYSTEM_AGENTS = {
@@ -28,14 +29,15 @@ def gads_emit_insight(artifact, insight, evidence=""):
 """
 
 def _sentinel_cleaned_stdout(stdout: str) -> str:
-    """Strip GADS internal sentinel lines from stdout for display."""
-    keep = []
-    for line in stdout.splitlines():
-        if not any(line.startswith(p) for p in (
-            "GADS_INSIGHTS_JSON:", "GADS_FLOOR_JSON:",
-            "GADS_STATE_SNAPSHOT:", "GADS_HYPOTHESIS_JSON:"
-        )):
-            keep.append(line)
+    """Strip GADS internal sentinel lines from stdout for display.
+
+    Prefix list is shared with the live/persisted display path (core/stdout_clean.py) so
+    the two cannot drift — this copy had already fallen behind by one (`GADS_METRICS_JSON:`).
+    """
+    keep = [
+        line for line in stdout.splitlines()
+        if not line.startswith(SENTINEL_PREFIXES)
+    ]
     return "\n".join(keep).strip()
 
 
