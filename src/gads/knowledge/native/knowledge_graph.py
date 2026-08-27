@@ -676,3 +676,412 @@ def gads_audit_graph(nodes, edges, ontology=None, write_path="graph_checks.json"
         result["error"] = f"{type(e).__name__}: {e}"
 
     return result
+
+
+def gads_build_ontology(entity_types=None, relation_types=None, source=None,
+                        write_path="ontology.json"):
+    """Normalise an ontology into the canonical shape, from user input or induction.
+
+    Three provenances, all landing in the same structure so nothing downstream cares:
+
+    * **user** — the analyst already knows the schema (biomedical DRUG/GENE/DISEASE,
+      finance ORG/INSTRUMENT). The common enterprise case, and by far the most reliable:
+      extraction constrained to a known type set beats extraction that also has to guess
+      the set.
+    * **induced** — proposed by the model from a corpus sample.
+    * **hybrid** — user types are authoritative, model additions are marked `added_by`
+      so a later audit can tell which came from where.
+
+    Input is accepted loosely, because a user should not have to learn a schema to say
+    "PERSON, ORG". `entity_types` may be a list of names, {name: description}, or
+    {name: {description, examples}}. `relation_types` may be a list of names, a list of
+    "HEAD REL TAIL" strings, {name: description}, or full
+    {name: {description, domain, range, examples, mutually_exclusive_with}}.
+
+    Normalisation is deliberate and reported: names are upper-snake-cased, so "works for"
+    and "Works For" cannot become two relations. Domain/range default to open (any type)
+    rather than to a guess — an unconstrained relation is honest, a wrongly-guessed one
+    silently rejects valid triplets in `gads_audit_graph`.
+
+    Returns {entity_types, relation_types, source, n_entity_types, n_relation_types,
+    warnings, ontology_path} — the same shape `gads_audit_graph(ontology=...)` consumes.
+    """
+    import re
+    import json
+
+    warnings = []
+
+    def _canon(name):
+        s = re.sub(r"[^\w\s]", " ", str(name)).strip()
+        s = re.sub(r"\s+", "_", s)
+        return s.upper()
+
+    def _norm_types(spec, kind):
+        out = {}
+        if spec is None:
+            return out
+        if isinstance(spec, (list, tuple, set)):
+            items = {}
+            for it in spec:
+                if isinstance(it, dict):
+                    nm = it.get("name") or it.get("type") or it.get("id")
+                    if nm:
+                        items[nm] = {k: v for k, v in it.items()
+                                     if k not in ("name", "type", "id")}
+                else:
+                    items[str(it)] = {}
+            spec = items
+        if not isinstance(spec, dict):
+            raise ValueError(f"{kind} must be a list or dict, got {type(spec).__name__}")
+        for raw, body in spec.items():
+            name = _canon(raw)
+            if not name:
+                warnings.append(f"dropped unnameable {kind} entry: {raw!r}")
+                continue
+            if name != str(raw):
+                warnings.append(f"{kind} {raw!r} normalised to {name!r}")
+            if isinstance(body, str):
+                body = {"description": body}
+            elif not isinstance(body, dict):
+                body = {}
+            if name in out:
+                warnings.append(f"duplicate {kind} {name!r} after normalisation — merged")
+                out[name].update({k: v for k, v in body.items() if v})
+            else:
+                out[name] = dict(body)
+        return out
+
+    ents = _norm_types(entity_types, "entity_type")
+
+    # Relations given as "ORG ACQUIRED ORG" carry their own domain/range.
+    rel_spec = relation_types
+    if isinstance(rel_spec, (list, tuple, set)):
+        expanded = {}
+        for it in rel_spec:
+            if isinstance(it, str) and len(it.split()) == 3:
+                h, r, t = it.split()
+                expanded[r] = {"domain": [_canon(h)], "range": [_canon(t)]}
+            else:
+                expanded[it if not isinstance(it, dict) else
+                         (it.get("name") or it.get("type") or "REL")] = (
+                    it if isinstance(it, dict) else {})
+        rel_spec = expanded
+    rels = _norm_types(rel_spec, "relation_type")
+
+    for name, body in rels.items():
+        for key in ("domain", "range"):
+            val = body.get(key)
+            if val is None:
+                body[key] = []          # open by default — see docstring
+            elif isinstance(val, str):
+                body[key] = [_canon(val)]
+            else:
+                body[key] = [_canon(v) for v in val]
+            unknown = [t for t in body[key] if ents and t not in ents]
+            if unknown:
+                warnings.append(
+                    f"relation {name!r} {key} references undeclared entity type(s) "
+                    f"{unknown} — they will be added")
+                for t in unknown:
+                    ents.setdefault(t, {"description": f"(implied by {name}.{key})"})
+        mx = body.get("mutually_exclusive_with")
+        body["mutually_exclusive_with"] = ([_canon(m) for m in mx] if mx else [])
+
+    if not ents:
+        warnings.append("no entity types declared — extraction will be unconstrained")
+    if not rels:
+        warnings.append("no relation types declared — triplet extraction will be unconstrained")
+
+    ontology = {"entity_types": ents, "relation_types": rels,
+                "source": source or ("user" if (entity_types or relation_types) else "empty"),
+                "n_entity_types": len(ents), "n_relation_types": len(rels),
+                "warnings": warnings, "ontology_path": write_path}
+    try:
+        import os as _os
+        _d = _os.path.dirname(write_path)
+        if _d:
+            _os.makedirs(_d, exist_ok=True)
+        with open(write_path, "w") as fh:
+            json.dump({k: v for k, v in ontology.items() if k != "ontology_path"},
+                      fh, indent=2, default=str)
+    except Exception as e:
+        print(f"[gads_build_ontology] could not write {write_path}: {e}")
+
+    print(f"[gads_build_ontology] source={ontology['source']} | {len(ents)} entity type(s): "
+          f"{sorted(ents)[:8]}{'...' if len(ents) > 8 else ''}")
+    print(f"[gads_build_ontology] {len(rels)} relation type(s): "
+          f"{sorted(rels)[:8]}{'...' if len(rels) > 8 else ''}")
+    for w in warnings:
+        print(f"  ~ {w}")
+    return ontology
+
+
+def gads_extract_entities(chunks, ontology, max_chunks=200, max_chars=6000,
+                          model="local_model", temperature=0.0, timeout=120.0,
+                          write_path="mentions.parquet"):
+    """Extract typed entity mentions from chunks, constrained to the ontology's types.
+
+    Calls the local model through the sandbox-scoped LiteLLM key
+    (`GADS_SANDBOX_LLM_KEY`, `models: [local_model]` — cloud providers are refused, so the
+    corpus cannot leave this machine). Raises if that env is absent rather than silently
+    producing nothing: a missing credential is a setup fault, not an empty result.
+
+    **Spans are computed, never trusted.** The model returns surface forms; this locates
+    each one in the chunk with `str.find` and converts to a document-absolute offset via
+    the chunk's `char_start`. Model-reported offsets are routinely wrong by a few
+    characters, and a wrong offset is worse than no offset — it makes an unverifiable claim
+    look verifiable. A form the model returns that does not occur in the chunk is DROPPED
+    and counted in `n_hallucinated`, because it was not in the text.
+
+    Types outside the ontology are dropped and counted in `n_off_ontology`. `max_chunks`
+    and `max_chars` are hard budget caps — generated code can loop, and the key's rpm limit
+    should not be the only thing standing between a 10k-document corpus and an afternoon.
+
+    Returns {mentions, n_mentions, n_chunks_processed, n_hallucinated, n_off_ontology,
+    n_failed_chunks, mentions_path}.
+    """
+    import os
+    import re
+    import json
+    import pandas as pd
+
+    base = os.environ.get("GADS_SANDBOX_LLM_BASE_URL")
+    key = os.environ.get("GADS_SANDBOX_LLM_KEY")
+    if not base or not key:
+        raise RuntimeError(
+            "GADS_SANDBOX_LLM_BASE_URL / GADS_SANDBOX_LLM_KEY are not set in the sandbox. "
+            "Extraction needs the local-model-scoped LiteLLM key — see approach_docs/030 §2a.")
+    from openai import OpenAI
+    client = OpenAI(base_url=base, api_key=key, timeout=timeout, max_retries=1)
+
+    chunks = pd.DataFrame(chunks)
+    allowed = set((ontology or {}).get("entity_types") or {})
+    type_help = "\n".join(
+        f"- {t}: {(b or {}).get('description') or 'no description'}"
+        for t, b in ((ontology or {}).get("entity_types") or {}).items()) or "- ENTITY: any"
+
+    budget = chunks.head(max_chunks)
+    rows, n_hall, n_off, n_failed, used = [], 0, 0, 0, 0
+
+    for rec in budget.to_dict("records"):
+        text = str(rec.get("text") or "")[:max_chars]
+        if not text.strip():
+            continue
+        prompt = (
+            "Extract named entities from the TEXT. Use ONLY these types:\n"
+            f"{type_help}\n\n"
+            "Return ONLY a JSON array, no prose, no code fences. Each element:\n"
+            '{"surface_form": "<exact substring copied from TEXT>", "entity_type": "<TYPE>"}\n'
+            "The surface_form MUST appear verbatim in TEXT. Return [] if there are none.\n\n"
+            f"TEXT:\n{text}")
+        try:
+            resp = client.chat.completions.create(
+                model=model, temperature=temperature, max_tokens=1500,
+                messages=[{"role": "user", "content": prompt}])
+            raw = (resp.choices[0].message.content or "").strip()
+            used += 1
+        except Exception as e:
+            n_failed += 1
+            print(f"[gads_extract_entities] chunk {rec.get('chunk_id')} failed: "
+                  f"{type(e).__name__}: {str(e)[:90]}")
+            continue
+
+        m = re.search(r"\[.*\]", raw, re.DOTALL)
+        if not m:
+            n_failed += 1
+            continue
+        try:
+            items = json.loads(m.group(0))
+        except Exception:
+            n_failed += 1
+            continue
+
+        for it in items if isinstance(items, list) else []:
+            if not isinstance(it, dict):
+                continue
+            form = str(it.get("surface_form") or "").strip()
+            etype = str(it.get("entity_type") or "").strip().upper()
+            if not form:
+                continue
+            if allowed and etype not in allowed:
+                n_off += 1
+                continue
+            pos = text.find(form)
+            if pos < 0:                       # not in the text — do not invent a span
+                n_hall += 1
+                continue
+            base_off = int(rec.get("char_start") or 0)
+            rows.append({"surface_form": form, "entity_type": etype or "ENTITY",
+                         "doc_id": rec.get("doc_id"), "chunk_id": rec.get("chunk_id"),
+                         "char_start": base_off + pos,
+                         "char_end": base_off + pos + len(form)})
+
+    mentions = pd.DataFrame(rows)
+    if len(mentions):
+        mentions = mentions.drop_duplicates(
+            subset=["surface_form", "entity_type", "doc_id", "char_start"])
+        # Persisting is a convenience; the caller already has the frame. A bad path must
+        # never destroy an extraction that cost real model calls.
+        try:
+            _d = os.path.dirname(write_path)
+            if _d:
+                os.makedirs(_d, exist_ok=True)
+            try:
+                mentions.to_parquet(write_path, index=False)
+            except Exception:
+                write_path = write_path.replace(".parquet", ".csv")
+                mentions.to_csv(write_path, index=False)
+        except Exception as e:
+            print(f"[gads_extract_entities] could not persist to {write_path}: "
+                  f"{type(e).__name__}; returning in-memory only")
+            write_path = None
+
+    skipped = max(0, len(chunks) - len(budget))
+    print(f"[gads_extract_entities] {len(mentions)} mention(s) from {used}/{len(chunks)} "
+          f"chunk(s)" + (f" (budget capped, {skipped} skipped)" if skipped else "")
+          + f" | dropped: {n_hall} not-in-text, {n_off} off-ontology, {n_failed} failed call(s)")
+    return {"mentions": mentions, "n_mentions": int(len(mentions)),
+            "n_chunks_processed": int(used), "n_hallucinated": int(n_hall),
+            "n_off_ontology": int(n_off), "n_failed_chunks": int(n_failed),
+            "mentions_path": write_path}
+
+
+def gads_extract_triplets(chunks, ontology, max_chunks=200, max_chars=6000,
+                          model="local_model", temperature=0.0, timeout=120.0,
+                          write_path="triplets.parquet"):
+    """Extract (head, relation, tail) triplets from chunks, constrained to the ontology.
+
+    Same contract as `gads_extract_entities`: local model only, budget-capped, and spans
+    are LOCATED rather than believed — head and tail must both occur verbatim in the chunk
+    or the triplet is dropped as unsupported. The edge's `char_start`/`char_end` bracket
+    the head and tail occurrences, so the span quotes the text that actually asserts the
+    relation.
+
+    Relations outside the ontology are dropped (`n_off_ontology`). Domain/range are NOT
+    enforced here — `gads_audit_graph` owns that check, and it is more useful as a reported
+    finding on the assembled graph than as a silent filter that hides what the model did.
+
+    `confidence` is the model's own estimate, clamped to [0,1] and defaulting to 0.5. It is
+    weak evidence by construction; the audit's degenerate-confidence check exists precisely
+    because a model that returns 1.0 for everything is telling you nothing.
+
+    Returns {triplets, n_triplets, n_chunks_processed, n_unsupported, n_off_ontology,
+    n_failed_chunks, triplets_path}.
+    """
+    import os
+    import re
+    import json
+    import pandas as pd
+
+    base = os.environ.get("GADS_SANDBOX_LLM_BASE_URL")
+    key = os.environ.get("GADS_SANDBOX_LLM_KEY")
+    if not base or not key:
+        raise RuntimeError(
+            "GADS_SANDBOX_LLM_BASE_URL / GADS_SANDBOX_LLM_KEY are not set in the sandbox. "
+            "Extraction needs the local-model-scoped LiteLLM key — see approach_docs/030 §2a.")
+    from openai import OpenAI
+    client = OpenAI(base_url=base, api_key=key, timeout=timeout, max_retries=1)
+
+    chunks = pd.DataFrame(chunks)
+    rel_defs = (ontology or {}).get("relation_types") or {}
+    allowed = set(rel_defs)
+    rel_help = "\n".join(
+        f"- {r}: {(b or {}).get('description') or 'no description'}"
+        + (f" [{'/'.join(b.get('domain') or [])} -> {'/'.join(b.get('range') or [])}]"
+           if (b or {}).get("domain") or (b or {}).get("range") else "")
+        for r, b in rel_defs.items()) or "- RELATED_TO: any relation"
+
+    budget = chunks.head(max_chunks)
+    rows, n_unsup, n_off, n_failed, used = [], 0, 0, 0, 0
+
+    for rec in budget.to_dict("records"):
+        text = str(rec.get("text") or "")[:max_chars]
+        if not text.strip():
+            continue
+        prompt = (
+            "Extract relationship triplets from the TEXT. Use ONLY these relation types:\n"
+            f"{rel_help}\n\n"
+            "Return ONLY a JSON array, no prose, no code fences. Each element:\n"
+            '{"head": "<exact substring from TEXT>", "relation": "<TYPE>", '
+            '"tail": "<exact substring from TEXT>", "confidence": <0.0-1.0>}\n'
+            "head and tail MUST appear verbatim in TEXT. Only state relations the TEXT "
+            "actually asserts — do not infer from world knowledge. Return [] if none.\n\n"
+            f"TEXT:\n{text}")
+        try:
+            resp = client.chat.completions.create(
+                model=model, temperature=temperature, max_tokens=1500,
+                messages=[{"role": "user", "content": prompt}])
+            raw = (resp.choices[0].message.content or "").strip()
+            used += 1
+        except Exception as e:
+            n_failed += 1
+            print(f"[gads_extract_triplets] chunk {rec.get('chunk_id')} failed: "
+                  f"{type(e).__name__}: {str(e)[:90]}")
+            continue
+
+        m = re.search(r"\[.*\]", raw, re.DOTALL)
+        if not m:
+            n_failed += 1
+            continue
+        try:
+            items = json.loads(m.group(0))
+        except Exception:
+            n_failed += 1
+            continue
+
+        base_off = int(rec.get("char_start") or 0)
+        for it in items if isinstance(items, list) else []:
+            if not isinstance(it, dict):
+                continue
+            head = str(it.get("head") or "").strip()
+            tail = str(it.get("tail") or "").strip()
+            rel = str(it.get("relation") or "").strip().upper().replace(" ", "_")
+            if not head or not tail or not rel:
+                continue
+            if allowed and rel not in allowed:
+                n_off += 1
+                continue
+            hp, tp = text.find(head), text.find(tail)
+            if hp < 0 or tp < 0:              # the text does not contain what was claimed
+                n_unsup += 1
+                continue
+            try:
+                conf = float(it.get("confidence", 0.5))
+            except Exception:
+                conf = 0.5
+            conf = min(1.0, max(0.0, conf))
+            lo = min(hp, tp)
+            hi = max(hp + len(head), tp + len(tail))
+            rows.append({"head_surface": head, "relation_type": rel, "tail_surface": tail,
+                         "confidence": conf, "doc_id": rec.get("doc_id"),
+                         "chunk_id": rec.get("chunk_id"),
+                         "char_start": base_off + lo, "char_end": base_off + hi,
+                         "evidence": text[lo:hi][:300]})
+
+    triplets = pd.DataFrame(rows)
+    if len(triplets):
+        triplets = triplets.drop_duplicates(
+            subset=["head_surface", "relation_type", "tail_surface", "doc_id", "char_start"])
+        try:
+            _d = os.path.dirname(write_path)
+            if _d:
+                os.makedirs(_d, exist_ok=True)
+            try:
+                triplets.to_parquet(write_path, index=False)
+            except Exception:
+                write_path = write_path.replace(".parquet", ".csv")
+                triplets.to_csv(write_path, index=False)
+        except Exception as e:
+            print(f"[gads_extract_triplets] could not persist to {write_path}: "
+                  f"{type(e).__name__}; returning in-memory only")
+            write_path = None
+
+    skipped = max(0, len(chunks) - len(budget))
+    print(f"[gads_extract_triplets] {len(triplets)} triplet(s) from {used}/{len(chunks)} "
+          f"chunk(s)" + (f" (budget capped, {skipped} skipped)" if skipped else "")
+          + f" | dropped: {n_unsup} unsupported-by-text, {n_off} off-ontology, "
+          f"{n_failed} failed call(s)")
+    return {"triplets": triplets, "n_triplets": int(len(triplets)),
+            "n_chunks_processed": int(used), "n_unsupported": int(n_unsup),
+            "n_off_ontology": int(n_off), "n_failed_chunks": int(n_failed),
+            "triplets_path": write_path}

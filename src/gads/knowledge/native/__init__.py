@@ -35,7 +35,8 @@ from .model_selection import (gads_load_prepared_split, gads_dataset_facts,
                               gads_model_card)
 from .diagnostics import gads_plot_classification_curves
 from .knowledge_graph import (gads_load_text_corpus, gads_resolve_entities,
-                              gads_build_lpg, gads_audit_graph)
+                              gads_build_lpg, gads_audit_graph, gads_build_ontology,
+                              gads_extract_entities, gads_extract_triplets)
 
 NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_automl_fit": gads_automl_fit,
@@ -98,6 +99,11 @@ NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_resolve_entities": gads_resolve_entities,
     "gads_build_lpg": gads_build_lpg,
     "gads_audit_graph": gads_audit_graph,
+    "gads_build_ontology": gads_build_ontology,
+    # LLM-backed extraction. Reach the local model ONLY, via the sandbox-scoped LiteLLM
+    # key; they raise rather than degrade silently if that env is missing.
+    "gads_extract_entities": gads_extract_entities,
+    "gads_extract_triplets": gads_extract_triplets,
 }
 
 # Preamble injected into every sandbox execution when AutoGluon recipes are active.
@@ -526,6 +532,9 @@ KNOWLEDGE_GRAPH_PREAMBLE = (
         _kg_mod.gads_resolve_entities,
         _kg_mod.gads_build_lpg,
         _kg_mod.gads_audit_graph,
+        _kg_mod.gads_build_ontology,
+        _kg_mod.gads_extract_entities,
+        _kg_mod.gads_extract_triplets,
     ))
 )
 
@@ -566,7 +575,9 @@ _PREAMBLE_ROUTES = (
      lambda: SURVIVAL_PREAMBLE),
     ("knowledge-graph", ("gads_load_text_corpus", "gads_resolve_entities",
                          "gads_build_lpg", "gads_audit_graph", "MultiDiGraph",
-                         "knowledge_graph_nodes", "graph_checks"),
+                         "knowledge_graph_nodes", "graph_checks",
+                         "gads_build_ontology", "gads_extract_entities",
+                         "gads_extract_triplets"),
      lambda: KNOWLEDGE_GRAPH_PREAMBLE),
 )
 
