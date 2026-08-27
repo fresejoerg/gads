@@ -6,7 +6,10 @@ author: gads-core
 
 # ——— ROUTING METADATA ———
 applies_when:
-  task_type: [causal_inference]
+  # `causal.heterogeneous_effects` MUST be declared explicitly — it is a SIBLING of
+  # `causal.effect_estimation` (what `causal_inference` canonicalizes to), so the alias
+  # alone left this recipe unreachable for a correctly-labelled CATE/uplift request.
+  task_type: [causal.heterogeneous_effects, causal_inference]
   data_modality: [tabular]
   signals:
     - heterogeneous_effects: true

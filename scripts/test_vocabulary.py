@@ -26,6 +26,31 @@ from gads.core.prompts import FACTORY_DEFAULTS, REQUIRED_VARS
 FM = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 failures: list[str] = []
 
+# Leaf task terms with NO agent-reachable recipe, as of 2026-08-27. See check 6.
+# This is a deliberate record of the coverage frontier, not a wishlist: shrink it when a
+# recipe lands, and only ever grow it on a conscious decision to drop a capability.
+# Gap analysis and priorities: approach_docs/028_coverage_gap_analysis.md.
+EXPECTED_UNREACHABLE = {
+    "analytics.ab_test", "analytics.cohort", "analytics.funnel", "analytics.kpi_metrics",
+    "association_mining",
+    "bayesian_inference.hierarchical", "bayesian_inference.parameter_estimation",
+    "causal.mediation",
+    "changepoint_detection",
+    "dimensionality_reduction.linear", "dimensionality_reduction.manifold",
+    "generation.code", "generation.image", "generation.synthetic_data", "generation.text",
+    "graph.centrality", "graph.community_detection", "graph.link_prediction",
+    "graph.node_classification",
+    "nlp.ner_extraction", "nlp.qa", "nlp.summarization", "nlp.translation",
+    "optimization.combinatorial", "optimization.heuristic", "optimization.linear_program",
+    "representation_learning.embedding", "representation_learning.pretraining",
+    "retrieval.rag", "retrieval.semantic_search",
+    "sequential_decision.bandit", "sequential_decision.reinforcement_learning",
+    "simulation.agent_based", "simulation.discrete_event", "simulation.monte_carlo",
+    "timeseries_classification",
+    "vision.image_classification", "vision.object_detection", "vision.ocr",
+    "vision.segmentation",
+}
+
 
 def check(label: str, ok: bool, detail: str = "") -> None:
     print(f"  {'PASS' if ok else 'FAIL'}  {label}{('  — ' + detail) if detail and not ok else ''}")
@@ -107,6 +132,45 @@ def main() -> int:
         check("Router prompt formats with the derived vocab blocks", False, f"missing placeholder {e}")
     check("REQUIRED_VARS['Router'] lists the vocab placeholders",
           {"task_vocab", "modality_vocab"} <= set(REQUIRED_VARS.get("Router", [])))
+
+    print("\n6. subtype-level reachability has not regressed")
+    # Why this exists, at SUBTYPE granularity: `taxonomy.recipe_coverage` reports the
+    # intent x task-FAMILY matrix, and a family looks covered the moment any one of its
+    # subtypes is. That is exactly how three built, validated causal recipes sat
+    # unreachable — `causal_effect.iv_panel.linearmodels`, `.heterogeneous.cate` and
+    # `.timeseries.causalimpact` each declared only the `causal_inference` alias, which
+    # canonicalizes to `causal.effect_estimation`: a SIBLING of `causal.iv_panel` /
+    # `.heterogeneous_effects` / `.impact`, not a parent. tasks_overlap is False between
+    # siblings, so a correctly-labelled IV request matched nothing, while the causal
+    # family still showed as covered and check 3 still passed (it only probes each
+    # recipe's FIRST declared label, under which the recipe is trivially findable).
+    #
+    # Golden-set rather than a heuristic: pin the terms with no agent-reachable recipe.
+    # Any change either way fails until someone updates the list deliberately — which is
+    # the point. Shrinking it is good news; growing it is a regression.
+    modalities = list(vocab["modality"].keys())
+    leaf_terms = []
+    for fam, subs in (vocab["task"] or {}).items():
+        leaf_terms.extend(f"{fam}.{s}" for s in subs) if subs else leaf_terms.append(fam)
+
+    def _reachable(term: str) -> bool:
+        for m in modalities:
+            for r in registry.find_matches({"task_type": term, "data_modality": m}):
+                if not registry.is_pin_only(r.applies_when):
+                    return True
+        return False
+
+    unreachable = {t for t in leaf_terms if not _reachable(t)}
+    newly_unreachable = sorted(unreachable - EXPECTED_UNREACHABLE)
+    newly_covered = sorted(EXPECTED_UNREACHABLE - unreachable)
+    check("no task subtype lost its last agent-reachable recipe",
+          not newly_unreachable, f"newly unreachable: {newly_unreachable}")
+    check("EXPECTED_UNREACHABLE is up to date",
+          not newly_covered,
+          f"now covered, remove from EXPECTED_UNREACHABLE: {newly_covered}")
+    covered = len(leaf_terms) - len(unreachable)
+    print(f"        ({covered}/{len(leaf_terms)} leaf task terms agent-reachable — "
+          f"{100 * covered // len(leaf_terms)}%)")
 
     print("\n" + "=" * 70)
     if failures:

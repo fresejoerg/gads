@@ -6,7 +6,11 @@ author: gads-core
 
 # ——— ROUTING METADATA ———
 applies_when:
-  task_type: [causal_inference]
+  # `causal.iv_panel` MUST be declared explicitly: it is a SIBLING of
+  # `causal.effect_estimation` (what the `causal_inference` alias canonicalizes to), not a
+  # child, so `tasks_overlap` returns False between them. Declaring only the alias made
+  # this recipe unreachable for a Router that correctly labelled an IV request.
+  task_type: [causal.iv_panel, causal_inference]
   data_modality: [tabular]
   signals:
     - instrument_or_panel: true

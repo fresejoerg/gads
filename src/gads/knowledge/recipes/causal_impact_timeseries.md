@@ -6,7 +6,11 @@ author: gads-core
 
 # ——— ROUTING METADATA ———
 applies_when:
-  task_type: [causal_inference, time_series]
+  # `causal.impact` MUST be declared explicitly — it is a SIBLING of
+  # `causal.effect_estimation` (what `causal_inference` canonicalizes to), so the alias
+  # alone left this recipe unreachable for a correctly-labelled interrupted-time-series
+  # request.
+  task_type: [causal.impact, causal_inference, time_series]
   data_modality: [tabular]
   signals:
     - temporal_ordering_required: true
