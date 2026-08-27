@@ -49,3 +49,59 @@ Directly informed the **`gads_audit_model` native node**: skore's `EstimatorRepo
 **[L2] lifelines & scikit-survival** — https://lifelines.readthedocs.io · https://scikit-survival.readthedocs.io
 
 The two survival-analysis engines behind the `survival_analysis.*` recipes and native nodes: lifelines for interpretable inference (Kaplan-Meier, log-rank, Cox PH + the proportional-hazards assumption test) and scikit-survival for ML prediction (Random Survival Forest + censoring-aware metrics: IPCW C-index, time-dependent AUC, Integrated Brier Score).
+
+**[L3] probabl-ai/skills — Data Science Skills for AI agents** — https://github.com/probabl-ai/skills · https://blog.probabl.ai/teaching-agents-data-science-skills
+
+BSD-3-Clause, 14 skills (2026-08-27), from the same company as skore [L1]. Reviewed
+2026-08-27; **nothing adopted yet** — this entry records what was learned, not a decision.
+
+Their stated aim — *"agents need encoded best practices that steer capable tools toward
+statistically sound methodology"* — is close to verbatim the methodological-appropriateness
+thesis behind `gads_audit_model` and the model-selection recipe. Independent convergence
+from the people who maintain scikit-learn is meaningful external validation of the bet.
+
+**The sharpest observation: their "skills" map onto GADS *recipes*, not GADS skills.**
+`build-ml-pipeline -> evaluate-ml-pipeline -> audit-ml-pipeline -> iterate-*` is a workflow
+with explicit handoffs, file-layout conventions (`experiments/NN_*.py`, `audit/NN_*.py`,
+`journal/NN_*.md` aligned 1:1), bundled executable scripts, and per-skill TRIGGER/SKIP
+routing. That is a DAG with contracts — i.e. what a GADS recipe is. GADS skills are the
+narrower thing: prose expertise injected into one Coder prompt.
+
+They use one mechanism where GADS uses two, almost certainly because Claude Code has no
+recipe/DAG concept and skills are its only extension point. GADS's substrate is richer
+here; the comparison is a point in its favour, not a gap.
+
+**Three things genuinely worth stealing:**
+
+1. **`skrub` DataOps as a structural leakage guard.** `build-ml-pipeline` declares the
+   pipeline as a skrub graph that "stops at the declared object — no fit, split, tuning,
+   or persistence". GADS enforces the same split-before-fit ordering *imperatively* inside
+   `gads_apply_transformations`; a declarative graph makes the violation unrepresentable
+   rather than merely audited. skrub is not in the sandbox. This is the strongest single
+   idea in the repo.
+2. **"Stops at ..." as an explicit per-step boundary.** Every skill declares its own hard
+   stop ("stops at what does the report say"). More legible than a `produces` list, and it
+   states what a node must NOT do — which is exactly where the recipe-compiled nodes have
+   been vague.
+3. **`iterate-from-skore` vs `iterate-from-user` as separate capabilities** — iteration
+   split by who initiated it. GADS's replan-on-failure is orchestrator logic with no
+   described counterpart, and the distinction is real (a metric-triggered retry and a
+   user-triggered change of direction want different behaviour).
+
+**Format is only partly compatible.** Theirs is the Anthropic Agent Skills format
+(`name:` + `description:`); GADS uses `id:` + `description:` + a `triggers:` keyword LIST.
+Probabl embed their triggers as prose inside `description`, so GADS's keyword matcher
+cannot consume them directly. They would, however, work through the embedding index
+(`core/skill_semantics.py`), which matches on description text — so a shim is plausible
+without touching the matcher.
+
+**Overlap with the existing 24 is smaller than it looks.** Theirs is a deep vertical on
+sklearn/skrub/skore experiment hygiene; GADS's breadth is methodological (causal, survival,
+recommendation, ranking, forecasting) with `model_audit` / `model_selection_tabular` /
+`supervised_modeling` the only real intersection. Against the 028 gap list they do not
+touch the big holes (`data_preparation.cleaning`, `analytics.ab_test`, explainability,
+fairness). Complementary rather than duplicative.
+
+**Not yet checked:** whether the bundled `scripts/` would run under the sandbox's AST
+validator (they use IPython `InteractiveShell.run_cell`, and `subprocess`/`urllib` are
+blacklisted), and whether skrub fits the 3G memory cap.
