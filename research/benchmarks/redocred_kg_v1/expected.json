@@ -1,0 +1,33 @@
+{
+  "benchmark_id": "redocred_kg_v1",
+  "spec_file": null,
+  "recipe_id": null,
+  "external_source": "Re-DocRED (MIT, tonytan48) re-labelling DocRED (MIT, THUNLP), Wikipedia-derived; relation labels from the Wikidata API (CC0). Staged by scripts/stage_redocred.py — 100 docs, 3655 gold triplets, 93 relation types.",
+  "reference_runs": {},
+  "smoke_run": {
+    "date": "2026-08-27",
+    "engine": "local_model",
+    "n_documents": 5,
+    "note": "Plumbing validation, not a reference run. Zero failed LLM calls on a 93-relation ontology; 120/120 mention spans quote the source exactly. The not-in-text guard dropped 15 of 46 candidate triplets (~33%) as unsupported — those would otherwise be silent hallucinations carrying provenance. Local model is a weak relation extractor at this ontology size: it anchors on the document subject and attaches everything to it.",
+    "metrics": {
+      "entity_recall": 0.765,
+      "triplet_precision": 0.258,
+      "triplet_recall": 0.041,
+      "span_integrity": 1.0,
+      "n_dropped_unsupported": 15,
+      "n_failed_calls": 0
+    }
+  },
+  "metrics": {},
+  "ceiling": {
+    "gold_mention_verbatim_frac": 0.976,
+    "note": "DocRED ships tokenised sentences; text is a space-join, so ~2.4% of gold names do not occur verbatim. Extraction natives drop anything not found verbatim, so this is the benchmark ceiling, not extractor error."
+  },
+  "artifacts": {
+    "required": [],
+    "forbidden_stdout": ["mock data", "simulating data"]
+  },
+  "methodology": {
+    "scoring": "Exact case-insensitive (doc_id, head, relation, tail) match. Entity resolution NOT applied before scoring, so alias variants count as misses and recall is a lower bound. Gold is document-level and includes inferred/cross-sentence facts that chunk-local extraction cannot reach by construction."
+  }
+}
