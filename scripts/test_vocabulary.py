@@ -40,7 +40,12 @@ EXPECTED_UNREACHABLE = {
     "generation.code", "generation.image", "generation.synthetic_data", "generation.text",
     "graph.centrality", "graph.community_detection", "graph.link_prediction",
     "graph.node_classification",
-    "nlp.ner_extraction", "nlp.qa", "nlp.summarization", "nlp.translation",
+    # nlp.ner_extraction + nlp.relation_extraction: both pending the knowledge-graph
+    # construction recipe (approach_docs/030), which is blocked on sandbox infra — a
+    # local-model-scoped LiteLLM key, and GLiNER/REBEL pre-cached for the offline
+    # fallback. Remove both when that recipe lands.
+    "nlp.ner_extraction", "nlp.relation_extraction",
+    "nlp.qa", "nlp.summarization", "nlp.translation",
     "optimization.combinatorial", "optimization.heuristic", "optimization.linear_program",
     "representation_learning.embedding", "representation_learning.pretraining",
     "retrieval.rag", "retrieval.semantic_search",

@@ -46,7 +46,12 @@ task:
   causal:         [effect_estimation, heterogeneous_effects, discovery, mediation, iv_panel, impact]
   ranking:        [learning_to_rank]
   recommendation: [collaborative, content, hybrid]
-  nlp:            [text_classification, ner_extraction, topic_modeling, sentiment, summarization, translation, qa, thematic]
+  # `relation_extraction` added 2026-08-27 (approach_docs/030): knowledge-graph
+  # construction was not representable. `ner_extraction` covers the entities; every
+  # `graph.*` subtype is an ANALYSIS task (node_classification, link_prediction,
+  # community_detection, centrality) — none of them is construction. A KG build is
+  # labelled [nlp.ner_extraction, nlp.relation_extraction].
+  nlp:            [text_classification, ner_extraction, relation_extraction, topic_modeling, sentiment, summarization, translation, qa, thematic]
   retrieval:      [semantic_search, rag]
   vision:         [image_classification, object_detection, segmentation, ocr]
   generation:     [text, image, code, synthetic_data]
@@ -303,6 +308,16 @@ crosswalk:
   thematic_analysis:          {intent: structure_discovery, task: nlp.thematic}
   topic_modeling:             {intent: structure_discovery, task: nlp.topic_modeling}
   text_mining:                {intent: structure_discovery, task: nlp.thematic}
+  # Knowledge-graph construction (approach_docs/030). The deliverable is a graph, but the
+  # WORK is entity + relation extraction from text, so it lands under nlp.* rather than
+  # graph.* (whose subtypes all analyse a graph that already exists).
+  relation_extraction:        {intent: structure_discovery, task: nlp.relation_extraction}
+  knowledge_graph:            {intent: structure_discovery, task: nlp.relation_extraction}
+  knowledge_graph_construction: {intent: structure_discovery, task: nlp.relation_extraction}
+  triplet_extraction:         {intent: structure_discovery, task: nlp.relation_extraction}
+  entity_extraction:          {intent: structure_discovery, task: nlp.ner_extraction}
+  named_entity_recognition:   {intent: structure_discovery, task: nlp.ner_extraction}
+  ner:                        {intent: structure_discovery, task: nlp.ner_extraction}
   sentiment_thematic:         {intent: structure_discovery, task: nlp.sentiment}
   semantic_search:            {intent: predictive, task: retrieval.semantic_search}
   kpi_metrics:                {intent: descriptive, task: analytics.kpi_metrics}

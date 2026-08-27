@@ -34,6 +34,8 @@ from .model_selection import (gads_load_prepared_split, gads_dataset_facts,
                               gads_feature_importance, gads_audit_model_choice,
                               gads_model_card)
 from .diagnostics import gads_plot_classification_curves
+from .knowledge_graph import (gads_load_text_corpus, gads_resolve_entities,
+                              gads_build_lpg, gads_audit_graph)
 
 NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_automl_fit": gads_automl_fit,
@@ -88,6 +90,14 @@ NATIVE_REGISTRY: Dict[str, Callable] = {
     # Cross-recipe: any classifier that yields probabilities. Auto-injected via
     # DIAGNOSTICS_PREAMBLE and also declarable as a node's fallback_native.
     "gads_plot_classification_curves": gads_plot_classification_curves,
+    # Knowledge graph (approach_docs/030). The deterministic half only — corpus
+    # chunking, entity resolution, LPG materialisation and the audit gate. The
+    # extraction natives (gads_extract_entities / gads_extract_triplets) are pending
+    # sandbox infra: a local-model-scoped LiteLLM key, and GLiNER/REBEL pre-cached.
+    "gads_load_text_corpus": gads_load_text_corpus,
+    "gads_resolve_entities": gads_resolve_entities,
+    "gads_build_lpg": gads_build_lpg,
+    "gads_audit_graph": gads_audit_graph,
 }
 
 # Preamble injected into every sandbox execution when AutoGluon recipes are active.
@@ -505,6 +515,21 @@ DIAGNOSTICS_PREAMBLE = (
 
 # Per-native source, for the opt-in local-fallback path (invoke ONE native on demand rather
 # than injecting the always-on preamble). Includes the demoted plotting natives.
+from . import knowledge_graph as _kg_mod
+
+# All four are auto-injected together: they form one pipeline (load -> resolve -> build
+# -> audit) and generated code that calls any of them almost always calls the next.
+KNOWLEDGE_GRAPH_PREAMBLE = (
+    "import warnings as _w_kg\n_w_kg.filterwarnings('ignore')\n\n"
+    + "\n\n".join(_inspect.getsource(_fn) for _fn in (
+        _kg_mod.gads_load_text_corpus,
+        _kg_mod.gads_resolve_entities,
+        _kg_mod.gads_build_lpg,
+        _kg_mod.gads_audit_graph,
+    ))
+)
+
+
 NATIVE_SOURCE = {name: _inspect.getsource(fn) for name, fn in NATIVE_REGISTRY.items()}
 
 
@@ -539,6 +564,10 @@ _PREAMBLE_ROUTES = (
                   "CoxPHFitter", "CoxPHSurvivalAnalysis", "RandomSurvivalForest",
                   "lifelines", "sksurv", "Surv.from_", "KaplanMeierFitter"),
      lambda: SURVIVAL_PREAMBLE),
+    ("knowledge-graph", ("gads_load_text_corpus", "gads_resolve_entities",
+                         "gads_build_lpg", "gads_audit_graph", "MultiDiGraph",
+                         "knowledge_graph_nodes", "graph_checks"),
+     lambda: KNOWLEDGE_GRAPH_PREAMBLE),
 )
 
 
