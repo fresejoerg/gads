@@ -37,6 +37,7 @@ from gads.core.registry import (
     get_local_fallback, set_local_fallback, VALID_LOCAL_FALLBACKS,
     get_run_mode, set_run_mode, VALID_RUN_MODES,
     get_recipe_confidence_threshold, set_recipe_confidence_threshold,
+    get_engine_id,
 )
 from gads.core.knowledge import KnowledgeRegistry
 from gads.core.dial import (compiled_plan_dial, advisory_plan_dial, drafted_plan_dial,
@@ -1063,13 +1064,18 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
     from gads.core.llm import trace_context
 
     prompt_version = _compute_prompt_version()
+    # Which weights are actually serving `local_model` (registry.resolve_served_model).
+    # Off-thread: the probe is a real completion call, and it must not block the loop.
+    # Cached process-wide, so only the first workflow after a restart pays for it.
+    engine_id = await asyncio.to_thread(get_engine_id)
 
     # 1. Create top-level Langfuse Trace
     trace = langfuse_client.trace(
         id=str(project_id),
         name="Project Workflow",
+        metadata={"objective": objective, "prompt_version": prompt_version,
+                  "engine_id": engine_id},
         user_id="default_user",
-        metadata={"objective": objective, "prompt_version": prompt_version},
         session_id=str(project_id)
     )
 
@@ -1078,7 +1084,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         "workflow_id": str(project_id),
         "user_id": "default_user",
         "langfuse_trace_id": trace.id,
-        "prompt_version": prompt_version
+        "prompt_version": prompt_version,
+        "engine_id": engine_id,
     })
 
     try:
@@ -3197,6 +3204,9 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                 "routing_mode": get_routing_mode(),
                 "pinned_model": get_pinned_model(),
                 "run_mode": get_run_mode(),
+                # A fine-tuned checkpoint is a DISTINCT engine, never a
+                # continuation of the baseline (approach_docs/031 §5).
+                "engine_id": engine_id,
                 "outcome": "pass" if (workflow_succeeded and failed_count == 0) else "fail",
                 "workflow_succeeded": workflow_succeeded,
                 "failed_tasks": failed_count,

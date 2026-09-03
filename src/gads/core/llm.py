@@ -152,6 +152,10 @@ def _prepare_llm_kwargs(model: str, messages: list, kwargs: dict):
             "escalation_count": ctx.get("escalation_count"),
             "model_tier": _tier_of(model),
             "prompt_version": ctx.get("prompt_version"),
+            # Which local weights served this generation. Without it, every
+            # `local_model` trace is indistinguishable from every other, across
+            # model swaps (see registry.resolve_served_model).
+            "engine_id": ctx.get("engine_id"),
             "completion_path": "first_shot",
             "messages_hash": messages_hash,
         }

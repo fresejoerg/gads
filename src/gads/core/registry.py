@@ -349,3 +349,85 @@ def get_next_model_dynamic(current_model: str, hierarchy: Dict[str, Any], aggres
         pass
         
     return None
+
+
+# ——— ENGINE IDENTITY: which weights actually served this run ——————————————————————
+# `local_model` is a LiteLLM *alias*. Every local generation in Langfuse is logged under
+# that alias with one opaque model_info hash, so which weights produced a trace was
+# unrecoverable from the data — measured 2026-09-03: all 2,850 local Coder generations,
+# spanning 2026-05-04 → 2026-08-25, are indistinguishable, even though the served model
+# demonstrably changed inside that window. That silently breaks two things: the dial
+# ledger's "local" rows are not comparable across time, and a fine-tuning corpus cannot
+# be filtered to the policy it will actually train (approach_docs/031 §5).
+#
+# The probe: LM Studio reports its loaded model in the completion response's `model`
+# field, and LiteLLM passes it through unchanged. A 1-token completion is therefore
+# enough, needs no new network path, and works from wherever GADS already reaches the
+# proxy (LM Studio's own port is not reachable from WSL).
+#
+# Fail-soft by construction: this is telemetry. An unreachable proxy, a cold model or a
+# slow load must never delay or fail a workflow — the engine is then "unknown", which is
+# honest, rather than an exception.
+_SERVED_MODEL: Optional[str] = None
+_SERVED_MODEL_PROBED = False
+
+
+def resolve_served_model(timeout: float = 20.0, force: bool = False) -> Optional[str]:
+    """The model LM Studio currently serves behind the `local_model` alias, or None.
+
+    Cached for the process: the served model only changes when the operator loads a
+    different one in LM Studio, which also means a backend restart is the honest place to
+    re-detect it. Pass force=True to re-probe.
+    """
+    global _SERVED_MODEL, _SERVED_MODEL_PROBED
+    # Only a SUCCESSFUL resolution is cached. A failure is usually transient — most often
+    # "no model loaded in LM Studio" while the operator is swapping one — and caching that
+    # would stamp every run of the backend session `unknown` long after a model came back.
+    if _SERVED_MODEL_PROBED and _SERVED_MODEL and not force:
+        return _SERVED_MODEL
+    try:
+        r = httpx.post(
+            f"{LITELLM_URL.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {LITELLM_KEY}"},
+            json={"model": "local_model", "max_tokens": 1,
+                  "messages": [{"role": "user", "content": "hi"}]},
+            timeout=timeout,
+        )
+        r.raise_for_status()
+        served = (r.json() or {}).get("model") or None
+        # Guard against the alias echoing back: that identifies nothing.
+        if served and served.strip().lower() in ("local_model", "local-model"):
+            served = None
+        _SERVED_MODEL = served
+        _SERVED_MODEL_PROBED = True
+        print(f"  [Registry] Served local engine: {_SERVED_MODEL or 'unknown'}", flush=True)
+    except Exception as e:
+        _SERVED_MODEL = None
+        print(f"  [Registry] Served-engine probe failed ({type(e).__name__}); "
+              f"engine recorded as unknown.", flush=True)
+    return _SERVED_MODEL
+
+
+def get_engine_tag() -> str:
+    """Adapter/checkpoint tag for the served weights. 'base' = no adapter merged.
+
+    Set GADS_ENGINE_TAG when serving a fine-tuned checkpoint, so ledger rows produced by
+    a tuned engine can never be read as baseline evidence.
+    """
+    return os.getenv("GADS_ENGINE_TAG", "base").strip() or "base"
+
+
+def get_engine_id() -> Optional[str]:
+    """Stable identity of the local engine under test, e.g. 'qwen3.8-27b@base'.
+
+    A fine-tuned checkpoint is a DISTINCT engine in the rung × engine grid, never a
+    continuation of the baseline — that is the whole point of stamping it.
+
+    None in the cloud-only routing modes: no local engine is exercised, so there is
+    nothing to identify, and probing would just charge every cloud run for a completion
+    against an LM Studio that may hold no model at all. `routing_mode`/`pinned_model` are
+    already on the ledger row, so a null here reads correctly rather than ambiguously.
+    """
+    if get_routing_mode() in ("cloud", "cloud_pinned"):
+        return None
+    return f"{resolve_served_model() or 'unknown'}@{get_engine_tag()}"
