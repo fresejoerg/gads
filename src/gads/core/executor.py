@@ -70,6 +70,15 @@ def _detect_kernel_poisoning(code: str):
     return None
 
 
+def _parses(code: str) -> bool:
+    """Does this text compile as Python? Used to gate repairs that can do harm."""
+    try:
+        ast.parse(code)
+        return True
+    except SyntaxError:
+        return False
+
+
 def _sanitize_code(code: str) -> str:
     """Rewrite broken library imports to sandbox-compatible equivalents.
 
@@ -433,9 +442,21 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
         print("  [Sanitizer] Fixed minority_class_fract → minority_class_frac typo", flush=True)
 
     # Fix duplicate closing square brackets on df access: df[col]] → df[col]
-    if 'df[' in code:
-        code = re.sub(r'df\[([^\]\n]+)\]\]', r'df[\1]', code)
-        print("  [Sanitizer] Fixed duplicate closing brackets on df", flush=True)
+    #
+    # Guarded by a parse check, because the naive pattern CORRUPTS WORKING CODE: on
+    # `df[['t','y']]` — the standard multi-column selection — `[^\]\n]+` happily captures
+    # `['t','y'` and the rewrite emits `df[['t','y']`, a SyntaxError. Measured on a 35-
+    # example holdout (scripts/eval_coder.py): it broke 5 of 26 parseable generations
+    # while rescuing 2, a net loss the model was then blamed for.
+    #
+    # Now: only attempt the repair on code that does not already parse, exclude nested
+    # `[` from the capture, and keep the result only if it actually parses — the same
+    # verified-repair discipline the stray-indent fix above uses.
+    if 'df[' in code and not _parses(code):
+        repaired = re.sub(r'df\[([^\[\]\n]+)\]\]', r'df[\1]', code)
+        if repaired != code and _parses(repaired):
+            code = repaired
+            print("  [Sanitizer] Fixed duplicate closing brackets on df", flush=True)
 
     # Fix dictionary keys from gads_causal_estimate_ate return
     if 'gads_causal_estimate_ate' in code:
