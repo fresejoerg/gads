@@ -29,9 +29,16 @@ the sandbox kernel via the preamble.
 """
 
 
-def gads_load_text_corpus(source, text_col=None, id_col=None, chunk_chars=1200,
-                          overlap_chars=150, min_chunk_chars=50, encoding="utf-8"):
+def gads_load_text_corpus(source, text_col=None, id_col=None, chunk_chars=2400,
+                          overlap_chars=300, min_chunk_chars=50, encoding="utf-8"):
     """Load a text corpus and split it into overlapping, provenance-bearing chunks.
+
+    `chunk_chars` default was raised from 1200 to 2400 after measuring the Re-DocRED
+    benchmark corpus (research/benchmarks/redocred_kg_v1): documents there run median 1033
+    / p90 1701 / max 2376 chars, so 1200 was splitting the majority of documents for no
+    reason — a local model's context window is not the binding constraint on a corpus this
+    short. 2400 keeps effectively the whole distribution as a single chunk while still
+    protecting against a pathologically long outlier document.
 
     `source` may be a directory of .txt/.md files, a single .txt/.md file, a .jsonl, a
     .csv/.parquet path, or an in-memory DataFrame. For tabular sources `text_col` is
@@ -818,7 +825,7 @@ def gads_build_ontology(entity_types=None, relation_types=None, source=None,
 
 def gads_extract_entities(chunks, ontology, max_chunks=200, max_chars=6000,
                           model="local_model", temperature=0.0, timeout=120.0,
-                          write_path="mentions.parquet"):
+                          max_output_tokens=3000, write_path="mentions.parquet"):
     """Extract typed entity mentions from chunks, constrained to the ontology's types.
 
     Calls the local model through the sandbox-scoped LiteLLM key
@@ -836,6 +843,12 @@ def gads_extract_entities(chunks, ontology, max_chunks=200, max_chars=6000,
     Types outside the ontology are dropped and counted in `n_off_ontology`. `max_chunks`
     and `max_chars` are hard budget caps — generated code can loop, and the key's rpm limit
     should not be the only thing standing between a 10k-document corpus and an afternoon.
+
+    `max_output_tokens` bounds each completion. It was a hardcoded 1500 — measured against
+    the Re-DocRED benchmark corpus that silently truncated the response for the densest
+    documents (13/100 docs' gold exceeded it at ~28 tokens/item). Raised to a 3000 default;
+    still a hard cap generated code should widen deliberately for denser domains, not a
+    guess to trust blindly.
 
     Returns {mentions, n_mentions, n_chunks_processed, n_hallucinated, n_off_ontology,
     n_failed_chunks, mentions_path}.
@@ -876,7 +889,7 @@ def gads_extract_entities(chunks, ontology, max_chunks=200, max_chars=6000,
             f"TEXT:\n{text}")
         try:
             resp = client.chat.completions.create(
-                model=model, temperature=temperature, max_tokens=1500,
+                model=model, temperature=temperature, max_tokens=max_output_tokens,
                 messages=[{"role": "user", "content": prompt}])
             raw = (resp.choices[0].message.content or "").strip()
             used += 1
@@ -948,7 +961,7 @@ def gads_extract_entities(chunks, ontology, max_chunks=200, max_chars=6000,
 
 def gads_extract_triplets(chunks, ontology, max_chunks=200, max_chars=6000,
                           model="local_model", temperature=0.0, timeout=120.0,
-                          write_path="triplets.parquet"):
+                          max_output_tokens=3000, write_path="triplets.parquet"):
     """Extract (head, relation, tail) triplets from chunks, constrained to the ontology.
 
     Same contract as `gads_extract_entities`: local model only, budget-capped, and spans
@@ -964,6 +977,12 @@ def gads_extract_triplets(chunks, ontology, max_chunks=200, max_chars=6000,
     `confidence` is the model's own estimate, clamped to [0,1] and defaulting to 0.5. It is
     weak evidence by construction; the audit's degenerate-confidence check exists precisely
     because a model that returns 1.0 for everything is telling you nothing.
+
+    `max_output_tokens` bounds each completion. It was a hardcoded 1500 — measured against
+    the Re-DocRED benchmark corpus (median 33 / max 92 gold triplets per doc, ~28 tokens
+    each) that would have silently truncated the response on the densest 13/100 documents.
+    Raised to a 3000 default; still a hard cap generated code should widen deliberately for
+    denser domains, not a guess to trust blindly.
 
     Returns {triplets, n_triplets, n_chunks_processed, n_unsupported, n_off_ontology,
     n_failed_chunks, triplets_path}.
@@ -1009,7 +1028,7 @@ def gads_extract_triplets(chunks, ontology, max_chunks=200, max_chars=6000,
             f"TEXT:\n{text}")
         try:
             resp = client.chat.completions.create(
-                model=model, temperature=temperature, max_tokens=1500,
+                model=model, temperature=temperature, max_tokens=max_output_tokens,
                 messages=[{"role": "user", "content": prompt}])
             raw = (resp.choices[0].message.content or "").strip()
             used += 1
