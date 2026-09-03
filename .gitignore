@@ -71,3 +71,4 @@ PERFORMANCE_OPPORTUNITIES.md
 specs/test_*.md
 .venv-train/
 unsloth_compiled_cache/
+research/finetune/

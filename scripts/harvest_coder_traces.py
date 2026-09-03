@@ -71,15 +71,17 @@ def load_verdicts(engine):
     sql = """
         select t.id::text, t.description, t.result_json->>'code',
                coalesce(t.result_json->>'model_used','?'),
-               p.id::text, p.last_state_json->>'spec_filename'
+               p.id::text, p.last_state_json->>'spec_filename',
+               t.postcondition_json->'required_variables'
         from task t join project p on p.id = t.project_id
         where t.status='completed' and coalesce(t.result_json->>'code','') <> ''
     """
     out = {}
     with engine.connect() as c:
-        for tid, desc, code, model, pid, spec in c.execute(text(sql)):
+        for tid, desc, code, model, pid, spec, req in c.execute(text(sql)):
             out[tid] = {"task_id": tid, "description": desc, "accepted_code": code,
                         "model_used": model, "project_id": pid,
+                        "required_variables": list(req or []),
                         # Spec is the holdout unit; fall back to project so an untagged
                         # run still cannot straddle the split.
                         "spec": spec or f"project:{pid}"}
@@ -161,6 +163,7 @@ def build(verdicts, gens, args):
             continue
 
         rec = {"task_id": tid, "spec": v["spec"], "model_used": v["model_used"],
+               "required_variables": v["required_variables"],
                "engine_id": accepted.get("engine_id"),
                "prompt_version": accepted.get("prompt_version"),
                "attempt": accepted["attempt"], "n_attempts": len(attempts),
@@ -197,11 +200,26 @@ def cap_per_spec(records, cap, seed):
 
 
 def split_by_spec(records, holdout, seed):
-    specs = sorted({r["spec"] for r in records})
+    """Hold out whole SPECS, stratified by whether the spec carries contract variables.
+
+    An unstratified draw is high-variance at this size and measurably wasteful: the first
+    random 4-of-21 draw held out only drafted-plan specs, none of which declare
+    `required_variables`, so eval_coder's most informative check (does the code bind what
+    its contract demands?) had nothing to score. Stratifying guarantees the holdout can
+    exercise it while keeping the split at spec granularity.
+    """
+    rich, plain = set(), set()
+    for r in records:
+        (rich if r.get("required_variables") else plain).add(r["spec"])
+    plain -= rich
     rng = random.Random(seed)
-    rng.shuffle(specs)
-    n_hold = max(1, int(len(specs) * holdout)) if len(specs) > 1 else 0
-    held = set(specs[:n_hold])
+    held = set()
+    for group in (sorted(rich), sorted(plain)):
+        if not group:
+            continue
+        g = list(group)
+        rng.shuffle(g)
+        held.update(g[:max(1, int(len(g) * holdout))])
     return ([r for r in records if r["spec"] not in held],
             [r for r in records if r["spec"] in held], held)
 
@@ -257,12 +275,16 @@ def main():
 
     print(f"\nSFT   : {len(sft)} examples over {len({r['spec'] for r in sft})} specs")
     if args.mode in ("sft", "both"):
-        n1 = write_jsonl(out / "sft_train.jsonl", train,
-                         lambda r: {"messages": r["messages"] + [
-                             {"role": "assistant", "content": r["completion"]}]})
-        n2 = write_jsonl(out / "sft_holdout.jsonl", held,
-                         lambda r: {"messages": r["messages"] + [
-                             {"role": "assistant", "content": r["completion"]}]})
+        # task_id/spec ride along so the holdout is self-describing: scripts/eval_coder.py
+        # joins back to `task.postcondition_json` on task_id. Trainers key off `messages`
+        # and ignore the extra columns.
+        def _chat(r):
+            return {"task_id": r["task_id"], "spec": r["spec"],
+                    "required_variables": r["required_variables"],
+                    "messages": r["messages"] + [
+                        {"role": "assistant", "content": r["completion"]}]}
+        n1 = write_jsonl(out / "sft_train.jsonl", train, _chat)
+        n2 = write_jsonl(out / "sft_holdout.jsonl", held, _chat)
         print(f"  -> {out/'sft_train.jsonl'} ({n1})  |  holdout ({n2}) "
               f"over {len(held_specs)} held-out spec(s)")
     if args.mode in ("dpo", "both"):
