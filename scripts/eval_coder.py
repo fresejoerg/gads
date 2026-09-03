@@ -52,6 +52,24 @@ SENTINELS = ("GADS_INSIGHTS_JSON:", "GADS_FLOOR_JSON:", "GADS_STATE_SNAPSHOT:",
 FENCE = re.compile(r"```(?:python)?\s*(.*?)\s*```", re.DOTALL)
 
 
+def _load_sanitizer():
+    """The executor's own repair pass, so eval matches what production actually runs.
+
+    The training targets are POST-sanitizer (the DB stores the code that executed), so
+    scoring raw generations against them compares against a repaired ceiling and
+    understates the served model. Reporting both is the honest form: the gap between
+    them is precisely how much the harness is currently rescuing.
+    """
+    try:
+        from gads.core.executor import _sanitize_code
+        return _sanitize_code
+    except Exception:        # training venv lacks the runtime deps
+        return None
+
+
+SANITIZE = _load_sanitizer()
+
+
 def unwrap(raw):
     if not raw or not raw.strip():
         return ""
@@ -83,12 +101,23 @@ def score(code, required):
     so a node with no declared outputs cannot inflate the pass rate."""
     r = {"chars": len(code)}
     try:
+        ast.parse(code)
+        r["parses_raw"] = True
+    except SyntaxError:
+        r["parses_raw"] = False
+    if SANITIZE:
+        code = SANITIZE(code)
+    try:
         tree = ast.parse(code)
         r["parses"] = True
-    except SyntaxError:
+    except SyntaxError as e:
         # Every downstream check needs an AST or a running program; scoring them on
         # unparseable text would invent signal. None = not applicable, not failed.
-        return {**r, "parses": False, "no_banned_import": None, "no_mock_data": None,
+        # The reason matters: a truncation is a decoding pathology SFT cannot reach
+        # (009 §1), while prose leakage is a formatting habit it can.
+        return {**r, "parses": False, "syntax_error": f"{e.msg} (line {e.lineno})",
+                "empty": not code.strip(),
+                "no_banned_import": None, "no_mock_data": None,
                 "no_sentinel": None, "binds_required": None, "missing": []}
     low = code.lower()
     r["no_banned_import"] = not any(b in low for b in BANNED_IMPORTS)
@@ -215,8 +244,15 @@ def main():
     ap.add_argument("--load-in-4bit", action="store_true")
     ap.add_argument("--tag", default=None, help="label for this run in the report")
     ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--repeats", type=int, default=1,
+                    help="re-run generation N times to establish the NOISE FLOOR. Local "
+                         "serving is not deterministic even at temperature 0 (measured: "
+                         "74.3%% vs 65.7%% parse rate on identical inputs), so a single "
+                         "run cannot support a pre/post comparison.")
     ap.add_argument("--temperature", type=float, default=0.0)
-    ap.add_argument("--max-new-tokens", type=int, default=2048)
+    ap.add_argument("--max-new-tokens", type=int, default=8192,
+                    help="match llm.py's local-model budget (8192); a smaller cap would "
+                         "manufacture truncation and score it as a model defect")
     ap.add_argument("--max-seq-len", type=int, default=8192)
     ap.add_argument("--timeout", type=float, default=600.0)
     ap.add_argument("--out", default="research/finetune/eval_report.jsonl")
@@ -253,35 +289,85 @@ def main():
         print(f"  loss {report['tier0']['loss']} | ppl {report['tier0']['perplexity']}")
 
     if "1" in tiers:
-        print("\nTIER 1 — static checks on generated code")
-        if args.reference_only:
-            codes = [r["messages"][-1]["content"] for r in rows]
-        elif args.backend == "litellm":
-            codes = [unwrap(c) for c in gen_litellm(rows, args)]
+        print("\nTIER 1 — static checks on generated code"
+              + (f" ({args.repeats} repeats for the noise floor)" if args.repeats > 1 else ""))
+        gen_path = pathlib.Path(args.out).parent / f"generations_{tag.replace('/', '_')}.jsonl"
+        runs = []
+
+        for rep in range(args.repeats):
+            if args.reference_only:
+                codes = [r["messages"][-1]["content"] for r in rows]
+            elif args.backend == "litellm":
+                if args.repeats > 1:
+                    print(f"  -- run {rep + 1}/{args.repeats}", flush=True)
+                codes = [unwrap(c) for c in gen_litellm(rows, args)]
+            else:
+                sys.exit("hf generation not implemented — use --backend litellm, or "
+                         "--reference-only. (Serve the merged checkpoint to compare "
+                         "like-for-like.)")
+
+            # Keep the LAST run's generations: they are the evidence for the failure
+            # breakdown printed below.
+            with open(gen_path, "w") as gf:
+                for r, code in zip(rows, codes):
+                    gf.write(json.dumps({"task_id": r.get("task_id"), "spec": r.get("spec"),
+                                         "generation": code}) + "\n")
+
+            results = []
+            for r, code in zip(rows, codes):
+                sc = score(code, contracts.get(r.get("task_id")))
+                sc.update(task_id=r.get("task_id"), spec=r.get("spec"))
+                results.append(sc)
+
+            agg = {}
+            for k in ("parses_raw", "parses", "no_banned_import", "no_mock_data",
+                      "no_sentinel", "binds_required"):
+                vals = [x[k] for x in results if x.get(k) is not None]
+                agg[k] = {"pass": sum(vals), "n": len(vals),
+                          "rate": round(sum(vals) / len(vals), 3) if vals else None}
+            runs.append(agg)
+            if args.reference_only:
+                break      # deterministic; repeating adds nothing
+
+        report["tier1_runs"] = runs
+        report["tier1"] = runs[-1]
+        keys = ("parses_raw", "parses", "no_banned_import", "no_mock_data",
+                "no_sentinel", "binds_required")
+        if len(runs) == 1:
+            print(f"  {'check':18s} {'pass':>8s}  rate")
+            for k in keys:
+                v = runs[0][k]
+                rate = "—" if v["rate"] is None else f"{v['rate']:.1%}"
+                print(f"  {k:18s} {v['pass']:4d}/{v['n']:<4d}  {rate}")
         else:
-            sys.exit("hf generation not implemented — use --backend litellm, or "
-                     "--reference-only. (Serve the merged checkpoint to compare like-for-like.)")
+            print(f"\n  {'check':18s} {'mean':>7s} {'min':>7s} {'max':>7s} {'spread':>8s}")
+            for k in keys:
+                rs = [r[k]["rate"] for r in runs if r[k]["rate"] is not None]
+                if not rs:
+                    print(f"  {k:18s} {'—':>7s}")
+                    continue
+                lo, hi = min(rs), max(rs)
+                print(f"  {k:18s} {sum(rs)/len(rs):>6.1%} {lo:>7.1%} {hi:>7.1%} "
+                      f"{hi - lo:>7.1%}")
+            print("\n  The spread is the NOISE FLOOR: any pre/post difference smaller than "
+                  "it\n  is not evidence. Local serving is nondeterministic even at "
+                  "temperature 0.")
 
-        results = []
-        for r, code in zip(rows, codes):
-            s = score(code, contracts.get(r.get("task_id")))
-            s.update(task_id=r.get("task_id"), spec=r.get("spec"))
-            results.append(s)
-
-        agg = {}
-        for k in ("parses", "no_banned_import", "no_mock_data", "no_sentinel",
-                  "binds_required"):
-            vals = [x[k] for x in results if x.get(k) is not None]
-            agg[k] = {"pass": sum(vals), "n": len(vals),
-                      "rate": round(sum(vals) / len(vals), 3) if vals else None}
-        report["tier1"] = agg
-        print(f"  {'check':18s} {'pass':>8s}  rate")
-        for k, v in agg.items():
-            rate = "—" if v["rate"] is None else f"{v['rate']:.1%}"
-            print(f"  {k:18s} {v['pass']:4d}/{v['n']:<4d}  {rate}")
-        empty = sum(1 for c in codes if not c.strip())
-        if empty:
-            print(f"  ! {empty} empty generation(s) — counted as parse failures")
+        rescued = sum(1 for x in results if x.get("parses") and not x.get("parses_raw"))
+        if rescued:
+            print(f"\n  {rescued} generation(s) parse ONLY after the executor's sanitizer "
+                  f"— that gap is harness rescue, not model capability.")
+        if SANITIZE is None:
+            print("  ! sanitizer unavailable in this venv; `parses` == raw parse rate")
+        broken = [x for x in results if x.get("parses") is False]
+        if broken:
+            print(f"\n  parse failures in the last run ({len(broken)}):")
+            import collections as _c
+            for msg, n in _c.Counter(
+                    ("EMPTY generation" if x.get("empty") else x.get("syntax_error", "?"))
+                    for x in broken).most_common(8):
+                print(f"    {n:3d}x  {msg}")
+            print(f"  generations saved -> {gen_path}")
         miss = [x for x in results if x.get("binds_required") is False]
         if miss:
             print(f"\n  contract variables never bound (top 5):")
