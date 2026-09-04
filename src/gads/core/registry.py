@@ -417,8 +417,16 @@ def get_engine_tag() -> str:
     return os.getenv("GADS_ENGINE_TAG", "base").strip() or "base"
 
 
-def get_engine_id() -> Optional[str]:
+def get_engine_id(force_probe: bool = False) -> Optional[str]:
     """Stable identity of the local engine under test, e.g. 'qwen3.8-27b@base'.
+
+    `force_probe` re-detects instead of trusting the process cache. The workflow entry
+    point passes it, because the operator swapping models in LM Studio between runs is
+    NORMAL — it needs no restart, leaves no signal, and a stale cache would then stamp the
+    run with the previous engine. A mislabelled ledger row is worse than no label: it is
+    the exact failure this field exists to prevent, and it was observed live on
+    2026-09-04 when the served model changed from gemma-4-12b to bonsai-27b mid-session.
+    The cost is one 1-token completion per workflow.
 
     A fine-tuned checkpoint is a DISTINCT engine in the rung × engine grid, never a
     continuation of the baseline — that is the whole point of stamping it.
@@ -430,4 +438,4 @@ def get_engine_id() -> Optional[str]:
     """
     if get_routing_mode() in ("cloud", "cloud_pinned"):
         return None
-    return f"{resolve_served_model() or 'unknown'}@{get_engine_tag()}"
+    return f"{resolve_served_model(force=force_probe) or 'unknown'}@{get_engine_tag()}"

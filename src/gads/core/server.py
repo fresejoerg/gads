@@ -1067,7 +1067,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
     # Which weights are actually serving `local_model` (registry.resolve_served_model).
     # Off-thread: the probe is a real completion call, and it must not block the loop.
     # Cached process-wide, so only the first workflow after a restart pays for it.
-    engine_id = await asyncio.to_thread(get_engine_id)
+    engine_id = await asyncio.to_thread(get_engine_id, True)
 
     # 1. Create top-level Langfuse Trace
     trace = langfuse_client.trace(
