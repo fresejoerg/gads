@@ -1,0 +1,71 @@
+{
+  "benchmark_id": "m4_hourly_forecast_v1",
+  "spec_file": "m4_hourly_forecast.md",
+  "recipe_id": "timeseries_forecast.autogluon.standard",
+  "external_source": "M4 Competition, Hourly split (Makridakis et al. 2018) — first 50 series by numeric id, staged by scripts/stage_m4_hourly.py",
+  "reference_runs": {},
+  "metrics": {
+    "n_series": {
+      "value": 50,
+      "exact": true,
+      "tol": 0.0,
+      "note": "Pure data function: distinct item_id count in the staged corpus."
+    },
+    "prediction_length": {
+      "value": 70,
+      "exact": true,
+      "tol": 0.0,
+      "note": "The recipe's own rule — ~10% of median series length (700), min 1 — is fully determined by the data, so this is exact. It deliberately does NOT equal M4's official Hourly horizon of 48; the recipe derives its horizon and is not forced to the competition's."
+    },
+    "best_model_mase": {
+      "value": 1.0,
+      "exact": false,
+      "tol": null,
+      "comparator": "lt",
+      "note": "THRESHOLD, not a target value: MASE < 1.0 means the model beat the seasonal-naive predictor it is normalised against. An exact expected value is impossible here by the recipe's own admission — its TIME BUDGET invariant sets a wall-clock time_limit=120, which makes AutoGluon's model SELECTION machine-load-dependent. Any exact figure would be a fiction that fails on a busy machine."
+    }
+  },
+  "informational": {
+    "naive_mae": {
+      "global_mad": 19562.0604489633,
+      "seasonal_naive_mae_mean_over_series": 918.308325,
+      "note": "NOT a pass criterion — the recipe says 'mean absolute deviation of the target from its own mean' without specifying global vs per-series. Computed globally the value is 19562, which is dominated by between-series scale differences (M4 Hourly series span orders of magnitude) and is close to meaningless for a panel. Recorded so a future run's number can be interpreted rather than judged. See notes.md."
+    }
+  },
+  "artifacts": {
+    "required": [
+      "figure_1_forecast.json",
+      "model_timeseries.joblib",
+      "final_dashboard.html",
+      "research_report.md",
+      "workflow_execution.py"
+    ],
+    "forbidden_stdout": [
+      "mock data",
+      "simulating data"
+    ]
+  },
+  "tasks": {
+    "expected_count": 4,
+    "produces": {
+      "profile_time_series": ["timestamp_col", "target_col", "item_id_col", "inferred_freq"],
+      "prepare_timeseries_dataframe": ["ts_df"],
+      "train_forecast_model": ["predictor_ts", "prediction_length", "best_model_mase"],
+      "generate_forecasts_and_visualize": ["forecasts"]
+    }
+  },
+  "methodology": {
+    "required_patterns": [
+      "TimeSeriesPredictor\\(",
+      "TimeSeriesDataFrame",
+      "eval_metric\\s*=\\s*[\"']MASE[\"']",
+      "prediction_length"
+    ],
+    "forbidden_patterns": [
+      "from statsmodels\\.tsa",
+      "import pmdarima",
+      "from prophet",
+      "prediction_length\\s*=\\s*(48|24|12)\\b"
+    ]
+  }
+}
