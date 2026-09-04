@@ -4,6 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Stack & Commands
 
+**GADS = Generative-Augmented Data Science.** That is the only correct expansion —
+not "General Agentic" or "Generative Agentic"; both were in the docs and have been
+corrected. Generic phrases like "agentic data science" describing the *field* (or
+citing others' work, e.g. CEDAR) are fine and are not expansions of the acronym.
+
 GADS is a Python 3.13 project managed by `uv`. It depends on an **external** companion stack `MyLocalStack` providing:
 - LiteLLM proxy on `http://localhost:4000/v1` (model gateway)
 - IPython-kernel sandbox on `http://localhost:8000`

@@ -1,4 +1,4 @@
-# GADS — General Agentic Data Science
+# GADS — Generative-Augmented Data Science
 
 > **Local-first agentic data science for teams whose data can't go to the cloud** — a benchmark-proven, expanding library of DS workflows tuned to run reliably on small local models, so you get real mileage on your own hardware.
 
