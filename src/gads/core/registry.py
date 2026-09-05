@@ -194,9 +194,21 @@ def resolve_stage_model(stage: str, tier_default: str) -> str:
 # The live hierarchy intersects this with LiteLLM's served models, so any newer ID
 # must also be added to the MyLocalStack gateway to become reachable; until then
 # intra-tier fallback covers interim 404s and the mapping self-heals.
+# gpt-6-astra (added 2026-09-04) sits at T1 on two pieces of evidence, not on its version
+# number: it is the only gpt-6 variant on the key (the gpt-5.6 family is already split
+# sol/terra/luna across T1/T2/T3), and it rejects `max_tokens` in favour of
+# `max_completion_tokens` — OpenAI's reasoning-model convention, which marks the slower,
+# higher-capability end of their lineup. No capability benchmark has been run against it, so
+# this is a reasoned placement rather than a measured one; T1 is also the LAST escalation
+# rung (TIER_ORDER below), which keeps the blast radius small if it is wrong.
+#
+# gemini-3.8-flash (added 2026-09-04) takes T2 alongside the 3.7-flash it succeeds: Google's
+# model endpoint reports identical limits for both (1,048,576 in / 65,536 out).
 TIER_MAPPING = {
-    "T1": ["gemini-3.1-pro-preview", "claude-opus-4.8", "claude-fable-5", "gpt-5.6-sol", "kimi-k3"],
-    "T2": ["gemini-3.7-flash", "claude-sonnet-5", "gpt-5.6-terra", "kimi-k2.7-code"],
+    "T1": ["gemini-3.1-pro-preview", "claude-opus-4.8", "claude-fable-5", "gpt-5.6-sol",
+           "kimi-k3", "gpt-6-astra"],
+    "T2": ["gemini-3.7-flash", "gemini-3.8-flash", "claude-sonnet-5", "gpt-5.6-terra",
+           "kimi-k2.7-code"],
     "T3": ["gemini-3.5-flash-lite", "claude-haiku-4.5", "gpt-5.6-luna", "kimi-k2.7-code-highspeed"],
     "T4": ["local_model"]
 }
