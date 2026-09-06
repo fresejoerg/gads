@@ -8,8 +8,56 @@ from datetime import datetime
 from jinja2 import Environment, FileSystemLoader
 from sqlmodel import Session, select
 from gads.core.database import engine
-from gads.core.models import Task
+from gads.core.models import Task, Project
 from gads.core import report_sections
+
+# Selection provenance, as the READER needs it. The dashboard previously stated
+# "Each step below is a node of the applied recipe" unconditionally — including for
+# drafted plans, where no recipe exists. That is not merely an unmarked scenario: it
+# attributes a from-scratch improvisation to a validated recipe, which is the one claim
+# the reader most needs to be able to trust. GADS deliberately still ANALYSES when nothing
+# matches (that is what the D0/D2 lanes are for); it just has to say so.
+_PROVENANCE = {
+    "pinned": ("Validated recipe (pinned)",
+               "recipe-strong",
+               "The plan was compiled from the recipe named by this project's spec. Each "
+               "step below is one of its DAG nodes, in execution order."),
+    "routed": ("Validated recipe (matched)",
+               "recipe-strong",
+               "The Router matched this objective to a validated recipe with high "
+               "confidence and the plan was compiled from its DAG. Each step below is one "
+               "of its nodes, in execution order."),
+    "advised": ("Recipe consulted, plan drafted",
+                "recipe-weak",
+                "A related recipe was found but matched below the confidence threshold, so "
+                "it was passed to the Planner as reference material rather than followed. "
+                "The methodology below was drafted for this objective and may depart from "
+                "any validated procedure."),
+    "drafted": ("No matching recipe — drafted from scratch",
+                "recipe-none",
+                "No validated recipe matched this objective, so the methodology below was "
+                "drafted from scratch for this run. The analysis is complete, but it did "
+                "not follow a procedure that has been reviewed and reused."),
+}
+
+
+def _selection_provenance(project_id) -> dict:
+    """What produced this plan, in the reader's terms. Never raises: a report must render."""
+    try:
+        with Session(engine) as session:
+            proj = session.get(Project, project_id)
+            dial = ((proj.last_state_json or {}).get("dial") or {}) if proj else {}
+        label, tone, blurb = _PROVENANCE.get(dial.get("selection"), _PROVENANCE["drafted"])
+        return {"label": label, "tone": tone, "blurb": blurb,
+                "recipe_id": dial.get("recipe_id"), "rung": dial.get("rung"),
+                "confidence": dial.get("recipe_confidence")}
+    except Exception as e:
+        print(f"  [Reporting] provenance unavailable ({type(e).__name__}); "
+              f"labelling conservatively as drafted.")
+        label, tone, blurb = _PROVENANCE["drafted"]
+        return {"label": label, "tone": tone, "blurb": blurb,
+                "recipe_id": None, "rung": None, "confidence": None}
+
 
 def create_master_reports(
     project_id: uuid.UUID,
@@ -109,10 +157,14 @@ def create_master_reports(
         except Exception as e:
             print(f"  [Reporting] Warning: could not load metrics.json: {e}")
 
+    provenance = _selection_provenance(project_id)
+    print(f"  [Reporting] Plan provenance: {provenance['label']}"
+          + (f" ({provenance['recipe_id']})" if provenance['recipe_id'] else ""))
+
     # 2. Markdown research report — the same section order as the dashboard, so the two
     # artefacts describe the run identically.
     md_content = _build_markdown(project_id, narrative, takeaways, key_metrics,
-                                 sections, orphan_cards, run_usage)
+                                 sections, orphan_cards, run_usage, provenance)
     with open(os.path.join(workspace_dir, "research_report.md"), "w") as f:
         f.write(md_content)
 
@@ -144,6 +196,7 @@ def create_master_reports(
 
     html_content = template.render(
         project_id=str(project_id),
+        provenance=provenance,
         narrative=narrative,
         takeaways=takeaways,
         cards=cards,
@@ -163,7 +216,7 @@ def create_master_reports(
 
 
 def _build_markdown(project_id, narrative, takeaways, key_metrics, sections, orphan_cards,
-                    run_usage=None):
+                    run_usage=None, provenance=None):
     """Markdown twin of the dashboard: same sections, same order, same gaps."""
     from gads.core.usage import format_cost, format_tokens
     md = [f"# Research Report: Project {project_id}", "", "## Executive Summary", narrative, ""]
@@ -184,8 +237,14 @@ def _build_markdown(project_id, narrative, takeaways, key_metrics, sections, orp
                ""]
     md += ["## Key Takeaways", ""]
     md += [f"- {t}" for t in takeaways]
-    md += ["", "## Methodology, Step by Step",
-           "", "Each step below is a node of the applied recipe, in execution order.", ""]
+    # Same provenance statement as the dashboard — the Markdown twin must not make a
+    # stronger claim than the HTML about where the methodology came from.
+    md += ["", "## Methodology, Step by Step", ""]
+    if provenance:
+        _rid = f" (`{provenance['recipe_id']}`)" if provenance.get("recipe_id") else ""
+        md += [f"**Plan provenance — {provenance['label']}**{_rid}", "",
+               provenance["blurb"], ""]
+    md += ["Each step below is one stage of that plan, in execution order.", ""]
 
     for sec in sections:
         status = "not executed" if sec["status"] == "not_executed" else sec["status"]

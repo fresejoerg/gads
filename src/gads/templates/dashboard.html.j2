@@ -25,6 +25,25 @@
         .metric-value { font-size: 2rem; font-weight: 700; color: #15803d; font-variant-numeric: tabular-nums; }
         .metric-name { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: #6b7280; margin-top: 4px; }
 
+        /* ——— Plan-provenance banner ——— */
+        .prov { border-left: 4px solid var(--prov-accent, #888); background: rgba(128,128,128,.06);
+                padding: .7rem .9rem; margin: 0 0 1rem; border-radius: 4px; }
+        .prov-head { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+                     font-weight: 600; }
+        .prov-dot { width: .6rem; height: .6rem; border-radius: 50%;
+                    background: var(--prov-accent, #888); flex: none; }
+        .prov-id { font-size: .8rem; font-weight: 400; opacity: .85; }
+        .prov-rung { font-size: .72rem; font-weight: 600; letter-spacing: .04em;
+                     border: 1px solid currentColor; border-radius: 3px; padding: 0 .3rem;
+                     opacity: .7; }
+        .prov-blurb { margin: .35rem 0 0; font-size: .88rem; opacity: .85; }
+        /* Strong = compiled from a reviewed recipe. Weak = recipe seen but not followed.
+           None = drafted from scratch. Colour carries the same ordering as the text, but the
+           text is authoritative: colour alone must never be the only signal. */
+        .prov-recipe-strong { --prov-accent: #2e7d32; }
+        .prov-recipe-weak   { --prov-accent: #e08a00; }
+        .prov-recipe-none   { --prov-accent: #6c6c6c; }
+
         /* ——— Recipe-driven pipeline sections ——— */
         .rail { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 30px; }
         .rail a { text-decoration: none; display: flex; align-items: center; gap: 8px;
@@ -198,9 +217,30 @@
                        core/report_sections.py. #}
                     {% if sections %}
                     <h2>How This Result Was Produced</h2>
+
+                    {# Provenance banner. The sentence that used to sit here claimed every
+                       run followed "the applied recipe" — untrue for drafted and advisory
+                       plans, and the reader had no way to tell. GADS still analyses when
+                       nothing matches; this states which of the three lanes produced the
+                       methodology below. See reporting._selection_provenance. #}
+                    {% if provenance %}
+                    <div class="prov prov-{{ provenance.tone }}">
+                        <div class="prov-head">
+                            <span class="prov-dot"></span>{{ provenance.label }}
+                            {% if provenance.recipe_id %}
+                            <code class="prov-id">{{ provenance.recipe_id }}</code>
+                            {% endif %}
+                            {% if provenance.rung %}
+                            <span class="prov-rung" title="Delegation rung (approach_docs/013)">{{ provenance.rung }}</span>
+                            {% endif %}
+                        </div>
+                        <p class="prov-blurb">{{ provenance.blurb }}</p>
+                    </div>
+                    {% endif %}
+
                     <p class="text-muted mb-4">
-                        Each step below is a node of the applied recipe, in execution order,
-                        with the evidence it produced.
+                        Each step below is one stage of that plan, in execution order, with
+                        the evidence it produced.
                     </p>
 
                     <div class="rail">
