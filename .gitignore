@@ -72,3 +72,5 @@ specs/test_*.md
 .venv-train/
 unsloth_compiled_cache/
 research/finetune/
+research/consistency/
+research/consistency_run.log
