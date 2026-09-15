@@ -1079,6 +1079,22 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         session_id=str(project_id)
     )
 
+    # Stamp the engine on the PROJECT row immediately. The dial ledger also records it,
+    # but only on completion — so a run that halts (context overflow, exhausted replans)
+    # was previously unattributable to an engine even though it was known at launch, which
+    # is exactly the population a consistency experiment most needs to classify.
+    try:
+        with Session(engine) as _s:
+            _p = _s.get(Project, project_id)
+            if _p is not None:
+                _st = dict(_p.last_state_json or {})
+                _st["engine_id"] = engine_id
+                _p.last_state_json = _st
+                _s.add(_p)
+                _s.commit()
+    except Exception as _e:
+        print(f"  [Telemetry] could not stamp engine on project: {type(_e).__name__}", flush=True)
+
     ctx_token = trace_context.set({
         "project_id": str(project_id),
         "workflow_id": str(project_id),
@@ -2609,7 +2625,8 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                                 # task — the retroactive spec_filename matching in
                                 # list_projects exists because of exactly this. Merge:
                                 # snapshot wins on kernel keys, metadata is preserved.
-                                _meta_keys = ("fast_mode", "disable_recipes", "spec_filename", "dial")
+                                _meta_keys = ("fast_mode", "disable_recipes", "spec_filename", "dial",
+                                              "engine_id")
                                 _prev = project.last_state_json or {}
                                 _merged = dict(executor.authoritative_state or {})
                                 for _k in _meta_keys:

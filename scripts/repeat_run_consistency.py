@@ -80,10 +80,16 @@ def collect(engine, spec):
     idx = ledger_index()
     runs = {}
     with engine.connect() as c:
-        for pid, created in c.execute(text(
-                "select id::text, created_at from project"
+        for pid, created, eng, narr in c.execute(text(
+                "select id::text, created_at, last_state_json->>'engine_id',"
+                "       coalesce(narrative,'') from project"
                 " where last_state_json->>'spec_filename' = :s order by created_at"), {"s": spec}):
-            runs[pid] = {"project_id": pid, "created": str(created)[:19], "metrics": {}}
+            runs[pid] = {"project_id": pid, "created": str(created)[:19], "metrics": {},
+                         # Engine from the PROJECT row: stamped at launch, so it survives a
+                         # run that halted before the ledger was written. The ledger is only
+                         # a fallback for runs predating that.
+                         "engine_row": eng,
+                         "halted": narr.startswith("[HALTED]")}
         if not runs:
             return []
         for pid, m in c.execute(text(
@@ -97,7 +103,8 @@ def collect(engine, spec):
     for pid, r in runs.items():
         d = idx.get(pid, {})
         r.update(mode=d.get("routing_mode"), rung=d.get("rung"),
-                 engine=d.get("engine_id"), outcome=d.get("outcome"))
+                 engine=r.get("engine_row") or d.get("engine_id"),
+                 outcome=d.get("outcome") or ("halted" if r.get("halted") else None))
     return list(runs.values())
 
 
