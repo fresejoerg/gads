@@ -114,17 +114,32 @@ def launch(spec):
     return r.json()["project"]["id"]
 
 
-def wait(engine, pid, poll=60, timeout_s=7200):
+def wait(engine, pid, poll=60, timeout_s=4 * 3600, ledger_grace_s=600):
     """Block until the workflow settles. A run that never settles is reported, not silently
-    counted as a result."""
+    counted as a result.
+
+    Settled = the run wrote its dial-ledger record (every normal ending does, pass or fail),
+    or it was halted/cancelled, or it has a final narrative and nothing running for longer
+    than `ledger_grace_s` (a ledger write that failed). Leftover `pending` tasks are NOT a
+    liveness signal: replans strand never-run tasks, and waiting on them made every failed
+    run of 2026-09-09 look like a 2-hour timeout."""
     t0 = time.time()
+    quiet_since = None
     while time.time() - t0 < timeout_s:
         with engine.connect() as c:
             narr = c.execute(text("select narrative from project where id=:p"), {"p": pid}).scalar()
             st_counts = {r[0]: r[1] for r in c.execute(text(
                 "select status, count(*) from task where project_id=:p group by 1"), {"p": pid})}
-        if narr is not None and not st_counts.get("running") and not st_counts.get("pending"):
+        if pid in ledger_index():
             return True, st_counts
+        if narr is not None and not st_counts.get("running"):
+            if narr.startswith(("[HALTED]", "[CANCELLED]")):
+                return True, st_counts
+            quiet_since = quiet_since or time.time()
+            if time.time() - quiet_since > ledger_grace_s:
+                return True, st_counts
+        else:
+            quiet_since = None
         time.sleep(poll)
     return False, {}
 
@@ -187,6 +202,8 @@ def main():
     ap.add_argument("--min-runs", type=int, default=3,
                     help="minimum runs in a group before variance is reported (default 3)")
     ap.add_argument("--poll", type=int, default=60)
+    ap.add_argument("--timeout-h", type=float, default=4.0,
+                    help="per-run wall-clock cap in hours (default 4)")
     ap.add_argument("--out", default="research/consistency")
     args = ap.parse_args()
 
@@ -203,8 +220,14 @@ def main():
         for i in range(1, n + 1):
             pid = launch(args.spec)
             print(f"  [{i}/{n}] {pid} launched ...", flush=True)
-            ok, counts = wait(engine, pid, poll=args.poll)
+            ok, counts = wait(engine, pid, poll=args.poll, timeout_s=args.timeout_h * 3600)
             print(f"  [{i}/{n}] {'settled' if ok else 'TIMED OUT'} {counts}", flush=True)
+            if not ok:
+                # The run may still be executing. Launching the next one would put two
+                # workflows on one GPU and one kernel — the contention this harness exists
+                # to exclude — so stop here and analyse what settled.
+                print(f"  stopping: run {pid} did not settle; not launching the rest", flush=True)
+                break
 
     runs = collect(engine, args.spec)
     if not runs:

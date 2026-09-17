@@ -3098,10 +3098,13 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
 
         # Clean up pending tasks left over when MAX_WORKFLOW_ATTEMPTS is exhausted.
         # Without this, those tasks stay "pending" forever and block monitoring loops.
-        if not workflow_succeeded and task_ids:
+        # Scoped to the PROJECT, not this attempt's task_ids: every replan leaves its own
+        # never-run downstream tasks pending, and filtering on the last attempt's ids missed
+        # attempts 1..N-1 (runs 4653ffae/50bd2bf3/22b8557a all kept 2-attempt-old pendings).
+        if not workflow_succeeded:
             with Session(engine) as session:
                 leftover = session.exec(
-                    select(Task).where(Task.id.in_(task_ids), Task.status == "pending")
+                    select(Task).where(Task.project_id == project_id, Task.status == "pending")
                 ).all()
                 for _t in leftover:
                     _t.status = "failed"
@@ -3184,15 +3187,31 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
             # Keep the two SEPARATE — a fallback-assisted pass must never read as a model pass,
             # or the delegation-dial measurement is contaminated. Deduped per recipe node
             # (last completed instance wins across attempts).
+            #
+            # A node that EXHAUSTED its retries and never completed in any attempt counts as
+            # attempted-not-passed. Counting completed tasks only made pass@model survivorship-
+            # biased: a run that died at node 7 of 10 recorded 6/6 = 1.0 (4653ffae, 50bd2bf3,
+            # 22b8557a). Downstream nodes that never ran carry no code and stay out of the
+            # denominator — the model was never asked to do them.
             _by_node: Dict[str, str] = {}
+            _failed_nodes: Dict[str, str] = {}
             for t in session.exec(
-                select(Task).where(Task.project_id == project_id, Task.status == "completed")
+                select(Task).where(Task.project_id == project_id,
+                                   Task.status.in_(["completed", "failed"]))
                 .order_by(Task.created_at)
             ).all():
                 _rj = t.result_json or {}
                 _mu = str(_rj.get("model_used", ""))
-                if _rj.get("code") or _mu.startswith(("native_fallback:", "cloud_fallback:")):
-                    _by_node[t.description] = _mu
+                _node = (t.postcondition_json or {}).get("recipe_node_id") or t.description
+                if t.status == "completed":
+                    if _rj.get("code") or _mu.startswith(("native_fallback:", "cloud_fallback:")):
+                        _by_node[_node] = _mu
+                # A failed task with ANY execution record was attempted — including one whose
+                # generation never parsed and so stored empty code (50bd2bf3). Tasks the
+                # exhaustion cleanup marked as never-run carry no result_json at all.
+                elif _rj and not _mu.startswith("native_primary:"):
+                    _failed_nodes[_node] = _mu
+            _n_failed = len([n for n in _failed_nodes if n not in _by_node])
             _n_exec = len(_by_node)
             _n_native_fb = sum(1 for m in _by_node.values() if m.startswith("native_fallback:"))
             _n_cloud_fb = sum(1 for m in _by_node.values() if m.startswith("cloud_fallback:"))
@@ -3202,14 +3221,14 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
             # cannot be evidence about the model either way.
             _n_native_primary = sum(1 for m in _by_node.values() if m.startswith("native_primary:"))
             _n_fb = _n_native_fb + _n_cloud_fb
-            _n_attempted = _n_exec - _n_native_primary
-            _n_model = _n_attempted - _n_fb
+            _n_attempted = _n_exec - _n_native_primary + _n_failed
+            _n_model = _n_exec - _n_native_primary - _n_fb
             _pass_at_model = round(_n_model / _n_attempted, 3) if _n_attempted else None
-            if _n_exec:
+            if _n_attempted or _n_exec:
                 print(f"  [Dial] run_mode={get_run_mode()} | pass@model="
                       f"{_n_model}/{_n_attempted} ({_pass_at_model}) | fallback-assisted: "
                       f"{_n_fb} ({_n_native_fb} native, {_n_cloud_fb} cloud) | "
-                      f"native-by-policy: {_n_native_primary}", flush=True)
+                      f"native-by-policy: {_n_native_primary} | failed: {_n_failed}", flush=True)
 
             append_ledger({
                 "project_id": str(project_id),
@@ -3231,7 +3250,10 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                 # pass@model reporting — model-only vs fallback-assisted (never collapsed).
                 "exec_nodes": _n_exec,
                 # Nodes the model was actually asked to do — the honest pass@model base.
+                # Includes failed_nodes (exhausted, never completed) since 2026-09-15;
+                # records without "failed_nodes" used a completed-only base and read high.
                 "attempted_nodes": _n_attempted,
+                "failed_nodes": _n_failed,
                 "native_primary": _n_native_primary,
                 "model_pass": _n_model,
                 "fallback_pass": _n_fb,
