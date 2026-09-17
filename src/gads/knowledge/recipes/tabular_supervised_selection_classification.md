@@ -1,6 +1,6 @@
 ---
 id: tabular_supervised.selection.classification
-version: 1.5.0
+version: 1.5.1
 schema_version: 1
 author: gads-core
 
@@ -185,7 +185,10 @@ dag:
       untouched test partition. Bind `macro_f1`, `roc_auc` and `log_loss` as top-level
       scalars under exactly those names, plus `y_pred` and `y_prob`. Report the
       majority-class baseline next to every headline metric — a metric without a baseline is
-      not evidence. For a BINARY target, calibrate the decision threshold with
+      not evidence. `y_prob = tuned_model.predict_proba(X_test)` is a 2-D NumPy array, one
+      column per class — keep it that way (diagnostic_curves consumes it), and wherever a
+      positive-class score is needed (threshold, roc_auc) use `y_prob[:, 1]`; it has no
+      `.iloc`. For a BINARY target, calibrate the decision threshold with
       gads_calibrate_threshold(y_test, y_prob) before computing any label-based metric. For
       3 or more classes use argmax and do NOT slice predict_proba to one column.
       Alias the sklearn import if it would shadow the `log_loss` variable name.
@@ -280,7 +283,7 @@ invariants:
   - "PERMUTATION, NOT IMPURITY: feature importance is permutation importance on held-out data. `.feature_importances_` is impurity-based and biased toward high-cardinality and continuous features; it may be shown for contrast but never as the headline."
   - "BASELINE ALWAYS: every headline metric is reported next to the trivial baseline (majority class for classification). A model that does not beat it is a finding to report, not a failure to hide."
   - "CLASS WEIGHTS: the bakeoff and tuning natives apply class_weight='balanced' (or scale_pos_weight) uniformly. Do not set these in candidate params — doing so confounds the comparison."
-  - "STRING LABELS: class labels may be strings ('<=50K'/'>50K'), not 0/1. A thresholded probability yields 0/1, so comparing it against a string y_test raises \"Labels in y_true and y_pred should be of the same type\". Map thresholded predictions back to the original label dtype before ANY metric, confusion matrix or report — e.g. `classes = sorted(pd.Series(y_test).unique()); y_pred = np.where(y_prob >= threshold, classes[-1], classes[0])`. Never cast the labels themselves with int()."
+  - "STRING LABELS: class labels may be strings ('<=50K'/'>50K'), not 0/1. A thresholded probability yields 0/1, so comparing it against a string y_test raises \"Labels in y_true and y_pred should be of the same type\". Map thresholded predictions back to the original label dtype before ANY metric, confusion matrix or report — e.g. `classes = sorted(pd.Series(y_test).unique()); y_pred = np.where(y_prob[:, 1] >= threshold, classes[-1], classes[0])` — `y_prob` here is the 2-D predict_proba array, so threshold its positive column; thresholding the whole matrix raises \"a mix of binary and multiclass-multioutput\". Never cast the labels themselves with int()."
   - "NATIVE RETURN KEYS: read the exact keys a native documents. gads_calibrate_threshold returns `best_threshold`, gads_feature_importance returns `importance_table`, gads_candidate_bakeoff returns `bakeoff_table`/`best_candidate`. Short aliases (`threshold`, `importance`, `table`, `best`) are also provided, but print `sorted(result.keys())` if unsure rather than guessing a third name."
   - "THRESHOLD CALIBRATION: when n_classes == 2, calibrate the decision threshold via gads_calibrate_threshold before computing any label-based metric. For 3+ classes a single threshold is meaningless under argmax — use argmax, and never slice predict_proba to one column."
   - "REASONED CHOICE: shortlist_candidates must state why each candidate was nominated AND name at least one family ruled out. A choice without a defence is a failed node even when the code runs."
