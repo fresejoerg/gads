@@ -3,10 +3,11 @@
 Read-only. Joins two stores that each hold half of a training example:
 
   Langfuse `observations` — the rendered prompt and completion, per ATTEMPT.
-      Since 3f1ad49 (telemetry plan 010 P1+P2) `GADS_UNIFIED_COMPLETION` defaults true, so
-      every model routes through `get_structured_completion`, where the user message IS the
-      serialized `CoderInput` and `llm.py` stamps task_id / attempt / prompt_version /
-      engine_id onto the generation. LiteLLM nests those under `requester_metadata`.
+      Since 3f1ad49 (telemetry plan 010 P1+P2) `GADS_UNIFIED_COMPLETION` defaulted true,
+      and the flag and the Pydantic AI path it guarded were later removed, so every model
+      routes through `get_structured_completion`, where the user message IS the serialized
+      `CoderInput` and `llm.py` stamps task_id / attempt / prompt_version / engine_id onto
+      the generation. LiteLLM nests those under `requester_metadata`.
 
   GADS Postgres `task` — the VERDICT: status, the accepted `result_json['code']`, and
       `model_used` (which carries `native_fallback:` / `cloud_fallback:` / `native_primary:`

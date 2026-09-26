@@ -25,10 +25,6 @@ class CritiqueAgent(BaseAgent[CritiqueInput, CritiqueOutput]):
         )
 
     async def run(self, input_data: CritiqueInput, **kwargs) -> Any:
-        # Refresh prompt from registry
-        # Set the prompt for the Pydantic AI agent
-        self.agent._system_prompts = (self.system_prompt,)
-
         user_content = (
             f"USER OBJECTIVE: {input_data.objective}\n\n"
             f"AGENT SYNTHESIS:\nNarrative: {input_data.synthesis_narrative}\n"

@@ -29,7 +29,7 @@ No formal test suite. The `stress_test_*.py` files at the repo root are ad-hoc s
 
 ### The Pipeline (server.py:run_agent_workflow)
 
-The entire multi-agent orchestration lives in `src/gads/core/server.py` as one long `async def run_agent_workflow`. Each stage runs in a `while True:` retry loop that escalates the model via `get_next_model_dynamic` on failure. Stages:
+The entire orchestration lives in `src/gads/core/server.py` as one long `async def run_agent_workflow`. Each stage runs in a `while True:` retry loop that escalates the model via `get_next_model_dynamic` on failure. Stages:
 
 Before the main loop, two one-shot stages run:
 - **DataAnalyzer** (`server.py:_probe_file_schema`) — runs in a dedicated sandbox session (`probe_{project_id}`) before any agent. Profiles each CSV/Parquet file: schema, row count, null rates, cardinality for low-cardinality columns, numeric stats (min/max/mean/std). Capped at 5000 rows, 30s timeout. Results stored in `FileMetadata.columns_and_dtypes` and formatted as human-readable text for the Planner prompt via `planner.py:_format_file_profile`. Visible in the UI as a "DataAnalyzer" task. Excel/JSON/text format support is implemented but requires `openpyxl` in the sandbox container.
@@ -79,12 +79,9 @@ Before the main loop, two one-shot stages run:
 
 ### BaseAgent (agents/base.py)
 
-All agents extend `BaseAgent[TIn, TOut]`. There are **three completion paths**:
-1. `local_model` → bypasses Pydantic AI entirely (it deadlocks local models in tool-call loops) and uses `core/llm.get_structured_completion` with `instructor` directly.
-2. Cloud + streaming → Pydantic AI `agent.run_stream` with a callback.
-3. Pydantic AI failure → falls back to `get_structured_completion` (no streaming) before re-raising.
+All agents extend `BaseAgent[TIn, TOut]`, and there is **one completion path**: every model, local and cloud, calls `core/llm.get_structured_completion` (instructor in `JSON_SCHEMA` mode over the LiteLLM proxy, with a manual JSON-extraction + repair pass). There is no tool calling anywhere: each agent call is a single structured completion, and control flow stays in `server.py`/`executor.py`. The single path matters for telemetry: it is where `llm.py` stamps `task_id`/`attempt`/`prompt_version`/`engine_id` onto every generation, which the Langfuse↔task join (`harvest_coder_traces.py`) depends on. Pydantic AI was used here once and has been removed; don't reintroduce a second call path without also carrying that trace metadata.
 
-The `local_model` branch also injects `repetition_penalty=1.1, temperature=0.1` to prevent repetition loops.
+For `local_model`, `get_structured_completion` injects `repetition_penalty=1.1, temperature=0.1` to prevent repetition loops and forces the 600s timeout; cloud calls default to 300s (set in `BaseAgent.run`).
 
 ### Knowledge & Prompt System
 
