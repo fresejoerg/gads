@@ -2,7 +2,7 @@
 
 > **Local-first agentic data science for teams whose data can't go to the cloud** — a benchmark-proven, expanding library of DS workflows tuned to run reliably on small local models, so you get real mileage on your own hardware.
 
-GADS is a **contract-driven, multi-agent system for autonomous data science**. Point it at one or more datasets, give it a one-line objective — *"estimate the causal effect of transaction amount on fraud"* — and it runs the full workflow (framing → planning → code generation → sandboxed execution → verification → synthesis → reporting) and hands back an interactive dashboard, a research report, an exportable notebook, and machine-readable metrics.
+GADS is a **contract-checked, LLM-driven workflow for data science**: control flow lives in auditable code, and the model plans, writes, and checks the analysis inside it. Point it at one or more datasets, give it a one-line objective — *"estimate the causal effect of transaction amount on fraud"* — and it runs the full workflow (framing → planning → code generation → sandboxed execution → verification → synthesis → reporting) and hands back an interactive dashboard, a research report, an exportable notebook, and machine-readable metrics.
 
 It is also a **research instrument**. GADS is built to answer one question: *where is the efficiency boundary between agentic scaffolding and raw model capability?* — how far down the ladder (from frontier cloud models to a single 12B local model) the executing LLM can be pushed before workflow reliability collapses, and how much of that collapse deterministic structure can buy back. Every run is graded on **reproducibility** and **methodological appropriateness** and logged to an evidence ledger.
 
@@ -27,7 +27,11 @@ Where a typical agent framework asks *"how do we prompt better?"*, GADS asks *"c
 
 ## The pipeline
 
-The entire orchestration is one auditable coroutine (`run_agent_workflow` in `core/server.py`). Stages:
+The entire orchestration is one auditable coroutine (`run_agent_workflow` in `core/server.py`).
+
+**What "agentic" means here.** GADS is a *workflow* in the sense of Anthropic's workflow-vs-agent distinction, not a free-running tool-calling agent. Every model call is a single structured completion (instructor over the LiteLLM proxy), and nothing uses tool calling. The model acts by writing programs that run against a live, stateful kernel, and it sees their errors and resulting state on the next attempt. The loop, the retry budget, replanning, and the decision to stop all belong to the code. How many decisions the model does make is not fixed: the **delegation dial** (D0 → D5) sets it per run. At D0 the model frames the problem, drafts the task graph, and writes every line. At D3+ the plan is compiled from a recipe, and the model only writes code inside each node. That share of decisions is the variable GADS exists to measure (see [The delegation dial](#the-delegation-dial-research-object)). Control flow stays in code on purpose: if the model owned the loop, the number of delegated decisions would drift from run to run and confound the measurement.
+
+Stages:
 
 1. **DataAnalyzer** *(deterministic)* — profiles every file in an isolated probe session: schema, dtypes, row counts, null rates, cardinality, numeric stats. Feeds measured schemas into every downstream prompt so a small model can't invent column names.
 2. **SpecDrafter** — formalizes the objective into `workflow_spec.md`. A `recipe_id` pinned here is a launch-validated **hard pin** that overrides the Router.
@@ -97,7 +101,7 @@ Durable state lives in **PostgreSQL** (via SQLModel); UI events are written to a
 
 ### Stateful Python sandbox
 
-A Docker-isolated **IPython kernel** (one persistent session per project) keeps variable state across agent turns. Fixed package set (no runtime `pip install`):
+A Docker-isolated **IPython kernel** (one persistent session per project) keeps variable state across tasks. Fixed package set (no runtime `pip install`):
 
 - **Data:** pandas, numpy, polars, pyarrow, duckdb
 - **ML:** scikit-learn, torch, lightgbm, xgboost, shap, joblib, skore (methodological audit)
