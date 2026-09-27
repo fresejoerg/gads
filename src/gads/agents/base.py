@@ -22,6 +22,10 @@ class BaseAgent(ABC, Generic[TIn, TOut]):
     def __init__(self, name: str, model: str, system_prompt: str, output_schema: Type[TOut]):
         self.name = name
         self.model_str = model
+        # Callers read and assign `.model` too (executor logging/returns, server's per-task
+        # model switch). It was the Pydantic AI model object until that path was removed;
+        # it is now the same model string as `model_str`.
+        self.model = model
         self.system_prompt = system_prompt
         self.output_schema = output_schema
 
