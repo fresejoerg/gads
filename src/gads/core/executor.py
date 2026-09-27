@@ -79,12 +79,68 @@ def _parses(code: str) -> bool:
         return False
 
 
-def _sanitize_code(code: str) -> str:
+def _call_arg_spans(code: str, func: str) -> List[Tuple[int, int]]:
+    """(start, end) of the argument text of every `func(...)` call, parenthesis-balanced."""
+    spans = []
+    for m in re.finditer(r'\b' + re.escape(func) + r'\s*\(', code):
+        depth, i = 1, m.end()
+        while i < len(code) and depth:
+            if code[i] == '(':
+                depth += 1
+            elif code[i] == ')':
+                depth -= 1
+            i += 1
+        if depth == 0:
+            spans.append((m.end(), i - 1))
+    return spans
+
+
+# A `.predict_proba(...)` call (one level of nested parentheses allowed) sliced to column 1.
+_PROBA_COL1 = re.compile(r'(\.predict_proba\((?:[^()]|\([^()]*\))*\))\[:,\s*1\]')
+
+# AutoGluon predictors whose predict_proba returns a pandas DataFrame (as_pandas=True default).
+_AG_PREDICTOR_TYPES = {"TabularPredictor", "MultiModalPredictor"}
+
+
+def _autogluon_proba_targets(code: str, kernel_state: Optional[Dict[str, Any]]):
+    """Which names in `code` really hold an AutoGluon predictor or its predict_proba frame.
+
+    Only these may have numpy-style `[:, n]` indexing rewritten to `.iloc`. sklearn's
+    predict_proba returns an ndarray, where `.iloc` is an AttributeError, so the rewrite must
+    be driven by evidence, never by the mere presence of `predict_proba` or a `y_prob` name.
+    Evidence is the live kernel's recorded type or a binding visible in this code; anything
+    ambiguous is left alone, because a missing `.iloc` fails loudly and a wrong one breaks
+    correct code.
+    """
+    ks = kernel_state or {}
+    predictors = {n for n, info in ks.items()
+                  if isinstance(info, dict) and info.get("type") in _AG_PREDICTOR_TYPES}
+    predictors |= set(re.findall(
+        r'\b(\w+)\s*=\s*(?:\w+\.)*(?:TabularPredictor|MultiModalPredictor)(?:\.load)?\s*\(', code))
+
+    frames = set()
+    candidates = set(re.findall(r'\b(\w+)\[:,\s*\d+\]', code))
+    for name in candidates:
+        assigned = re.findall(r'^\s*' + re.escape(name) + r'\s*=(?!=)\s*(.+)$', code, re.MULTILINE)
+        if assigned:
+            receivers = [re.match(r'(\w+)\.predict_proba\s*\(', rhs.strip()) for rhs in assigned]
+            if all(r and r.group(1) in predictors for r in receivers):
+                frames.add(name)
+        elif ((ks.get(name) or {}).get("type") == "DataFrame"
+              and (ks.get(name) or {}).get("engine") != "polars"):  # sandbox labels polars "DataFrame" too; no .iloc there
+            frames.add(name)
+    return predictors, frames
+
+
+def _sanitize_code(code: str, kernel_state: Optional[Dict[str, Any]] = None) -> str:
     """Rewrite broken library imports to sandbox-compatible equivalents.
 
     lightgbm and xgboost fail at import time (missing libgomp.so.1).
     pickle is blocked by sandbox security policy.
     Replacements happen regardless of what the LLM generated.
+
+    `kernel_state` (the executor's authoritative_state: name -> {"type", ...}) lets
+    type-dependent rewrites check what an object actually is instead of guessing.
     """
     # Strip markdown code fences that leak into the code field. Local models
     # habitually wrap their output in ``` blocks despite the JSON schema; a
@@ -214,16 +270,20 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
 """
         code = _fi_patch + "\n" + code
 
-    # Multiclass predict_proba binary-slice fix:
-    # Replace predict_proba(...)[:, 1] with predict_proba(...) so log_loss gets full matrix.
-    # Only applied when log_loss is also used (classification context).
-    if 'log_loss' in code and re.search(r'\.predict_proba\([^)]+\)\[:,\s*1\]', code):
-        code = re.sub(
-            r'(\.predict_proba\([^)]+\))\[:,\s*1\]',
-            r'\1',
-            code
-        )
-        print("  [Sanitizer] Removed binary predict_proba slice (multiclass context detected)", flush=True)
+    # Multiclass log_loss fix: `log_loss(y, m.predict_proba(X)[:, 1])` is wrong for a
+    # multiclass target, and the full matrix is right for binary and multiclass alike. So
+    # drop the slice INSIDE log_loss(...) calls only. It used to be stripped everywhere once
+    # `log_loss` appeared, which turned the correct binary idiom
+    # `y_prob = m.predict_proba(X)[:, 1]` into a 2-D matrix: roc_auc_score then raised "y
+    # should be a 1d array", and thresholding it raised "can't handle a mix of binary and
+    # multiclass-multioutput targets" (26x on model-selection holdout_evaluation).
+    if 'log_loss' in code:
+        fixed = code
+        for start, end in reversed(_call_arg_spans(code, 'log_loss')):
+            fixed = fixed[:start] + _PROBA_COL1.sub(r'\1', fixed[start:end]) + fixed[end:]
+        if fixed != code:
+            code = fixed
+            print("  [Sanitizer] Passed the full predict_proba matrix to log_loss", flush=True)
 
     # PyMC/Bambi multiprocessing fix: chains>1 forks processes in Docker which hang
     # indefinitely after sampling. Force single-chain execution regardless of LLM output.
@@ -467,12 +527,20 @@ if not isinstance(vars(_HGBCls).get('feature_importances_'), property):
         code = code.replace('treatment=treatment_lane', 'treatment=treatment_col')
         print("  [Sanitizer] Standardized gads_causal_estimate_ate return keys", flush=True)
 
-    # AutoGluon predict_proba returns a DataFrame, not ndarray; fix numpy-style [:, n] indexing
-    if 'predict_proba' in code or ('y_prob' in code and '[:,' in code):
-        code = re.sub(r'predict_proba\(([^)]*)\)\[:,\s*(\d+)\]', r'predict_proba(\1).iloc[:, \2]', code)
-        code = re.sub(r'\by_prob\[:,\s*(\d+)\]', r'y_prob.iloc[:, \1]', code)
-        if 'predict_proba' in code:
-            print("  [Sanitizer] Fixed predict_proba numpy-style indexing → .iloc", flush=True)
+    # AutoGluon predict_proba returns a DataFrame, not an ndarray; fix numpy-style [:, n]
+    # indexing, but ONLY on objects shown to be AutoGluon's (see _autogluon_proba_targets).
+    # This used to fire on any predict_proba / y_prob[:, n], rewriting correct sklearn code
+    # into `.iloc` on an ndarray (edf7f79).
+    if '[:,' in code:
+        predictors, frames = _autogluon_proba_targets(code, kernel_state)
+        before = code
+        for recv in predictors:
+            code = re.sub(r'\b(' + re.escape(recv) + r'\.predict_proba\((?:[^()]|\([^()]*\))*\))\[:,\s*(\d+)\]',
+                          r'\1.iloc[:, \2]', code)
+        for name in frames:
+            code = re.sub(r'\b' + re.escape(name) + r'\[:,\s*(\d+)\]', name + r'.iloc[:, \1]', code)
+        if code != before:
+            print("  [Sanitizer] Fixed AutoGluon predict_proba numpy-style indexing → .iloc", flush=True)
 
     # Fix non-existent pandas API: is_datetime64_ns → is_datetime64_any_dtype
     if 'is_datetime64_ns' in code:
@@ -902,7 +970,8 @@ class ExecutionManager:
                     reasoning_buffer.clear()
                     await stream_callback(delta)
                 
-                current_code = _sanitize_code(coder_res.content.code)
+                current_code = _sanitize_code(coder_res.content.code,
+                                              kernel_state=self.authoritative_state)
 
                 # Honesty gate: everything that reaches the sandbox must be a program.
                 # A reasoning model that never closes its fence leaks deliberation prose,
