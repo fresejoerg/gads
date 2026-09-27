@@ -53,11 +53,29 @@ class BaseAgent(ABC, Generic[TIn, TOut]):
             # the 300s cloud convention. local_model timeout is forced to 600s inside
             # get_structured_completion.
             kwargs.setdefault("timeout", 300.0)
-        content = await get_structured_completion(
-            model=self.model_str,
-            response_model=self.output_schema,
-            messages=messages,
-            stream_callback=stream_callback,
-            **kwargs
-        )
+        try:
+            content = await get_structured_completion(
+                model=self.model_str,
+                response_model=self.output_schema,
+                messages=messages,
+                stream_callback=stream_callback,
+                **kwargs
+            )
+        except Exception as e:
+            self._capture(messages, None, f"{type(e).__name__}: {e}")
+            raise
+        self._capture(messages, content, None)
         return AgentResponse(content=content, model_used=self.model_str)
+
+    def _capture(self, messages, content, error):
+        """Distillation capture for every stage but the Coder, which the executor records
+        with its execution outcome (core/distill_capture.py). Never raises."""
+        if self.name == "CodeGenerator":
+            return
+        try:
+            from gads.core.distill_capture import record_call
+            record_call(stage=self.name, model=self.model_str, messages=messages,
+                        output=content.model_dump() if content is not None else None,
+                        error=error)
+        except Exception:
+            pass

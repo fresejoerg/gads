@@ -97,38 +97,4 @@ For `local_model`, `get_structured_completion` injects `repetition_penalty=1.1, 
 
 **Delegation dial & pass@model** (`core/dial.py`): each completed run appends a record to `research/dial_ledger.jsonl` — the delegation rung (D0…D5) × routing outcome, plus `pass_at_model` (`model_pass`/`attempted_nodes`, the fraction the assigned model did itself; `attempted_nodes` includes `failed_nodes` — nodes that exhausted retries and never completed — since 2026-09-15; older records lack `failed_nodes` and used a completed-only base, so a failed run could read 1.0) vs `fallback_pass` (`native_fallback`/`cloud_fallback`, nodes a fallback rescued). The two are kept **separate and never collapsed** so a fallback-assisted pass cannot masquerade as a model pass — this is what keeps the efficiency-boundary measurement honest.
 
-### Postcondition Contracts (execution_hub.py:validate_contract)
-
-Tasks declare `postcondition_json` with `output_type`, `required_columns`, and optional `required_insights`. The hub checks for the columns in stdout OR in the live kernel state. `required_insights` checks emitted `gads_emit_insight()` payloads — but is currently a **soft fail** (logs a warning, does not fail the task) to tolerate forgetful local models.
-
-### Project Specs (server.py:launch_from_spec)
-
-`POST /projects/from-spec` reads a Markdown file from `specs/` with YAML frontmatter. Supported keys:
-
-| Key | Type | Description |
-|-----|------|-------------|
-| `name` | str | Project display name |
-| `datasets` | list[str] | Paths relative to `GADS_DATASETS_ROOT` (default `/home/joergf/datasets`) — **copied** (not symlinked) into workspace |
-| `recipes` | list[str] | Recipe filenames to validate against the registry |
-| `target_column` | str | Forwarded to Planner as a hint |
-| `feature_columns` | list[str] | Forwarded to Planner as a hint |
-| `filters` | str | Forwarded to Planner as a hint |
-| `domain` | str | Forwarded to Planner as a hint |
-| `recipe_id` | str | Forwarded to Planner as a hint |
-| `sample_rows` | int | Hard sandbox budget constraint — caps the maximum number of rows processed in ML training/analysis tasks to prevent execution timeouts |
-| `save_model` | bool | If `true`, a deterministic post-execution hook saves the first fitted sklearn-style classifier found in the kernel (`hasattr(fit) + hasattr(predict) + hasattr(classes_)`) to `model.joblib` via joblib. Runs after all tasks complete successfully, independent of what the Planner generates. NOT forwarded to the Planner. |
-| `disable_recipes` | bool | If `true`, forces the drafted-plan lane: the spec-pin fast path and Router recipe matching are both skipped, so the plan is LLM-drafted (used by delegation-dial D0/D1 specs). Also settable per launch via the request body. |
-
-Path-traversal is blocked via `Path.is_relative_to` checks; recipes are validated against the registry. The endpoint is fully transactional — failure rolls back DB and rm's the workspace.
-
-## Conventions & Gotchas
-
-- **Many hardcoded paths**: `WORKSPACE_ROOT = "/home/joergf/projects/MyLocalStack/data/workspaces"` and `host_path = f"/home/joergf/projects/MyLocalStack/..."` in `sandbox.list_workspace_files` are user-specific. If you move the repo, both need updating.
-- **`asyncio.wait_for` is the rule** when calling the sandbox or LLM — every external call has a deliberate timeout to keep the workflow responsive. Key timeouts: Coder agent 300s, sandbox health check 5s, sandbox *execution* 720s for `local_model` / 360s for cloud (asyncio wrapper) with the sandbox body timeout set to 600s / 300s respectively. The chain must be ordered: sandbox body timeout < httpx client timeout (720s) ≤ asyncio wrapper, otherwise a transport-layer race produces an empty `ConnectionError` before the proper error surface fires.
-- **`GADS_INSIGHTS_JSON:` / `GADS_FLOOR_JSON:` / `GADS_STATE_SNAPSHOT:` prefixes** — sentinel-prefixed stdout lines parsed back into structured data by the Executor and orchestrator. Don't let task code log lines starting with these strings.
-- **The sliding-window context** (server.py:run_agent_workflow, "2+1 model") gives the Coder full detail for the first + last 2 tasks and only `orchestrator_summary` for the middle. When something is invisible to the Coder, suspect that distillation.
-- **Cascade deletes are manual** — `DELETE /projects/{id}` walks Task/Artifact/Instruction and deletes each before deleting the Project (no FK cascade configured).
-- **`core/state.Blackboard` is dead code** — only `main.py` uses it. Real state lives in the DB + `ExecutionManager.authoritative_state` + the IPython kernel.
-- **Inbox Collaboration & GOD Tasks**: At the start of every session, ALWAYS check if the background monitor task (`scripts/monitor_inbox.py`) is running. If not, immediately start it. When a task message arrives in `agent_inbox.jsonl` from `"from": "GOD"`, do not simply write an acknowledgment and stop. You must immediately parse the task, take ownership of it, and proactively execute/implement the required work, communicating updates and coordinating with the other agent (`Deepfrese`) via the inbox as needed to advance the work.
-
-
+**Distillation capture** (`core/distill_capture.py`, on by default, `GADS_DISTILL_CAPTURE=false` to disable), three append-only streams under gitignored `research/finetune/capture/` (prompts carry data profiles): `attempts-YYYY-MM.jsonl`, every Coder generation from `executor.run_task` (the prompt *core* and the skills block from `CodeGeneratorAgent.last_render`, raw output, executed post-sanitizer code, outcome); `accepts-YYYY-MM.jsonl`, every accepted code task from `ExecutionHub.complete_task` (workflow and follow-up lane alike); `calls-YYYY-MM.jsonl`, every other model stage from `BaseAgent.run` (exact messages + structured output). `scripts/build_distill_dataset.py` turns them (plus the older Langfuse harvest as backfill) into a snapshot under `research/finetune/datasets/<ts>/` (`latest` symlink): Coder SFT/DPO re-rendered into the local raw-code format via `coder.render_messages`, skills-ablated variants (`*_noskills.jsonl`), and Router examples labelled against each spec's declared taxonomy + recipe (the `eval_routing.py` ground truth; its calls are tagged with their spec via `distill_capture.capture_context`). Benchmark specs and their dial variants are always held out. `scripts/distill.sh --model <hf checkpoint>` builds and trains in one step (refuses while LM Studio holds the GPU). Keep capture in step with any change to how the Coder renders its prompt.

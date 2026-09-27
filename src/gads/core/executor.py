@@ -806,6 +806,19 @@ class ExecutionManager:
                 drifted.append(f"`{name}` changed from {before} to {now}")
         return drifted
 
+    def _capture_attempt(self, outcome: str, raw_output: Optional[str], executed_code: Optional[str],
+                         error: Optional[str], task_id, task_description: str,
+                         recipe_id: Optional[str]) -> None:
+        """Record this Coder generation for distillation (core/distill_capture.py). Never raises."""
+        try:
+            from gads.core.distill_capture import record_attempt
+            record_attempt(model=self.coder.model_str, render=getattr(self.coder, "last_render", None),
+                           raw_output=raw_output, executed_code=executed_code, outcome=outcome,
+                           error=error, task_id=str(task_id) if task_id else None,
+                           task_description=task_description, recipe_id=recipe_id)
+        except Exception:
+            pass
+
     async def run_task(
         self, 
         task_description: str, 
@@ -1200,17 +1213,23 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                                 "you need a different view, bind a NEW name.")
                         print(f"    [Executor] 🚫 State drift: {'; '.join(_drift)}", flush=True)
                         exec_result.error = {"ename": "StateDriftError", "evalue": _msg}
+                        self._capture_attempt("state_drift", coder_res.content.code, current_code,
+                                              _msg, task_id, task_description, recipe_id)
                     else:
                         # Step succeeded after ≥1 failure → record that its prior errors were
                         # recoverable (distinguishes recurring-but-fixable from hard dead ends).
                         if error_history:
                             record_resolution(recipe_id, recipe_version, task_description,
                                                coder_res.model_used)
+                        self._capture_attempt("executed", coder_res.content.code, current_code,
+                                              None, task_id, task_description, recipe_id)
                         return exec_result, coder_res.model_used
                 else:
                     ename = exec_result.error.get("ename", "Error")
                     evalue = exec_result.error.get("evalue", "Unknown error")
                     print(f"    [Executor] ❌ Failure: {ename} - {evalue}", flush=True)
+                    self._capture_attempt("exec_error", coder_res.content.code, current_code,
+                                          f"{ename}: {evalue}", task_id, task_description, recipe_id)
 
                     attempt_msg = f"{ename}: {evalue}"
 
@@ -1274,6 +1293,8 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                           + "\n".join("    │ " + ln for ln in _bad[:500].splitlines())
                           + "\n    └", flush=True)
                     last_bad_text = _bad
+                self._capture_attempt("no_program", _bad or None, None, str(e),
+                                      task_id, task_description, recipe_id)
                 attempt_msg = (
                     f"CodeGenerationError: {e}\n\n"
                     "REMEDY: Output ONLY a single ```python fenced block containing the "

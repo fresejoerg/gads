@@ -22,6 +22,31 @@ class CoderInput(BaseModel):
     postcondition_contract: Optional[Dict[str, Any]] = None
     state_summary: Optional[str] = None
 
+# The two output formats a Coder prompt is rendered into. Both are the same prompt CORE (the
+# formatted system prompt + the task's user content) plus a fixed suffix, so a prompt captured
+# from one engine can be re-rendered exactly for the other (core/distill_capture.py): a local
+# student must be trained on the raw-code format it is actually served.
+RAW_SYSTEM_SUFFIX = (
+    "\n\n## OUTPUT FORMAT — OVERRIDES ALL PRIOR FORMAT INSTRUCTIONS\n"
+    "Return ONLY the Python code for this task, inside a single ```python fence.\n"
+    "Do NOT return JSON. Do NOT write prose before or after the fence."
+)
+RAW_USER_SUFFIX = "Return ONLY a single ```python code block."
+JSON_USER_SUFFIX = "Return the required FLAT JSON object."
+# What the prompt's {skills_context} slot holds when no skill applies. A skills-ablated
+# rendering of a captured example substitutes exactly this (build_distill_dataset.py).
+NO_SKILLS_TEXT = "No specific skills required for this task."
+
+
+def render_messages(system: str, user_core: str, raw: bool) -> List[Dict[str, str]]:
+    """The exact messages the Coder sends: raw-code mode (local) or JSON envelope (cloud)."""
+    if raw:
+        return [{"role": "system", "content": system + RAW_SYSTEM_SUFFIX},
+                {"role": "user", "content": user_core + RAW_USER_SUFFIX}]
+    return [{"role": "system", "content": system},
+            {"role": "user", "content": user_core + JSON_USER_SUFFIX}]
+
+
 class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
     def __init__(self, model: str = "local_model"):
         super().__init__(
@@ -53,7 +78,7 @@ class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
         formatted_prompt = base_prompt.format(
             state_summary=state_summary,
             files_list=files_summary,
-            skills_context=input_data.skills_context or "No specific skills required for this task.",
+            skills_context=input_data.skills_context or NO_SKILLS_TEXT,
             contract_json=contract_summary
         )
 
@@ -127,21 +152,17 @@ class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
         # loops (observed: gemma-4-12b burning the full 8K token budget on one
         # derailed CoderOutput generation, repeatedly). Ask for plain fenced
         # code and build the schema object ourselves.
+        # The prompt core of this call, for distillation capture (the executor records it
+        # with the outcome once it is known).
+        self.last_render = {"system": formatted_prompt, "user_core": user_content,
+                            "skills_context": input_data.skills_context}
+
         if self.model_str == "local_model":
             from gads.core.llm import get_code_completion
-            raw_system = formatted_prompt + (
-                "\n\n## OUTPUT FORMAT — OVERRIDES ALL PRIOR FORMAT INSTRUCTIONS\n"
-                "Return ONLY the Python code for this task, inside a single ```python fence.\n"
-                "Do NOT return JSON. Do NOT write prose before or after the fence."
-            )
-            raw_user = user_content + "Return ONLY a single ```python code block."
             print(f"    [Coder] RAW CODE MODE (local_model) — plain fenced code, no JSON envelope.", flush=True)
             code = await get_code_completion(
                 model=self.model_str,
-                messages=[
-                    {"role": "system", "content": raw_system},
-                    {"role": "user", "content": raw_user}
-                ],
+                messages=render_messages(formatted_prompt, user_content, raw=True),
                 stream_callback=kwargs.pop("stream_callback", None),
             )
             return AgentResponse(
@@ -149,11 +170,9 @@ class CodeGeneratorAgent(BaseAgent[CoderInput, CoderOutput]):
                 model_used=self.model_str
             )
 
-        user_content += "Return the required FLAT JSON object."
-
         # Use super().run to get streaming support
         return await super().run(
-            user_content,
+            render_messages(formatted_prompt, user_content, raw=False)[1]["content"],
             system_prompt=formatted_prompt,
             **kwargs
         )

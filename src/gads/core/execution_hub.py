@@ -5,7 +5,7 @@ from typing import List, Optional, Dict, Any
 from sqlmodel import select, Session
 from pydantic import BaseModel as PydanticModel
 from gads.core.database import engine
-from gads.core.models import Task, OutboxEvent
+from gads.core.models import Task, OutboxEvent, Project
 from gads.core.registry import get_next_model_dynamic
 import uuid
 
@@ -235,6 +235,14 @@ class ExecutionHub:
             self.session.add(task)
             self.create_outbox_event("TASK_COMPLETED", {"task_id": str(task_id), "result": result})
             self.session.commit()
+            # Distillation capture: every ACCEPTED code task, workflow and follow-up alike
+            # (core/distill_capture.py). Best-effort; never affects the task.
+            if (result or {}).get("code"):
+                try:
+                    from gads.core.distill_capture import record_accept
+                    record_accept(task, result, self.session.get(Project, task.project_id))
+                except Exception:
+                    pass
 
     def bypass_task(self, task_id: uuid.UUID, result: dict):
         """Mark a task as bypassed due to complexity."""

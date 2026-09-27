@@ -102,6 +102,10 @@ async def evaluate(specs, registry, model):
         # specs read as misclassifications in the 2026-08-21 batch. `error` is never the
         # empty string now, so a falsy check cannot mistake a failure for a success.
         last_exc = None
+        # Tag the Router call for distillation capture: routing evaluation is the densest
+        # source of LABELLED Router examples (the spec carries the gold taxonomy + recipe).
+        from gads.core.distill_capture import capture_context
+        capture_context.set({"spec": sp["spec"], "source": "routing_eval"})
         for attempt in (1, 2):
             try:
                 res = await asyncio.wait_for(
