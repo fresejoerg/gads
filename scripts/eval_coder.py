@@ -17,9 +17,13 @@ gain is masked by a Planner wobble, so credit assignment is murky at the n we ha
                               (carried in the holdout file; only recipe-compiled nodes
                               declare them, so this scores a subset)
 
-Tier 2 (execute the code and judge with the real `validate_contract`) is the instrument
-that can support a capability claim; this is not it. With ~35 held-out examples a 10-point
-move sits inside the noise, so treat these as regression tripwires, not evidence of gain.
+  Tier 2  EXECUTE the generated code against a kernel rebuilt to the task's position in its
+          run, and judge it with production's own acceptance path (scripts/eval_tier2.py).
+          This is the tier that can support a capability claim. Its denominator is only the
+          examples whose reference code the instrument can itself reconstruct and accept.
+
+Tiers 0-1 are regression tripwires, not evidence of gain. With ~35 held-out examples a
+10-point move sits inside the noise even at tier 2, so run --repeats and read the spread.
 
     # validate the checks themselves against the reference solutions (no model needed)
     PYTHONPATH=src uv run python scripts/eval_coder.py --reference-only
@@ -233,7 +237,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--holdout", default="research/finetune/sft_holdout.jsonl")
-    ap.add_argument("--tier", default="1", help="comma list: 0, 1 (default 1)")
+    ap.add_argument("--tier", default="1", help="comma list: 0, 1, 2 (default 1)")
     ap.add_argument("--backend", choices=["litellm", "hf"], default="litellm")
     ap.add_argument("--reference-only", action="store_true",
                     help="score the REFERENCE solutions instead of generating. Establishes "
@@ -256,6 +260,14 @@ def main():
     ap.add_argument("--max-seq-len", type=int, default=8192)
     ap.add_argument("--timeout", type=float, default=600.0)
     ap.add_argument("--out", default="research/finetune/eval_report.jsonl")
+    t2 = ap.add_argument_group("tier 2 (see scripts/eval_tier2.py)")
+    t2.add_argument("--refresh-reference", action="store_true",
+                    help="ignore cached reference verdicts")
+    t2.add_argument("--validation-model", default=None,
+                    help="validate_contract's column-check model (default: the task's own)")
+    t2.add_argument("--replay-timeout", type=float, default=900.0)
+    t2.add_argument("--exec-timeout", type=float, default=720.0)
+    t2.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
     rows = [json.loads(l) for l in open(args.holdout)]
@@ -288,11 +300,13 @@ def main():
         report["tier0"] = tier0_loss(rows, model, tok, args)
         print(f"  loss {report['tier0']['loss']} | ppl {report['tier0']['perplexity']}")
 
-    if "1" in tiers:
-        print("\nTIER 1 — static checks on generated code"
+    if "1" in tiers or "2" in tiers:
+        label = " + ".join(x for x, t in (("TIER 1 — static checks", "1"),
+                                            ("TIER 2 — execution", "2")) if t in tiers)
+        print(f"\n{label} on generated code"
               + (f" ({args.repeats} repeats for the noise floor)" if args.repeats > 1 else ""))
         gen_path = pathlib.Path(args.out).parent / f"generations_{tag.replace('/', '_')}.jsonl"
-        runs = []
+        runs, t2_runs = [], []
 
         for rep in range(args.repeats):
             if args.reference_only:
@@ -326,11 +340,27 @@ def main():
                 agg[k] = {"pass": sum(vals), "n": len(vals),
                           "rate": round(sum(vals) / len(vals), 3) if vals else None}
             runs.append(agg)
+            if "2" in tiers:
+                from eval_tier2 import run_tier2
+                t2_runs.append(run_tier2(rows, None if args.reference_only else codes,
+                                         tag, args))
             if args.reference_only:
                 break      # deterministic; repeating adds nothing
 
+        if t2_runs:
+            report["tier2_runs"] = t2_runs
+            report["tier2"] = t2_runs[-1]
+            rates = [r["rate"] for r in t2_runs if r["rate"] is not None]
+            if len(rates) > 1:
+                print(f"\n  tier 2 accepted rate over {len(rates)} runs: mean "
+                      f"{sum(rates) / len(rates):.1%}, min {min(rates):.1%}, max "
+                      f"{max(rates):.1%}, spread {max(rates) - min(rates):.1%} (noise floor)")
+
+    if "1" in tiers:
+
         report["tier1_runs"] = runs
         report["tier1"] = runs[-1]
+        print("\nTIER 1 — static checks")
         keys = ("parses_raw", "parses", "no_banned_import", "no_mock_data",
                 "no_sentinel", "binds_required")
         if len(runs) == 1:
