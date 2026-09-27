@@ -196,15 +196,27 @@ def build_replay_code(project_id: uuid.UUID,
     """
     tasks = replayable_tasks(project_id)
     if tasks:
-        body = "\n\n".join(
-            f"# --- replay {i}/{len(tasks)}: {(t.description or '')[:70]} ---\n"
-            + (t.result_json or {}).get("code", "").strip()
-            for i, t in enumerate(tasks, 1)
-        )
-    else:
-        body = replay_code_from_workspace(workspace_dir) if workspace_dir else None
-        if not body:
-            return None
+        return replay_script_for_tasks(tasks)
+    body = replay_code_from_workspace(workspace_dir) if workspace_dir else None
+    return replay_script(body) if body else None
+
+
+def replay_script_for_tasks(tasks: List[Task]) -> Optional[str]:
+    """The replay script for an explicit, ordered list of completed tasks.
+
+    Callers that need state as of a point *inside* a run (scripts/eval_tier2.py rebuilds
+    the kernel as it was just before one task) pass the prefix they want.
+    """
+    body = "\n\n".join(
+        f"# --- replay {i}/{len(tasks)}: {(t.description or '')[:70]} ---\n"
+        + (t.result_json or {}).get("code", "").strip()
+        for i, t in enumerate(tasks, 1)
+    )
+    return replay_script(body) if body.strip() else None
+
+
+def replay_script(body: str) -> str:
+    """Prefix replayed task code with the native definitions it needs and the emit shim."""
     # Native definitions the replayed code references (same routing the executor uses).
     native = ""
     try:

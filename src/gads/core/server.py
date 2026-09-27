@@ -105,6 +105,15 @@ async def catch_exceptions_middleware(request, call_next):
 
 registry = KnowledgeRegistry("src/gads/knowledge/recipes")
 WORKSPACE_ROOT = "/home/joergf/projects/MyLocalStack/data/workspaces"
+
+# Stdout phrases that mean the task code gave up on the real data and simulated or skipped
+# instead of failing. A task whose stdout contains one fails even if it did not raise.
+# Shared with scripts/eval_tier2.py so offline evaluation applies the same guard.
+HALLUCINATION_TOKENS = (
+    "no files provided", "no data available", "simulating data",
+    "mock data", "dummy data", "environment is empty",
+    "no file available to process",
+)
 # Source-dataset root, bind mounted READ-ONLY into the sandbox at the identical path.
 # Datasets under this root are symlinked into workspaces rather than copied (see
 # _mount_external_dataset); the read-only mount is what makes that safe.
@@ -2515,12 +2524,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                             )
 
                         # --- HALLUCINATION GUARD ---
-                        hallucination_tokens = [
-                            "no files provided", "no data available", "simulating data", 
-                            "mock data", "dummy data", "environment is empty",
-                            "no file available to process"
-                        ]
-                        if not error_msg and any(token in res.stdout.lower() for token in hallucination_tokens):
+                        if not error_msg and any(token in res.stdout.lower() for token in HALLUCINATION_TOKENS):
                             error_msg = "Task Failed: Agent detected missing environment files and attempted to simulate/skip instead of erroring."
 
                         if error_msg:

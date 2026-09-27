@@ -79,6 +79,37 @@ def _parses(code: str) -> bool:
         return False
 
 
+_TELEMETRY_PREAMBLE = """
+if '_gads_insights' not in globals(): _gads_insights = []
+def gads_emit_insight(artifact, insight, evidence=""):
+    _gads_insights.append({"artifact": artifact, "insight": insight, "evidence": evidence})
+"""
+_TELEMETRY_POSTAMBLE = """
+import json as _json
+print("GADS_INSIGHTS_JSON:" + _json.dumps(_gads_insights))
+_gads_insights = [] # Clear for next task
+"""
+
+
+def wrap_for_execution(code: str) -> str:
+    """The exact program the sandbox runs for a task: native definitions + telemetry hooks.
+
+    Natives are keyword-routed (single source of truth in
+    gads.knowledge.native.preamble_for_code, shared with kernel rehydration so replayed code
+    gets the same definitions). Shared with scripts/eval_tier2.py so offline evaluation runs
+    what production runs, not an approximation of it.
+    """
+    native = ""
+    try:
+        from gads.knowledge.native import preamble_for_code
+        native, names = preamble_for_code(code)
+        if names:
+            print(f"    [Executor] Injecting native node preamble(s): {', '.join(names)}", flush=True)
+    except Exception as e:
+        print(f"    [Executor] Warning: Could not load native preambles: {e}", flush=True)
+    return native + _TELEMETRY_PREAMBLE + "\n" + code + "\n" + _TELEMETRY_POSTAMBLE
+
+
 def _call_arg_spans(code: str, func: str) -> List[Tuple[int, int]]:
     """(start, end) of the argument text of every `func(...)` call, parenthesis-balanced."""
     spans = []
@@ -1065,32 +1096,7 @@ class ExecutionManager:
                     ), self.coder.model
 
                 print(f"    [Executor] Executing code in sandbox...", flush=True)
-
-                # Inject the native-node definitions this code references (keyword-routed;
-                # single source of truth in gads.knowledge.native.preamble_for_code, shared
-                # with kernel rehydration so replayed code gets the same definitions).
-                _native_preamble = ""
-                try:
-                    from gads.knowledge.native import preamble_for_code
-                    _native_preamble, _native_names = preamble_for_code(current_code)
-                    if _native_names:
-                        print(f"    [Executor] Injecting native node preamble(s): "
-                              f"{', '.join(_native_names)}", flush=True)
-                except Exception as _e:
-                    print(f"    [Executor] Warning: Could not load native preambles: {_e}", flush=True)
-
-                # Wrap code with telemetry hooks
-                telemetry_preamble = _native_preamble + """
-if '_gads_insights' not in globals(): _gads_insights = []
-def gads_emit_insight(artifact, insight, evidence=""):
-    _gads_insights.append({"artifact": artifact, "insight": insight, "evidence": evidence})
-"""
-                telemetry_postamble = """
-import json as _json
-print("GADS_INSIGHTS_JSON:" + _json.dumps(_gads_insights))
-_gads_insights = [] # Clear for next task
-"""
-                wrapped_code = telemetry_preamble + "\n" + current_code + "\n" + telemetry_postamble
+                wrapped_code = wrap_for_execution(current_code)
 
                 exec_result = None
                 poller = asyncio.create_task(poll_logs_loop())
