@@ -5,7 +5,7 @@ datasets:
 disable_recipes: true
 taxonomy:
   intent: causal
-  task: [causal.effect_estimation]
+  task: [causal.iv_panel]
   modality: [tabular]
   domain: marketing
   domain_detail: "outdoor advertising campaign effect on customer bank deposits"

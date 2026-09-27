@@ -5,7 +5,7 @@ datasets:
 disable_recipes: true
 taxonomy:
   intent: causal
-  task: [causal.effect_estimation]
+  task: [causal.iv_panel]
   modality: [tabular]
   domain: public_sector
   domain_detail: "state self-defense ('stand your ground') law effect on homicide rate (Cheng & Hoekstra 2013)"

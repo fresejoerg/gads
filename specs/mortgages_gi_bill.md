@@ -5,7 +5,7 @@ datasets:
 disable_recipes: true
 taxonomy:
   intent: causal
-  task: [causal.effect_estimation]
+  task: [causal.iv_panel]
   modality: [tabular]
   domain: finance
   domain_detail: "mid-century US GI Bill mortgage-subsidy eligibility, by birth-cohort cutoff (Fetter 2013)"

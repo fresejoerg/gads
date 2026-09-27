@@ -5,7 +5,7 @@ datasets:
 disable_recipes: true
 taxonomy:
   intent: causal
-  task: [causal.effect_estimation]
+  task: [causal.iv_panel]
   modality: [tabular]
   domain: healthcare
   domain_detail: "California active-choice organ-donor registration policy change (Kessler & Roth 2014)"

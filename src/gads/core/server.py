@@ -1983,7 +1983,12 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                             knowledge_report=knowledge_report,
                             available_skills=registry.get_skills_summary(),
                             critique_feedback=critique_feedback,
-                            user_hints={k: v for k, v in spec_hints.items() if k != "save_model"} or None
+                            # `taxonomy` is classification METADATA (routing eval, coverage,
+                            # dataset splits), not a hint. Passing it leaked the method family
+                            # into D0 specs that exist to withhold methodology, e.g.
+                            # `task: causal.iv_panel` names the design to use.
+                            user_hints={k: v for k, v in spec_hints.items()
+                                        if k not in ("save_model", "taxonomy")} or None
                         ), stream_callback=stream_planner_callback)
                         span.end(output=planner_res.content.model_dump())
                         # NOTE: a HIGH-confidence recipe match never reaches this LLM path —

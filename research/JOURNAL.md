@@ -995,4 +995,36 @@ long-running-workflow monitoring.
 
 ---
 
+## 2026-09-26 — `[method]` `[harness]` Spec taxonomy tags were a method hint to the Planner; eight causal specs relabelled
+
+A full cloud routing eval (gemini-3.7-flash, 71 specs, commit `b714ebc`) scored 61/71 on
+task_type. Eight of the ten misses were one disagreement: the Router labelled
+`causal.iv_panel` where the spec tags said `causal.effect_estimation`, on ak91_schooling_wages,
+billboard_deposits, castle_doctrine_homicide, minwage_employment, mortgages_gi_bill,
+organ_donation_nudge, prop99_cigarette_sales and snow_cholera_water. These are IV,
+difference-in-differences and natural-experiment designs, so the Router's label was the more
+precise one. The eight specs (and their `research/benchmarks/*_v1/spec.md` copies) are now
+tagged `task: [causal.iv_panel]`. Recipe selection was unaffected (20/20); this only changes
+how the task is classified.
+
+The relabelling exposed a leak. `server.py` passed every spec hint except `save_model` to the
+Planner as `user_hints`, and that included the `taxonomy:` block. For D0 specs, which exist to
+withhold methodology (approach_docs/026), a tag like `causal.iv_panel` tells the Planner which
+design to use. The weaker `causal.effect_estimation` tag was already in those prompts. From
+this commit on, `taxonomy` is excluded from the Planner's hints. It stays what it is meant to
+be: classification metadata for routing evaluation, coverage and dataset splits.
+
+**Comparability consequence.** Every spec-launched Planner prompt changes from here: the
+taxonomy block is gone. Drafted-lane (D0/D1) runs before and after this commit saw different
+Planner inputs, so they should not be pooled without noting it. Recipe-compiled runs are
+unaffected, since the Planner LLM does not run for them. The dial rung assignment
+(`dial.drafted_plan_dial`) never read the taxonomy, so recorded rungs are unchanged; what
+changed is how much a D0 prompt actually withheld.
+
+For the distillation data (approach_docs/035), the same eight Router answers now count as
+correct: Router examples marked wrong fell from 9 to 1. They are benchmark specs, so they sit
+in the held-out split.
+
+---
+
 *Add entries above this line. Keep the evidence discipline: UUID or it didn't happen.*

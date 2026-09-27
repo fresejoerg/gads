@@ -5,7 +5,7 @@ datasets:
 disable_recipes: true
 taxonomy:
   intent: causal
-  task: [causal.effect_estimation]
+  task: [causal.iv_panel]
   modality: [tabular]
   domain: education
   domain_detail: "Angrist-Krueger 1991 quarter-of-birth natural experiment on returns to schooling"

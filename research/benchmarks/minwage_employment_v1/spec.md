@@ -5,7 +5,7 @@ datasets:
 disable_recipes: true
 taxonomy:
   intent: causal
-  task: [causal.effect_estimation]
+  task: [causal.iv_panel]
   modality: [tabular]
   domain: public_sector
   domain_detail: "state minimum-wage policy effect on fast-food employment (Card-Krueger design)"
