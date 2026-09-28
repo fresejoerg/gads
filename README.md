@@ -2,9 +2,41 @@
 
 > **Local-first agentic data science for teams whose data can't go to the cloud** — a benchmark-proven, expanding library of DS workflows tuned to run reliably on small local models, so you get real mileage on your own hardware.
 
-GADS is a **contract-checked, LLM-driven workflow for data science**: control flow lives in auditable code, and the model plans, writes, and checks the analysis inside it. Point it at one or more datasets, give it a one-line objective — *"estimate the causal effect of transaction amount on fraud"* — and it runs the full workflow (framing → planning → code generation → sandboxed execution → verification → synthesis → reporting) and hands back an interactive dashboard, a research report, an exportable notebook, and machine-readable metrics.
+GADS is a **contract-checked, LLM-driven workflow for data science**: control flow lives in auditable code, and the model plans, writes, and checks the analysis inside it. Point it at one or more datasets, give it a one-line objective — *"estimate the causal effect of transaction amount on fraud"* — and it runs the full workflow (framing → planning → code generation → sandboxed execution → verification → synthesis → reporting) and hands back an interactive dashboard, a research report, an exportable notebook, and machine-readable metrics: evidence for a person to review, not a decision.
 
 It is also a **research instrument**. GADS is built to answer one question: *where is the efficiency boundary between agentic scaffolding and raw model capability?* — how far down the ladder (from frontier cloud models to a single 12B local model) the executing LLM can be pushed before workflow reliability collapses, and how much of that collapse deterministic structure can buy back. Every run is graded on **reproducibility** and **methodological appropriateness** and logged to an evidence ledger.
+
+## What GADS is, and what it isn't
+
+Doing data science with an LLM leaves a person with two jobs: **specifying the work** (the
+question, its constraints, the evidence that would settle it) and **verifying the claim**
+(whether the analysis actually supports the conclusion). In interactive use, a data scientist
+does both, turn by turn. GADS asks how much of each can be **written down once and reused**:
+
+- **Specification** as artifacts: a spec states the question, target and constraints; a
+  **recipe** fixes a validated plan for a class of problem; **skills** say how to write each step
+  correctly in this environment. How much is written down is the **delegation dial** (D0 → D5).
+- **Verification** as artifacts:
+  - postcondition **contracts** checked against the live kernel;
+  - pre-written **native functions** for steps with one right answer;
+  - methodological **gates**, such as the model audit;
+  - guards against overwritten upstream outputs and simulated data;
+  - benchmark specs with externally anchored expected results.
+
+It then **measures**, per model, how much of that scaffolding a smaller model needs before it
+gives the answer a larger one gives.
+
+What it is **not**:
+
+- **Not an interactive copilot.** It runs unattended from a spec. The follow-up lane is the one
+  human-in-the-loop step. To steer an analysis turn by turn, use a general coding agent.
+- **Not a free-roaming agent.** Control flow stays in code (see *The pipeline*). There is no
+  open-ended exploration, no competing analyses and no in-run experiment search.
+- **Not a decision-maker.** Its outputs are evidence for review. An unattended run relies on
+  machine verification alone, and that can fail quietly. On local models we have seen causal
+  estimates with the wrong sign pass their own refutation checks. Read the report before acting
+  on it.
+- **Not a general model benchmark.** Its evidence is about GADS tasks under GADS scaffolding.
 
 > 📖 For how to write effective objectives, see the **[User Guide](USER_GUIDE.md)**. For contributor/architecture notes, see **[CLAUDE.md](CLAUDE.md)**.
 
