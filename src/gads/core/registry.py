@@ -186,21 +186,27 @@ def resolve_stage_model(stage: str, tier_default: str) -> str:
 
 # Hardcoded rules for mapping model names to Tiers. Latest generation per provider,
 # placed by capability; Gemini/Local are kept at index 0 so they are the primary
-# (cheapest-first) choice. Currency per provider (2026-07-22):
-#   OpenAI    — GPT-5.6 generation only (sol/terra/luna); 5.4/5.5 retired.
+# (cheapest-first) choice. Currency per provider (2026-07-22; OpenAI 2026-09-29):
+#   OpenAI    — GPT-6 generation (astra T1 / 6.1-sol T2 / luna T3) per the current docs
+#               lineup; GPT-5.6 (sol/terra/luna) still served, not deprecated, kept as
+#               intra-tier fallback; 5.4/5.5 retired. gpt-6-sol is on the key but omitted —
+#               superseded by gpt-6.1-sol, which the docs list in its place.
 #   Anthropic — Claude 5 line (Fable 5, Sonnet 5) + Opus 4.8 (T1) + Haiku 4.5 (T3).
 #   Gemini    — 3.6-flash (T2), 3.5-flash-lite (T3); Pro is 3.1-pro-preview (latest Pro).
 #   Kimi      — k3 flagship (T1) + k2.7-code / k2.7-code-highspeed (k2.x/2.6 sunset).
 # The live hierarchy intersects this with LiteLLM's served models, so any newer ID
 # must also be added to the MyLocalStack gateway to become reachable; until then
 # intra-tier fallback covers interim 404s and the mapping self-heals.
-# gpt-6-astra (added 2026-09-04) sits at T1 on two pieces of evidence, not on its version
-# number: it is the only gpt-6 variant on the key (the gpt-5.6 family is already split
-# sol/terra/luna across T1/T2/T3), and it rejects `max_tokens` in favour of
-# `max_completion_tokens` — OpenAI's reasoning-model convention, which marks the slower,
-# higher-capability end of their lineup. No capability benchmark has been run against it, so
-# this is a reasoned placement rather than a measured one; T1 is also the LAST escalation
-# rung (TIER_ORDER below), which keeps the blast radius small if it is wrong.
+# The gpt-6 family (astra 2026-09-04; 6.1-sol, luna 2026-09-29) is placed on OpenAI's own
+# ordering of it: astra "our most capable model" -> T1, 6.1-sol "near-Astra performance for
+# complex work at a lower cost" -> T2, luna "our most efficient model for focused,
+# high-volume tasks" -> T3 — one gpt-6 model per escalation rung. Placement is by role in the
+# CURRENT lineup, not by name lineage (gpt-5.6-sol sat at T1 when sol topped the lineup).
+# astra's original T1 rationale (the only gpt-6 on the key; rejects `max_tokens`) no longer
+# holds: every gpt-6 model, luna included, rejects `max_tokens` and `temperature != 1`, so
+# that is a generation-wide API convention, not a capability signal. The MyLocalStack proxy
+# pins `max_completion_tokens` + drops `max_tokens` for each; GADS sends no temperature to
+# cloud models. No capability benchmark has been run on any of them — reasoned, not measured.
 #
 # gemini-3.8-flash (added 2026-09-04) takes T2 alongside the 3.7-flash it succeeds: Google's
 # model endpoint reports identical limits for both (1,048,576 in / 65,536 out).
@@ -208,8 +214,9 @@ TIER_MAPPING = {
     "T1": ["gemini-3.1-pro-preview", "claude-opus-4.8", "claude-fable-5", "gpt-5.6-sol",
            "kimi-k3", "gpt-6-astra"],
     "T2": ["gemini-3.7-flash", "gemini-3.8-flash", "claude-sonnet-5", "gpt-5.6-terra",
-           "kimi-k2.7-code"],
-    "T3": ["gemini-3.5-flash-lite", "claude-haiku-4.5", "gpt-5.6-luna", "kimi-k2.7-code-highspeed"],
+           "kimi-k2.7-code", "gpt-6.1-sol"],
+    "T3": ["gemini-3.5-flash-lite", "claude-haiku-4.5", "gpt-5.6-luna", "kimi-k2.7-code-highspeed",
+           "gpt-6-luna"],
     "T4": ["local_model"]
 }
 
