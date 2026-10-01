@@ -7,7 +7,7 @@ domain: time-series demand forecasting
 recipe_id: timeseries_forecast.autogluon.standard
 taxonomy:
   intent: predictive
-  task: [forecasting.multivariate]
+  task: [forecasting.univariate]
   modality: [time_series]
   domain: operations
   domain_detail: "M4 competition, Hourly split (Makridakis et al. 2018)"

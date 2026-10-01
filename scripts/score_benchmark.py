@@ -40,11 +40,22 @@ def check_metrics(expected: dict, workspace: Path):
             results.append((f"metric {name}", False, "not in metrics.json"))
             continue
         got, want = observed[name], spec["value"]
-        if spec.get("exact"):
+        comparator = spec.get("comparator")
+        if comparator:
+            # Threshold checks (e.g. "must beat the seasonal-naive MASE"): `value` is the bound.
+            ops = {"lt": (float.__lt__, "<"), "le": (float.__le__, "<="),
+                   "gt": (float.__gt__, ">"), "ge": (float.__ge__, ">=")}
+            if comparator not in ops:
+                results.append((f"metric {name}", False, f"unknown comparator {comparator!r}"))
+                continue
+            op, sym = ops[comparator]
+            ok = op(float(got), float(want))
+            detail = f"got {got}, want {sym} {want}"
+        elif spec.get("exact"):
             ok = got == want
             detail = f"got {got!r}, want exactly {want!r}"
         else:
-            tol = spec.get("tol", 0.0)
+            tol = spec.get("tol") or 0.0
             ok = abs(float(got) - float(want)) <= tol
             detail = f"got {got}, want {want} ± {tol}"
         results.append((f"metric {name}", ok, detail))

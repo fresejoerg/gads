@@ -174,3 +174,18 @@ The cloud run computed `naive_mae` **globally**: 19562.060448963268, matching th
 reference 19562.0604489633 to 10 significant figures. So the model chose the pooled
 interpretation. That confirms the value is reproducible, and equally confirms it is the
 less useful of the two readings — it remains informational, not a criterion.
+
+## Addendum (2026-10-01)
+
+- **Retagged `forecasting.multivariate` → `forecasting.univariate`.** The 50 series are forecast
+  independently, with no cross-series dependencies and no exogenous regressors: many univariate
+  problems, which is how M4 itself scores them. The Router had already been labelling the spec
+  `forecasting.univariate` in every routing eval.
+- **Threshold flaw:** `best_model_mase < 1.0` assumes "MASE < 1 = beats seasonal-naive". That
+  only holds in-sample. On a holdout, seasonal-naive itself scores > 1 whenever the series
+  trends (air_passengers_v1 measured 1.94). The current threshold is therefore stricter than
+  "beats seasonal-naive", by an unknown margin. Fix: an analytic `reference.py` here (as in
+  air_passengers_v1) that computes seasonal-naive's holdout MASE on the same 70-step window,
+  with `provenance` on each metric. Until then this benchmark stays provisional (L3*).
+- `score_benchmark.py` gained comparator support on 2026-10-01. Before that, this benchmark's
+  `comparator: lt` with `tol: null` could not be scored at all.

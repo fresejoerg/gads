@@ -1,0 +1,140 @@
+{
+ "benchmark_id": "air_passengers_v1",
+ "spec_file": "air_passengers_forecast.md",
+ "recipe_id": "timeseries_forecast.autogluon.standard",
+ "external_source": "AirPassengers \u2014 Box & Jenkins (1976) Series G, monthly international airline passengers 1949\u20131960; staged from statsforecast.utils.AirPassengersDF by scripts/stage_air_passengers.py (sha256 in the dataset's PROVENANCE.md)",
+ "reference_runs": {
+  "cloud": {
+   "project_id": "b7f5853a-d303-4ef6-b0e7-c81c96a54f0a",
+   "date": "2026-10-01",
+   "worker_model": "gemini-3.7-flash",
+   "best_model_mase": 0.3517,
+   "quality_band": "classical_par",
+   "score": "PASS 16/16 (research/benchmarks/results.jsonl)"
+  }
+ },
+ "metrics": {
+  "n_series": {
+   "value": 1,
+   "exact": true,
+   "tol": 0.0,
+   "provenance": "analytic",
+   "source": "data function: the staged file has one series",
+   "note": "Single series. The recipe must add a constant item id rather than invent several."
+  },
+  "prediction_length": {
+   "value": 14,
+   "exact": true,
+   "tol": 0.0,
+   "provenance": "analytic",
+   "source": "the recipe's own rule (~10% of median series length, min 1) applied to 144 observations; reference.py horizon()",
+   "note": "Deliberately NOT the conventional 12: the recipe derives its horizon and forbids hardcoding it, and the reference uses the same 14-month holdout so the MASE figures are comparable."
+  },
+  "best_model_mase": {
+   "value": 1.9414,
+   "exact": false,
+   "comparator": "lt",
+   "provenance": "analytic",
+   "source": "reference.py: seasonal-naive holdout MASE on the same 14-month window (1959-11 \u2026 1960-12), m=12",
+   "tol_basis": "Threshold, not a target value: the run must beat seasonal-naive on the identical holdout. Quality beyond the floor is graded against the reference block (see notes.md), not pass/fail.",
+   "note": "The floor is seasonal-naive's own holdout MASE (1.94), NOT 1.0. MASE divides by the in-sample seasonal-naive error, and on a trending series seasonal-naive falls further behind every year, so it scores well above 1 out of sample. 'MASE < 1 = beats seasonal-naive' only holds in-sample."
+  }
+ },
+ "informational": {
+  "quality_bands": {
+   "note": "Not pass criteria. Grade a passing run by its best_model_mase relative to the analytic reference block below (same window, same scale).",
+   "classical_par": "<= 0.40  \u2014 matches the airline model / AutoARIMA (0.335 / 0.372)",
+   "adequate": "0.40 \u2013 1.27  \u2014 between the best classical models and AutoETS",
+   "weak": "1.27 \u2013 1.94  \u2014 worse than AutoETS, but beats seasonal-naive",
+   "fail": ">= 1.94  \u2014 no better than seasonal-naive"
+  }
+ },
+ "artifacts": {
+  "required": [
+   "figure_1_forecast.json",
+   "model_timeseries.joblib",
+   "final_dashboard.html",
+   "research_report.md",
+   "workflow_execution.py"
+  ],
+  "forbidden_stdout": [
+   "mock data",
+   "simulating data"
+  ]
+ },
+ "tasks": {
+  "expected_count": 4,
+  "produces": {
+   "profile_time_series": [
+    "timestamp_col",
+    "target_col",
+    "item_id_col",
+    "inferred_freq"
+   ],
+   "prepare_timeseries_dataframe": [
+    "ts_df"
+   ],
+   "train_forecast_model": [
+    "predictor_ts",
+    "prediction_length",
+    "best_model_mase"
+   ],
+   "generate_forecasts_and_visualize": [
+    "forecasts"
+   ]
+  }
+ },
+ "methodology": {
+  "required_patterns": [
+   "TimeSeriesPredictor\\(",
+   "TimeSeriesDataFrame",
+   "eval_metric\\s*=\\s*[\"']MASE[\"']",
+   "prediction_length"
+  ],
+  "forbidden_patterns": [
+   "from statsmodels\\.tsa",
+   "import pmdarima",
+   "from prophet",
+   "prediction_length\\s*=\\s*(12|24|36)\\b"
+  ]
+ },
+ "reference": {
+  "protocol": {
+   "n_obs": 144,
+   "horizon": 14,
+   "season_length": 12,
+   "fit_window": "1949-01 \u2026 1959-10",
+   "holdout": "1959-11 \u2026 1960-12"
+  },
+  "models": {
+   "seasonal_naive": {
+    "mase": 1.9414,
+    "smape": 13.881
+   },
+   "naive": {
+    "mase": 2.2491,
+    "smape": 14.412
+   },
+   "auto_ets": {
+    "mase": 1.2721,
+    "smape": 8.143
+   },
+   "auto_arima": {
+    "mase": 0.372,
+    "smape": 2.436
+   },
+   "airline_log": {
+    "mase": 0.335,
+    "smape": 2.202
+   }
+  },
+  "best_classical": "airline_log",
+  "versions": {
+   "python": "3.13.11",
+   "numpy": "2.4.4",
+   "pandas": "3.0.3",
+   "statsforecast": "2.0.1",
+   "statsmodels": "0.14.6"
+  }
+ }
+}
