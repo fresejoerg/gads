@@ -16,7 +16,8 @@ class BaseAgent(ABC, Generic[TIn, TOut]):
     Every model — local and cloud — goes through `core/llm.get_structured_completion`
     (instructor over the LiteLLM proxy). One path means one prompt serialization and
     one place where trace metadata (task_id / attempt / prompt_version / engine_id) is
-    stamped, which the Langfuse↔task join in harvest_coder_traces.py depends on.
+    stamped, which the trace↔task join depends on (MLflow now; the Langfuse v2 history read
+    by harvest_coder_traces.py before that).
     """
     
     def __init__(self, name: str, model: str, system_prompt: str, output_schema: Type[TOut]):

@@ -52,18 +52,12 @@ from gads.core.introspection import summarize_artifact, looks_like_plotly_figure
 from gads.core.distiller import distill_dashboard_to_markdown
 from gads.core.history_renderer import HistoryRenderer
 from gads.core.prompts import prompt_registry
-from langfuse import Langfuse
+from gads.core import tracing
 from sqlmodel import select, Session
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Initialize Observability
-langfuse_client = Langfuse(
-    public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
-    secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
-    host=os.getenv("LANGFUSE_HOST")
-)
 
 ACTIVE_WORKFLOWS: set[uuid.UUID] = set()
 
@@ -1078,14 +1072,12 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
     # Cached process-wide, so only the first workflow after a restart pays for it.
     engine_id = await asyncio.to_thread(get_engine_id, True)
 
-    # 1. Create top-level Langfuse Trace
-    trace = langfuse_client.trace(
-        id=str(project_id),
-        name="Project Workflow",
+    # 1. Create the run's root span (core/tracing.py); its trace id is the project UUID.
+    trace = tracing.start_trace(
+        project_id,
+        "Project Workflow",
         metadata={"objective": objective, "prompt_version": prompt_version,
                   "engine_id": engine_id},
-        user_id="default_user",
-        session_id=str(project_id)
     )
 
     # Stamp the engine on the PROJECT row immediately. The dial ledger also records it,
@@ -1108,7 +1100,9 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
         "project_id": str(project_id),
         "workflow_id": str(project_id),
         "user_id": "default_user",
-        "langfuse_trace_id": trace.id,
+        "trace_id": trace.trace_id,
+        # Stages overwrite this with their own span; until then calls nest under the root.
+        "parent_span_id": trace.id,
         "prompt_version": prompt_version,
         "engine_id": engine_id,
     })
@@ -1302,7 +1296,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 trace_context.get().update({
                     "agent_name": "SpecDrafter",
                     "task_id": str(spec_task_id),
-                    "parent_observation_id": spec_span.id,
+                    "parent_span_id": spec_span.id,
                     "stage": "Spec Drafting",
                     "attempt": None,
                     "escalation_count": None
@@ -1484,7 +1478,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 trace_context.get().update({
                     "agent_name": "Router",
                     "task_id": str(route_task.id),
-                    "parent_observation_id": span.id,
+                    "parent_span_id": span.id,
                     "stage": "Architect Routing",
                     "attempt": None,
                     "escalation_count": None
@@ -1968,7 +1962,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     trace_context.get().update({
                         "agent_name": "Planner",
                         "task_id": pid_str,
-                        "parent_observation_id": span.id,
+                        "parent_span_id": span.id,
                         "stage": "Project Planning",
                         "attempt": workflow_attempt,
                         "escalation_count": None
@@ -2069,7 +2063,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     trace_context.get().update({
                         "agent_name": "PlanCritique",
                         "task_id": str(pc_task.id),
-                        "parent_observation_id": span.id,
+                        "parent_span_id": span.id,
                         "stage": "Plan Critique",
                         "attempt": workflow_attempt,
                         "escalation_count": None
@@ -2390,7 +2384,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                     trace_context.get().update({
                         "agent_name": "CodeGenerator",
                         "task_id": tid_str,
-                        "parent_observation_id": task_span.id,
+                        "parent_span_id": task_span.id,
                         "stage": "Task Execution",
                         "attempt": None,  # set per coder attempt by the executor retry loop
                         "escalation_count": None
@@ -2810,7 +2804,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                 trace_context.get().update({
                     "agent_name": "CompletenessVerifier",
                     "task_id": str(cv_task_id),
-                    "parent_observation_id": cv_span.id,
+                    "parent_span_id": cv_span.id,
                     "stage": "Completeness Verification",
                     "attempt": workflow_attempt,
                     "escalation_count": None
@@ -2942,7 +2936,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                     session.refresh(synth_task)
 
                     span = trace.span(name=f"Synthesis Attempt {workflow_attempt}")
-                    trace_context.get().update({"agent_name": "Synthesizer", "task_id": str(synth_task.id), "parent_observation_id": span.id, "stage": "Synthesis", "attempt": workflow_attempt, "escalation_count": None})
+                    trace_context.get().update({"agent_name": "Synthesizer", "task_id": str(synth_task.id), "parent_span_id": span.id, "stage": "Synthesis", "attempt": workflow_attempt, "escalation_count": None})
 
                     all_tasks = session.exec(select(Task).where(Task.project_id == project_id)).all()
                     task_log_parts = []
@@ -3068,7 +3062,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                     session.refresh(critique_task)
 
                     span = trace.span(name=f"Critique Attempt {workflow_attempt}")
-                    trace_context.get().update({"agent_name": "Critique", "task_id": str(critique_task.id), "parent_observation_id": span.id, "stage": "Critique", "attempt": workflow_attempt, "escalation_count": None})
+                    trace_context.get().update({"agent_name": "Critique", "task_id": str(critique_task.id), "parent_span_id": span.id, "stage": "Critique", "attempt": workflow_attempt, "escalation_count": None})
 
                     try:
                         critique_agent = CritiqueAgent(model=critique_model) 
@@ -3283,7 +3277,8 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
         except Exception as label_exc:
             print(f"  [Telemetry] Failed to label trace outcome: {label_exc}", flush=True)
         trace_context.reset(ctx_token)
-        langfuse_client.flush()
+        trace.end()
+        tracing.flush()
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, last_seq: int = 0):

@@ -36,4 +36,6 @@ dependencies = [
     "pygal>=3.1.0",
     "markdown>=3.10.2",
     "fastembed>=0.8.0",
+    "opentelemetry-sdk>=1.41",
+    "opentelemetry-exporter-otlp-proto-http>=1.41",
 ]

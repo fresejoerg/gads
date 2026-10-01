@@ -45,7 +45,7 @@ from typing import Any, Dict, List, Optional
 
 # Extra capture context for callers outside a workflow (e.g. scripts/eval_routing.py sets
 # the spec). Deliberately separate from llm.trace_context: setting that without a project
-# would attach Langfuse generations to a trace named "None".
+# would stamp project_id=None onto the call's trace metadata.
 capture_context: ContextVar[Optional[Dict[str, Any]]] = ContextVar("capture_context", default=None)
 _SPEC_CACHE: Dict[str, Optional[str]] = {}
 

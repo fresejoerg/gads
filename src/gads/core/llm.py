@@ -7,6 +7,7 @@ import instructor
 from litellm import acompletion
 from dotenv import load_dotenv
 from contextvars import ContextVar
+from gads.core.tracing import traceparent
 from typing import Optional, Dict, Any
 
 # Load environment variables from .env
@@ -137,15 +138,12 @@ def _prepare_llm_kwargs(model: str, messages: list, kwargs: dict):
         messages_hash = hashlib.sha256(
             json.dumps(messages, sort_keys=True, default=str).encode()
         ).hexdigest()[:16]
+        # The proxy's OTel callback records these on its `litellm_request` span under
+        # `metadata.requester_metadata` (core/tracing.py); the span itself nests under the
+        # current stage via the traceparent header below.
         meta = {
-            # existing_trace_id attaches the generation WITHOUT letting LiteLLM
-            # upsert/rename the trace (trace_id overwrites trace attributes).
-            "existing_trace_id": str(ctx.get("project_id")),
-            "session_id": str(ctx.get("project_id")),
-            "parent_observation_id": str(ctx.get("parent_observation_id")) if ctx.get("parent_observation_id") else None,
-            "generation_name": str(ctx.get("agent_name", "agent_call")),
-            "trace_user_id": str(ctx.get("user_id", "default_user")),
-            # Non-reserved keys below land in the generation's metadata.
+            "project_id": str(ctx.get("project_id")) if ctx.get("project_id") else None,
+            "agent_name": ctx.get("agent_name"),
             "task_id": str(ctx.get("task_id")) if ctx.get("task_id") else None,
             "stage": ctx.get("stage"),
             "attempt": ctx.get("attempt"),
@@ -169,11 +167,9 @@ def _prepare_llm_kwargs(model: str, messages: list, kwargs: dict):
         if "extra_headers" not in kwargs:
             kwargs["extra_headers"] = {}
 
-        kwargs["extra_headers"].update({
-            "x-langfuse-trace-id": str(ctx.get("project_id")),
-            "x-langfuse-session-id": str(ctx.get("project_id")),
-            "x-langfuse-tags": f"agent:{ctx.get('agent_name')}"
-        })
+        _traceparent = traceparent(ctx.get("trace_id"), ctx.get("parent_span_id"))
+        if _traceparent:
+            kwargs["extra_headers"]["traceparent"] = _traceparent
 
         print(f"  [LLM] Injecting Trace Metadata (Headers + Body): {ctx.get('project_id')}", flush=True)
 
@@ -311,7 +307,7 @@ async def get_structured_completion(model: str, response_model, messages: list, 
     Wrapper around litellm to get validated Pydantic objects.
     Supports streaming reasoning tokens to a callback, stripping <think> tags,
     and automatic repair via `instructor` if manual extraction fails.
-    Injects Langfuse/LiteLLM metadata from trace_context for observability.
+    Injects trace metadata + a W3C traceparent from trace_context for observability.
     """
     meta = _prepare_llm_kwargs(model, messages, kwargs)
 

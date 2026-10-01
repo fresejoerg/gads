@@ -1,7 +1,7 @@
 """Per-task token and cost accounting.
 
 Every LLM call in a run belongs to exactly one task — `llm.trace_context` already carries
-the `task_id` so Langfuse can parent the span correctly — so the same context is enough to
+the `task_id` so the trace can attribute the call correctly — so the same context is enough to
 attribute tokens and spend to the recipe node that caused them. That is what lets the
 dashboard report what each section of the report cost to produce.
 

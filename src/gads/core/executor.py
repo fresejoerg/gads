@@ -976,7 +976,7 @@ class ExecutionManager:
                         task_escalations = t_obj.escalation_count or 0
 
                 # Label the upcoming Coder generation with its attempt number so
-                # first-shot and retried completions are distinguishable in Langfuse
+                # first-shot and retried completions are distinguishable in the trace
                 # (telemetry plan 010, Phase 1b).
                 from gads.core.llm import trace_context
                 ctx = trace_context.get()
