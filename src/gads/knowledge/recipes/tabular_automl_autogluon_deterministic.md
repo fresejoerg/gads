@@ -6,7 +6,8 @@ author: gads-core
 
 # ——— ROUTING METADATA ———
 applies_when:
-  task_type: [binary_classification, multiclass_classification, regression, classification]
+  # Explicit subtypes (SPRINT-8) — same reasoning as tabular_automl.autogluon.standard.
+  task_type: [classification.binary, classification.multiclass, regression.nonlinear, regression.count]
   data_modality: [tabular]
   signals:
     - objective_contains: [reproducible, deterministic, benchmark, identical results]

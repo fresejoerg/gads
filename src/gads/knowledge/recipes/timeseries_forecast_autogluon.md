@@ -6,7 +6,9 @@ author: gads-core
 
 # ——— ROUTING METADATA ———
 applies_when:
-  task_type: [time_series_forecasting, forecasting, time_series]
+  # Explicit subtypes (SPRINT-8): no hierarchical reconciliation, so `forecasting.hierarchical`
+  # is not claimed. Probabilistic is: the predictor emits quantile forecasts.
+  task_type: [forecasting.univariate, forecasting.multivariate, forecasting.probabilistic]
   data_modality: [tabular, time_series]
   signals:
     - temporal_ordering_required: true

@@ -6,7 +6,9 @@ author: gads-core
 
 # ——— ROUTING METADATA ———
 applies_when:
-  task_type: [binary_classification, multiclass_classification, classification]
+  # Explicit subtypes (SPRINT-8, 2026-09-30): bare `classification` also claimed multilabel and
+  # ordinal; the model-selection DAG compares single-label classifiers only.
+  task_type: [classification.binary, classification.multiclass]
   data_modality: [tabular]
   signals:
     - objective_contains: [compare models, model selection, choose a model, which model,

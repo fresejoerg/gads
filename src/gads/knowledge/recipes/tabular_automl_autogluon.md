@@ -6,7 +6,10 @@ author: gads-core
 
 # ——— ROUTING METADATA ———
 applies_when:
-  task_type: [binary_classification, multiclass_classification, regression, classification]
+  # Explicit subtypes (SPRINT-8): bare `classification`/`regression` also claimed multilabel,
+  # ordinal, linear (coefficients/inference), quantile and survival (censoring), none of which
+  # TabularPredictor as configured here does.
+  task_type: [classification.binary, classification.multiclass, regression.nonlinear, regression.count]
   data_modality: [tabular]
   signals:
     - objective_contains: [predict, classify, model, accuracy, performance]

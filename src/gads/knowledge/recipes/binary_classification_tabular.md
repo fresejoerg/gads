@@ -6,7 +6,10 @@ author: gads-core
 
 # ——— ROUTING METADATA ———
 applies_when:
-  task_type: [binary_classification, classification]
+  # Explicit subtypes, not the bare `classification` family (SPRINT-8, 2026-09-30): the family
+  # label also routed multilabel and ordinal requests here, which this single-label DAG cannot do.
+  # Vague requests still match: a bare family label overlaps every declared subtype.
+  task_type: [classification.binary, classification.multiclass]
   data_modality: [tabular]
   signals:
     - target_type: categorical_binary

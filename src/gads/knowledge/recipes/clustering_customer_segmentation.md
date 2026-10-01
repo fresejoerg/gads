@@ -6,7 +6,9 @@ author: gads-core
 
 # ——— ROUTING METADATA ———
 applies_when:
-  task_type: [clustering, customer_segmentation, segmentation]
+  # Explicit subtype (SPRINT-8): RFM + KMeans is partitional; hierarchical and density-based
+  # clustering are not claimed.
+  task_type: [clustering.partitional]
   data_modality: [tabular]
   signals:
     - no_labeled_target: true

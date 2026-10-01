@@ -10,8 +10,13 @@ applies_when:
   # `causal.effect_estimation` (what `causal_inference` canonicalizes to), so the alias
   # alone left this recipe unreachable for a correctly-labelled interrupted-time-series
   # request.
-  task_type: [causal.impact, causal_inference, time_series]
-  data_modality: [tabular]
+  #
+  # SPRINT-8 (2026-09-30): `causal_inference` (→ cross-sectional causal.effect_estimation) and
+  # `time_series` (→ forecasting) were removed. They made this recipe a candidate for every
+  # observational-study request and for plain forecasting, neither of which BSTS impact
+  # analysis does. `time_series` is a MODALITY here, not a task.
+  task_type: [causal.impact]
+  data_modality: [time_series, tabular]
   signals:
     - temporal_ordering_required: true
     - intervention_event: true

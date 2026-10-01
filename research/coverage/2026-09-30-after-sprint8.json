@@ -1,0 +1,2528 @@
+{
+ "generated_at": "2026-10-01T05:44:46+00:00",
+ "commit": "3a0c977",
+ "summary": {
+  "families_by_level": {
+   "L4*": 2,
+   "L2": 7,
+   "L0": 13,
+   "L1": 2
+  },
+  "leaf_terms_by_level": {
+   "L4*": 3,
+   "L0": 51,
+   "L1": 15,
+   "L2": 9
+  },
+  "families_total": 24,
+  "leaf_terms_total": 78,
+  "leaf_terms_agent_reachable": 28,
+  "routable_recipes": 22,
+  "pin_only_recipes": 7,
+  "tagged_specs": 71,
+  "benchmarks": 25,
+  "benchmark_anchors": {
+   "unclassified": 25
+  },
+  "modalities_with_routable_recipe": 3,
+  "modalities_total": 11
+ },
+ "rows": [
+  {
+   "term": "classification",
+   "family": "classification",
+   "is_family": true,
+   "level": "L4*",
+   "specific_recipes": [
+    "binary_classification.tabular.standard",
+    "nlp_classification.text.embedding_ensemble",
+    "ordinal_classification.tabular.regression_wrapper",
+    "tabular_automl.autogluon.deterministic",
+    "tabular_automl.autogluon.standard",
+    "tabular_supervised.selection.classification"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "adult_interpretable_classification.md",
+    "adult_model_selection.md",
+    "amlb_adult.md",
+    "amlb_segment.md",
+    "autogluon_fraud_classification.md",
+    "llm_preference_classification.md"
+   ],
+   "benchmarks": [
+    "amlb_adult_v1",
+    "amlb_segment_v1",
+    "fraud_autogluon_v1"
+   ],
+   "benchmark_anchors": {
+    "unclassified": 3
+   },
+   "scored_pass": {
+    "cloud": 2,
+    "local": 4
+   },
+   "completed_runs": {
+    "cloud": 6,
+    "local": 5
+   }
+  },
+  {
+   "term": "classification.binary",
+   "family": "classification",
+   "is_family": false,
+   "level": "L4*",
+   "specific_recipes": [
+    "binary_classification.tabular.standard",
+    "nlp_classification.text.embedding_ensemble",
+    "tabular_automl.autogluon.deterministic",
+    "tabular_automl.autogluon.standard",
+    "tabular_supervised.selection.classification"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "adult_interpretable_classification.md",
+    "adult_model_selection.md",
+    "amlb_adult.md",
+    "autogluon_fraud_classification.md"
+   ],
+   "benchmarks": [
+    "amlb_adult_v1",
+    "fraud_autogluon_v1"
+   ],
+   "benchmark_anchors": {
+    "unclassified": 2
+   },
+   "scored_pass": {
+    "cloud": 1,
+    "local": 2
+   },
+   "completed_runs": {
+    "cloud": 4,
+    "local": 3
+   }
+  },
+  {
+   "term": "classification.multiclass",
+   "family": "classification",
+   "is_family": false,
+   "level": "L4*",
+   "specific_recipes": [
+    "binary_classification.tabular.standard",
+    "nlp_classification.text.embedding_ensemble",
+    "tabular_automl.autogluon.deterministic",
+    "tabular_automl.autogluon.standard",
+    "tabular_supervised.selection.classification"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "amlb_segment.md",
+    "llm_preference_classification.md"
+   ],
+   "benchmarks": [
+    "amlb_segment_v1"
+   ],
+   "benchmark_anchors": {
+    "unclassified": 1
+   },
+   "scored_pass": {
+    "cloud": 1,
+    "local": 2
+   },
+   "completed_runs": {
+    "cloud": 2,
+    "local": 2
+   }
+  },
+  {
+   "term": "classification.multilabel",
+   "family": "classification",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "classification.ordinal",
+   "family": "classification",
+   "is_family": false,
+   "level": "L1",
+   "specific_recipes": [
+    "ordinal_classification.tabular.regression_wrapper"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "regression",
+   "family": "regression",
+   "is_family": true,
+   "level": "L2",
+   "specific_recipes": [
+    "survival_analysis.cox_regression",
+    "survival_analysis.ml",
+    "tabular_automl.autogluon.deterministic",
+    "tabular_automl.autogluon.standard"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "gbsg2_survival_cox.md",
+    "gbsg2_survival_ml.md"
+   ],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 2,
+    "local": 4
+   }
+  },
+  {
+   "term": "regression.linear",
+   "family": "regression",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "regression.nonlinear",
+   "family": "regression",
+   "is_family": false,
+   "level": "L1",
+   "specific_recipes": [
+    "tabular_automl.autogluon.deterministic",
+    "tabular_automl.autogluon.standard"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "regression.count",
+   "family": "regression",
+   "is_family": false,
+   "level": "L1",
+   "specific_recipes": [
+    "tabular_automl.autogluon.deterministic",
+    "tabular_automl.autogluon.standard"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "regression.quantile",
+   "family": "regression",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "regression.survival",
+   "family": "regression",
+   "is_family": false,
+   "level": "L2",
+   "specific_recipes": [
+    "survival_analysis.cox_regression",
+    "survival_analysis.ml"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "gbsg2_survival_cox.md",
+    "gbsg2_survival_ml.md"
+   ],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 2,
+    "local": 4
+   }
+  },
+  {
+   "term": "clustering",
+   "family": "clustering",
+   "is_family": true,
+   "level": "L2",
+   "specific_recipes": [
+    "clustering.segmentation.rfm_kmeans"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "amazon_customer_segmentation.md"
+   ],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "clustering.partitional",
+   "family": "clustering",
+   "is_family": false,
+   "level": "L2",
+   "specific_recipes": [
+    "clustering.segmentation.rfm_kmeans"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "amazon_customer_segmentation.md"
+   ],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "clustering.hierarchical",
+   "family": "clustering",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "clustering.density",
+   "family": "clustering",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "dimensionality_reduction",
+   "family": "dimensionality_reduction",
+   "is_family": true,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "dimensionality_reduction.linear",
+   "family": "dimensionality_reduction",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "dimensionality_reduction.manifold",
+   "family": "dimensionality_reduction",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "anomaly_detection",
+   "family": "anomaly_detection",
+   "is_family": true,
+   "level": "L1",
+   "specific_recipes": [
+    "anomaly_detection.tabular.isolation_forest"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "anomaly_detection.tabular",
+   "family": "anomaly_detection",
+   "is_family": false,
+   "level": "L1",
+   "specific_recipes": [
+    "anomaly_detection.tabular.isolation_forest"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "anomaly_detection.timeseries",
+   "family": "anomaly_detection",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "anomaly_detection.novelty",
+   "family": "anomaly_detection",
+   "is_family": false,
+   "level": "L1",
+   "specific_recipes": [
+    "anomaly_detection.tabular.isolation_forest"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "association_mining",
+   "family": "association_mining",
+   "is_family": true,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "representation_learning",
+   "family": "representation_learning",
+   "is_family": true,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "representation_learning.embedding",
+   "family": "representation_learning",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "representation_learning.pretraining",
+   "family": "representation_learning",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "forecasting",
+   "family": "forecasting",
+   "is_family": true,
+   "level": "L2",
+   "specific_recipes": [
+    "timeseries_forecast.autogluon.standard"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "m4_hourly_forecast.md"
+   ],
+   "benchmarks": [
+    "m4_hourly_forecast_v1"
+   ],
+   "benchmark_anchors": {
+    "unclassified": 1
+   },
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 1,
+    "local": 0
+   }
+  },
+  {
+   "term": "forecasting.univariate",
+   "family": "forecasting",
+   "is_family": false,
+   "level": "L1",
+   "specific_recipes": [
+    "timeseries_forecast.autogluon.standard"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "forecasting.multivariate",
+   "family": "forecasting",
+   "is_family": false,
+   "level": "L2",
+   "specific_recipes": [
+    "timeseries_forecast.autogluon.standard"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "m4_hourly_forecast.md"
+   ],
+   "benchmarks": [
+    "m4_hourly_forecast_v1"
+   ],
+   "benchmark_anchors": {
+    "unclassified": 1
+   },
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 1,
+    "local": 0
+   }
+  },
+  {
+   "term": "forecasting.hierarchical",
+   "family": "forecasting",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "forecasting.probabilistic",
+   "family": "forecasting",
+   "is_family": false,
+   "level": "L1",
+   "specific_recipes": [
+    "timeseries_forecast.autogluon.standard"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "changepoint_detection",
+   "family": "changepoint_detection",
+   "is_family": true,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "timeseries_classification",
+   "family": "timeseries_classification",
+   "is_family": true,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "causal",
+   "family": "causal",
+   "is_family": true,
+   "level": "L4*",
+   "specific_recipes": [
+    "causal_discovery.observational.constraint",
+    "causal_effect.bayesian.pymc",
+    "causal_effect.heterogeneous.cate",
+    "causal_effect.iv_panel.linearmodels",
+    "causal_effect.observational.dowhy",
+    "causal_effect.timeseries.causalimpact"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [
+    "causal_effect.observational.dowhy.directed",
+    "causal_effect.observational.dowhy.mechanized",
+    "causal_effect.observational.ols.directed",
+    "causal_effect.observational.sklearn.directed"
+   ],
+   "specs": [
+    "ak91_schooling_wages.md",
+    "bayesian_causal_fraud.md",
+    "billboard_deposits.md",
+    "castle_doctrine_homicide.md",
+    "causal_fraud_amount.md",
+    "drinking_age_mortality.md",
+    "jobs_lalonde_training.md",
+    "learning_mindset_achievement.md",
+    "minwage_employment.md",
+    "mortgages_gi_bill.md",
+    "mps_wealth.md",
+    "organ_donation_nudge.md",
+    "prop99_cigarette_sales.md",
+    "qrdata_collections_email.md",
+    "qrdata_collections_email_d0.md",
+    "qrdata_collections_email_d1.md",
+    "qrdata_collections_email_d3.md",
+    "qrdata_collections_email_d3ols.md",
+    "qrdata_collections_email_d3skl.md",
+    "qrdata_collections_email_d5.md",
+    "qrdata_hospital_treatment.md",
+    "qrdata_hospital_treatment_d0.md",
+    "qrdata_hospital_treatment_d1.md",
+    "qrdata_hospital_treatment_d3.md",
+    "qrdata_hospital_treatment_d3ols.md",
+    "qrdata_hospital_treatment_d3skl.md",
+    "qrdata_hospital_treatment_d5.md",
+    "qrdata_ihdp_0.md",
+    "qrdata_ihdp_0_d0.md",
+    "qrdata_ihdp_0_d1.md",
+    "qrdata_ihdp_0_d3.md",
+    "qrdata_ihdp_0_d3ols.md",
+    "qrdata_ihdp_0_d3skl.md",
+    "qrdata_ihdp_0_d5.md",
+    "qrdata_ihdp_1.md",
+    "qrdata_ihdp_1_d0.md",
+    "qrdata_ihdp_1_d1.md",
+    "qrdata_ihdp_1_d3.md",
+    "qrdata_ihdp_1_d3ols.md",
+    "qrdata_ihdp_1_d3skl.md",
+    "qrdata_ihdp_1_d5.md",
+    "qrdata_online_classroom.md",
+    "qrdata_online_classroom_d0.md",
+    "qrdata_online_classroom_d1.md",
+    "qrdata_online_classroom_d3.md",
+    "qrdata_online_classroom_d3ols.md",
+    "qrdata_online_classroom_d3skl.md",
+    "qrdata_online_classroom_d5.md",
+    "snow_cholera_water.md",
+    "social_insurance_takeup.md",
+    "thornton_hiv_incentive.md",
+    "trainee_program_earnings.md",
+    "women_reservation_water.md"
+   ],
+   "benchmarks": [
+    "ak91_schooling_wages_v1",
+    "billboard_deposits_v1",
+    "castle_doctrine_homicide_v1",
+    "drinking_age_mortality_v1",
+    "jobs_lalonde_training_v1",
+    "learning_mindset_achievement_v1",
+    "minwage_employment_v1",
+    "mortgages_gi_bill_v1",
+    "mps_wealth_v1",
+    "organ_donation_nudge_v1",
+    "prop99_cigarette_sales_v1",
+    "qrdata_collections_email_v1",
+    "qrdata_hospital_treatment_v1",
+    "qrdata_ihdp_0_v1",
+    "qrdata_ihdp_1_v1",
+    "qrdata_online_classroom_v1",
+    "snow_cholera_water_v1",
+    "social_insurance_takeup_v1",
+    "thornton_hiv_incentive_v1",
+    "trainee_program_earnings_v1",
+    "women_reservation_water_v1"
+   ],
+   "benchmark_anchors": {
+    "unclassified": 21
+   },
+   "scored_pass": {
+    "cloud": 5,
+    "local": 4
+   },
+   "completed_runs": {
+    "cloud": 15,
+    "local": 12
+   }
+  },
+  {
+   "term": "causal.effect_estimation",
+   "family": "causal",
+   "is_family": false,
+   "level": "L4*",
+   "specific_recipes": [
+    "causal_effect.bayesian.pymc",
+    "causal_effect.heterogeneous.cate",
+    "causal_effect.iv_panel.linearmodels",
+    "causal_effect.observational.dowhy"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [
+    "causal_effect.observational.dowhy.directed",
+    "causal_effect.observational.dowhy.mechanized",
+    "causal_effect.observational.ols.directed",
+    "causal_effect.observational.sklearn.directed"
+   ],
+   "specs": [
+    "bayesian_causal_fraud.md",
+    "causal_fraud_amount.md",
+    "drinking_age_mortality.md",
+    "jobs_lalonde_training.md",
+    "learning_mindset_achievement.md",
+    "mps_wealth.md",
+    "qrdata_collections_email.md",
+    "qrdata_collections_email_d0.md",
+    "qrdata_collections_email_d1.md",
+    "qrdata_collections_email_d3.md",
+    "qrdata_collections_email_d3ols.md",
+    "qrdata_collections_email_d3skl.md",
+    "qrdata_collections_email_d5.md",
+    "qrdata_hospital_treatment.md",
+    "qrdata_hospital_treatment_d0.md",
+    "qrdata_hospital_treatment_d1.md",
+    "qrdata_hospital_treatment_d3.md",
+    "qrdata_hospital_treatment_d3ols.md",
+    "qrdata_hospital_treatment_d3skl.md",
+    "qrdata_hospital_treatment_d5.md",
+    "qrdata_ihdp_0.md",
+    "qrdata_ihdp_0_d0.md",
+    "qrdata_ihdp_0_d1.md",
+    "qrdata_ihdp_0_d3.md",
+    "qrdata_ihdp_0_d3ols.md",
+    "qrdata_ihdp_0_d3skl.md",
+    "qrdata_ihdp_0_d5.md",
+    "qrdata_ihdp_1.md",
+    "qrdata_ihdp_1_d0.md",
+    "qrdata_ihdp_1_d1.md",
+    "qrdata_ihdp_1_d3.md",
+    "qrdata_ihdp_1_d3ols.md",
+    "qrdata_ihdp_1_d3skl.md",
+    "qrdata_ihdp_1_d5.md",
+    "qrdata_online_classroom.md",
+    "qrdata_online_classroom_d0.md",
+    "qrdata_online_classroom_d1.md",
+    "qrdata_online_classroom_d3.md",
+    "qrdata_online_classroom_d3ols.md",
+    "qrdata_online_classroom_d3skl.md",
+    "qrdata_online_classroom_d5.md",
+    "social_insurance_takeup.md",
+    "thornton_hiv_incentive.md",
+    "trainee_program_earnings.md",
+    "women_reservation_water.md"
+   ],
+   "benchmarks": [
+    "drinking_age_mortality_v1",
+    "jobs_lalonde_training_v1",
+    "learning_mindset_achievement_v1",
+    "mps_wealth_v1",
+    "qrdata_collections_email_v1",
+    "qrdata_hospital_treatment_v1",
+    "qrdata_ihdp_0_v1",
+    "qrdata_ihdp_1_v1",
+    "qrdata_online_classroom_v1",
+    "social_insurance_takeup_v1",
+    "thornton_hiv_incentive_v1",
+    "trainee_program_earnings_v1",
+    "women_reservation_water_v1"
+   ],
+   "benchmark_anchors": {
+    "unclassified": 13
+   },
+   "scored_pass": {
+    "cloud": 5,
+    "local": 4
+   },
+   "completed_runs": {
+    "cloud": 10,
+    "local": 11
+   }
+  },
+  {
+   "term": "causal.heterogeneous_effects",
+   "family": "causal",
+   "is_family": false,
+   "level": "L1",
+   "specific_recipes": [
+    "causal_effect.heterogeneous.cate"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "causal.discovery",
+   "family": "causal",
+   "is_family": false,
+   "level": "L1",
+   "specific_recipes": [
+    "causal_discovery.observational.constraint"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "causal.mediation",
+   "family": "causal",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "causal.iv_panel",
+   "family": "causal",
+   "is_family": false,
+   "level": "L2",
+   "specific_recipes": [
+    "causal_effect.iv_panel.linearmodels"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "ak91_schooling_wages.md",
+    "billboard_deposits.md",
+    "castle_doctrine_homicide.md",
+    "minwage_employment.md",
+    "mortgages_gi_bill.md",
+    "organ_donation_nudge.md",
+    "prop99_cigarette_sales.md",
+    "snow_cholera_water.md"
+   ],
+   "benchmarks": [
+    "ak91_schooling_wages_v1",
+    "billboard_deposits_v1",
+    "castle_doctrine_homicide_v1",
+    "minwage_employment_v1",
+    "mortgages_gi_bill_v1",
+    "organ_donation_nudge_v1",
+    "prop99_cigarette_sales_v1",
+    "snow_cholera_water_v1"
+   ],
+   "benchmark_anchors": {
+    "unclassified": 8
+   },
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 5,
+    "local": 1
+   }
+  },
+  {
+   "term": "causal.impact",
+   "family": "causal",
+   "is_family": false,
+   "level": "L1",
+   "specific_recipes": [
+    "causal_effect.timeseries.causalimpact"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "ranking",
+   "family": "ranking",
+   "is_family": true,
+   "level": "L2",
+   "specific_recipes": [
+    "learning_to_rank.tabular.lambdamart"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "ltr_search_ranking.md"
+   ],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "ranking.learning_to_rank",
+   "family": "ranking",
+   "is_family": false,
+   "level": "L2",
+   "specific_recipes": [
+    "learning_to_rank.tabular.lambdamart"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "ltr_search_ranking.md"
+   ],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "recommendation",
+   "family": "recommendation",
+   "is_family": true,
+   "level": "L2",
+   "specific_recipes": [
+    "recommendation.implicit.collaborative_filtering"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "amazon_reviews_recommendation.md",
+    "movielens_recommendation.md"
+   ],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 2
+   }
+  },
+  {
+   "term": "recommendation.collaborative",
+   "family": "recommendation",
+   "is_family": false,
+   "level": "L2",
+   "specific_recipes": [
+    "recommendation.implicit.collaborative_filtering"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "amazon_reviews_recommendation.md",
+    "movielens_recommendation.md"
+   ],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 2
+   }
+  },
+  {
+   "term": "recommendation.content",
+   "family": "recommendation",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "recommendation.hybrid",
+   "family": "recommendation",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "nlp",
+   "family": "nlp",
+   "is_family": true,
+   "level": "L1",
+   "specific_recipes": [
+    "nlp_classification.text.embedding_ensemble",
+    "thematic_analysis.unstructured.text"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "nlp.text_classification",
+   "family": "nlp",
+   "is_family": false,
+   "level": "L1",
+   "specific_recipes": [
+    "nlp_classification.text.embedding_ensemble"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "nlp.ner_extraction",
+   "family": "nlp",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "nlp.relation_extraction",
+   "family": "nlp",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "nlp.topic_modeling",
+   "family": "nlp",
+   "is_family": false,
+   "level": "L1",
+   "specific_recipes": [
+    "thematic_analysis.unstructured.text"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "nlp.sentiment",
+   "family": "nlp",
+   "is_family": false,
+   "level": "L1",
+   "specific_recipes": [
+    "thematic_analysis.unstructured.text"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "nlp.summarization",
+   "family": "nlp",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "nlp.translation",
+   "family": "nlp",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "nlp.qa",
+   "family": "nlp",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "nlp.thematic",
+   "family": "nlp",
+   "is_family": false,
+   "level": "L1",
+   "specific_recipes": [
+    "thematic_analysis.unstructured.text"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "retrieval",
+   "family": "retrieval",
+   "is_family": true,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "retrieval.semantic_search",
+   "family": "retrieval",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "retrieval.rag",
+   "family": "retrieval",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "vision",
+   "family": "vision",
+   "is_family": true,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "vision.image_classification",
+   "family": "vision",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "vision.object_detection",
+   "family": "vision",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "vision.segmentation",
+   "family": "vision",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "vision.ocr",
+   "family": "vision",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "generation",
+   "family": "generation",
+   "is_family": true,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "generation.text",
+   "family": "generation",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "generation.image",
+   "family": "generation",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "generation.code",
+   "family": "generation",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "generation.synthetic_data",
+   "family": "generation",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "optimization",
+   "family": "optimization",
+   "is_family": true,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "optimization.linear_program",
+   "family": "optimization",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "optimization.combinatorial",
+   "family": "optimization",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "optimization.heuristic",
+   "family": "optimization",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "sequential_decision",
+   "family": "sequential_decision",
+   "is_family": true,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "sequential_decision.reinforcement_learning",
+   "family": "sequential_decision",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "sequential_decision.bandit",
+   "family": "sequential_decision",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "simulation",
+   "family": "simulation",
+   "is_family": true,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "simulation.monte_carlo",
+   "family": "simulation",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "simulation.agent_based",
+   "family": "simulation",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "simulation.discrete_event",
+   "family": "simulation",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "bayesian_inference",
+   "family": "bayesian_inference",
+   "is_family": true,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "bayesian_inference.parameter_estimation",
+   "family": "bayesian_inference",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "bayesian_inference.hierarchical",
+   "family": "bayesian_inference",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "graph",
+   "family": "graph",
+   "is_family": true,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "graph.node_classification",
+   "family": "graph",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "graph.link_prediction",
+   "family": "graph",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "graph.community_detection",
+   "family": "graph",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "graph.centrality",
+   "family": "graph",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "analytics",
+   "family": "analytics",
+   "is_family": true,
+   "level": "L2",
+   "specific_recipes": [
+    "tabular_eda.descriptive.standard"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [
+    "analytics.answer_suite.metrics",
+    "analytics.answer_suite.raw",
+    "analytics.answer_suite.star"
+   ],
+   "specs": [
+    "aah_rung1_messy.md",
+    "aah_rung2_star.md",
+    "aah_rung3_semantic.md",
+    "eda_adult_ml_prep.md"
+   ],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 2,
+    "local": 0
+   }
+  },
+  {
+   "term": "analytics.descriptive_stats",
+   "family": "analytics",
+   "is_family": false,
+   "level": "L1",
+   "specific_recipes": [
+    "tabular_eda.descriptive.standard"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "analytics.exploratory",
+   "family": "analytics",
+   "is_family": false,
+   "level": "L2",
+   "specific_recipes": [
+    "tabular_eda.descriptive.standard"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "eda_adult_ml_prep.md"
+   ],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 2,
+    "local": 0
+   }
+  },
+  {
+   "term": "analytics.kpi_metrics",
+   "family": "analytics",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [
+    "analytics.answer_suite.metrics",
+    "analytics.answer_suite.raw",
+    "analytics.answer_suite.star"
+   ],
+   "specs": [
+    "aah_rung1_messy.md",
+    "aah_rung2_star.md",
+    "aah_rung3_semantic.md"
+   ],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "analytics.cohort",
+   "family": "analytics",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "analytics.funnel",
+   "family": "analytics",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "analytics.ab_test",
+   "family": "analytics",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "data_preparation",
+   "family": "data_preparation",
+   "is_family": true,
+   "level": "L2",
+   "specific_recipes": [
+    "tabular_transform.apply_manifest"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "transform_adult_from_eda.md"
+   ],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "data_preparation.cleaning",
+   "family": "data_preparation",
+   "is_family": false,
+   "level": "L0",
+   "specific_recipes": [],
+   "inherited_recipes": [
+    "tabular_transform.apply_manifest"
+   ],
+   "pin_only_recipes": [],
+   "specs": [
+    "transform_adult_from_eda.md"
+   ],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "data_preparation.transformation",
+   "family": "data_preparation",
+   "is_family": false,
+   "level": "L2",
+   "specific_recipes": [
+    "tabular_transform.apply_manifest"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "transform_adult_from_eda.md"
+   ],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  },
+  {
+   "term": "data_preparation.feature_engineering",
+   "family": "data_preparation",
+   "is_family": false,
+   "level": "L2",
+   "specific_recipes": [
+    "tabular_transform.apply_manifest"
+   ],
+   "inherited_recipes": [],
+   "pin_only_recipes": [],
+   "specs": [
+    "transform_adult_from_eda.md"
+   ],
+   "benchmarks": [],
+   "benchmark_anchors": {},
+   "scored_pass": {
+    "cloud": 0,
+    "local": 0
+   },
+   "completed_runs": {
+    "cloud": 0,
+    "local": 0
+   }
+  }
+ ],
+ "modalities": {
+  "tabular": {
+   "routable_recipes": [
+    "anomaly_detection.tabular.isolation_forest",
+    "binary_classification.tabular.standard",
+    "causal_discovery.observational.constraint",
+    "causal_effect.bayesian.pymc",
+    "causal_effect.heterogeneous.cate",
+    "causal_effect.iv_panel.linearmodels",
+    "causal_effect.observational.dowhy",
+    "causal_effect.timeseries.causalimpact",
+    "clustering.segmentation.rfm_kmeans",
+    "learning_to_rank.tabular.lambdamart",
+    "ordinal_classification.tabular.regression_wrapper",
+    "recommendation.implicit.collaborative_filtering",
+    "survival_analysis.cox_regression",
+    "survival_analysis.ml",
+    "tabular_automl.autogluon.deterministic",
+    "tabular_automl.autogluon.standard",
+    "tabular_eda.descriptive.standard",
+    "tabular_supervised.selection.classification",
+    "tabular_transform.apply_manifest",
+    "timeseries_forecast.autogluon.standard"
+   ],
+   "specs": [
+    "adult_interpretable_classification.md",
+    "adult_model_selection.md",
+    "ak91_schooling_wages.md",
+    "amazon_customer_segmentation.md",
+    "amazon_reviews_recommendation.md",
+    "amlb_adult.md",
+    "amlb_segment.md",
+    "autogluon_fraud_classification.md",
+    "bayesian_causal_fraud.md",
+    "billboard_deposits.md",
+    "castle_doctrine_homicide.md",
+    "causal_fraud_amount.md",
+    "drinking_age_mortality.md",
+    "eda_adult_ml_prep.md",
+    "gbsg2_survival_cox.md",
+    "gbsg2_survival_ml.md",
+    "jobs_lalonde_training.md",
+    "learning_mindset_achievement.md",
+    "ltr_search_ranking.md",
+    "minwage_employment.md",
+    "mortgages_gi_bill.md",
+    "movielens_recommendation.md",
+    "mps_wealth.md",
+    "organ_donation_nudge.md",
+    "prop99_cigarette_sales.md",
+    "qrdata_collections_email.md",
+    "qrdata_collections_email_d0.md",
+    "qrdata_collections_email_d1.md",
+    "qrdata_collections_email_d3.md",
+    "qrdata_collections_email_d3ols.md",
+    "qrdata_collections_email_d3skl.md",
+    "qrdata_collections_email_d5.md",
+    "qrdata_hospital_treatment.md",
+    "qrdata_hospital_treatment_d0.md",
+    "qrdata_hospital_treatment_d1.md",
+    "qrdata_hospital_treatment_d3.md",
+    "qrdata_hospital_treatment_d3ols.md",
+    "qrdata_hospital_treatment_d3skl.md",
+    "qrdata_hospital_treatment_d5.md",
+    "qrdata_ihdp_0.md",
+    "qrdata_ihdp_0_d0.md",
+    "qrdata_ihdp_0_d1.md",
+    "qrdata_ihdp_0_d3.md",
+    "qrdata_ihdp_0_d3ols.md",
+    "qrdata_ihdp_0_d3skl.md",
+    "qrdata_ihdp_0_d5.md",
+    "qrdata_ihdp_1.md",
+    "qrdata_ihdp_1_d0.md",
+    "qrdata_ihdp_1_d1.md",
+    "qrdata_ihdp_1_d3.md",
+    "qrdata_ihdp_1_d3ols.md",
+    "qrdata_ihdp_1_d3skl.md",
+    "qrdata_ihdp_1_d5.md",
+    "qrdata_online_classroom.md",
+    "qrdata_online_classroom_d0.md",
+    "qrdata_online_classroom_d1.md",
+    "qrdata_online_classroom_d3.md",
+    "qrdata_online_classroom_d3ols.md",
+    "qrdata_online_classroom_d3skl.md",
+    "qrdata_online_classroom_d5.md",
+    "snow_cholera_water.md",
+    "social_insurance_takeup.md",
+    "thornton_hiv_incentive.md",
+    "trainee_program_earnings.md",
+    "transform_adult_from_eda.md",
+    "women_reservation_water.md"
+   ]
+  },
+  "relational": {
+   "routable_recipes": [],
+   "specs": [
+    "aah_rung1_messy.md",
+    "aah_rung2_star.md",
+    "aah_rung3_semantic.md"
+   ]
+  },
+  "time_series": {
+   "routable_recipes": [
+    "causal_effect.timeseries.causalimpact",
+    "timeseries_forecast.autogluon.standard"
+   ],
+   "specs": [
+    "m4_hourly_forecast.md"
+   ]
+  },
+  "text": {
+   "routable_recipes": [
+    "nlp_classification.text.embedding_ensemble",
+    "ordinal_classification.tabular.regression_wrapper",
+    "thematic_analysis.unstructured.text"
+   ],
+   "specs": [
+    "llm_preference_classification.md"
+   ]
+  },
+  "image": {
+   "routable_recipes": [],
+   "specs": [
+    "amlb_segment.md"
+   ]
+  },
+  "audio": {
+   "routable_recipes": [],
+   "specs": []
+  },
+  "video": {
+   "routable_recipes": [],
+   "specs": []
+  },
+  "graph": {
+   "routable_recipes": [],
+   "specs": []
+  },
+  "geospatial": {
+   "routable_recipes": [],
+   "specs": []
+  },
+  "multimodal": {
+   "routable_recipes": [],
+   "specs": []
+  },
+  "streaming": {
+   "routable_recipes": [],
+   "specs": []
+  }
+ }
+}

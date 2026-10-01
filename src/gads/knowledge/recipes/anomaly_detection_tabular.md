@@ -6,7 +6,9 @@ author: gads-core
 
 # ——— ROUTING METADATA ———
 applies_when:
-  task_type: [anomaly_detection, outlier_detection]
+  # Explicit subtypes (SPRINT-8): IsolationForest on rows ignores temporal structure, so
+  # `anomaly_detection.timeseries` is not claimed.
+  task_type: [anomaly_detection.tabular, anomaly_detection.novelty]
   data_modality: [tabular]
   signals:
     - no_labeled_target: true

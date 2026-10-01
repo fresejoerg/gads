@@ -54,6 +54,20 @@ EXPECTED_UNREACHABLE = {
     "timeseries_classification",
     "vision.image_classification", "vision.object_detection", "vision.ocr",
     "vision.segmentation",
+    # Conscious drop, SPRINT-8 (2026-09-30): these were reachable only because a recipe
+    # declared the bare family label, which routed them to a DAG that cannot do them
+    # (single-label classifiers for multilabel, AutoGluon for coefficient/quantile regression,
+    # IsolationForest-on-rows for time-series anomalies, KMeans for hierarchical/density
+    # clustering, item-item CF for content/hybrid recommendation, no reconciliation for
+    # hierarchical forecasts). Recipes now declare explicit subtypes; a vague family-level
+    # request still reaches them (tasks_overlap is symmetric). These get a drafted plan
+    # instead of a wrong recipe until a real one lands. See scripts/coverage_report.py.
+    "classification.multilabel",
+    "regression.linear", "regression.quantile",
+    "forecasting.hierarchical",
+    "anomaly_detection.timeseries",
+    "clustering.hierarchical", "clustering.density",
+    "recommendation.content", "recommendation.hybrid",
 }
 
 

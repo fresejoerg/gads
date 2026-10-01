@@ -6,7 +6,9 @@ author: gads-core
 
 # ——— ROUTING METADATA ———
 applies_when:
-  task_type: [recommendation, collaborative_filtering, top_n_recommendation]
+  # Explicit subtype (SPRINT-8): item-item CF uses interactions only — content-based and hybrid
+  # recommendation are not claimed.
+  task_type: [recommendation.collaborative]
   data_modality: [tabular]
   signals:
     - user_item_interactions: true
