@@ -191,7 +191,12 @@ def resolve_stage_model(stage: str, tier_default: str) -> str:
 #               lineup; GPT-5.6 (sol/terra/luna) still served, not deprecated, kept as
 #               intra-tier fallback; 5.4/5.5 retired. gpt-6-sol is on the key but omitted —
 #               superseded by gpt-6.1-sol, which the docs list in its place.
-#   Anthropic — Claude 5 line (Fable 5, Sonnet 5) + Opus 4.8 (T1) + Haiku 4.5 (T3).
+#   Anthropic — (2026-09-30) Opus 5.5 + Fable 5.1 (T1), Sonnet 5.5 (T2), Haiku 4.5 (T3, still
+#               the newest Haiku). Predecessors Opus 4.8 / Fable 5 / Sonnet 5 are still served
+#               with no shutdown date and stay as intra-tier fallback. The 5.5 / 5.1 models
+#               reject forced tool_choice, so they need LiteLLM >=1.105 on the proxy (native
+#               output_format for response_format); on older proxies every structured call
+#               400s and lands on llm.py's manual_fallback.
 #   Gemini    — 3.6-flash (T2), 3.5-flash-lite (T3); Pro is 3.1-pro-preview (latest Pro).
 #   Kimi      — k3 flagship (T1) + k2.7-code / k2.7-code-highspeed (k2.x/2.6 sunset).
 # The live hierarchy intersects this with LiteLLM's served models, so any newer ID
@@ -212,9 +217,9 @@ def resolve_stage_model(stage: str, tier_default: str) -> str:
 # model endpoint reports identical limits for both (1,048,576 in / 65,536 out).
 TIER_MAPPING = {
     "T1": ["gemini-3.1-pro-preview", "claude-opus-4.8", "claude-fable-5", "gpt-5.6-sol",
-           "kimi-k3", "gpt-6-astra"],
+           "kimi-k3", "gpt-6-astra", "claude-opus-5.5", "claude-fable-5.1"],
     "T2": ["gemini-3.7-flash", "gemini-3.8-flash", "claude-sonnet-5", "gpt-5.6-terra",
-           "kimi-k2.7-code", "gpt-6.1-sol"],
+           "kimi-k2.7-code", "gpt-6.1-sol", "claude-sonnet-5.5"],
     "T3": ["gemini-3.5-flash-lite", "claude-haiku-4.5", "gpt-5.6-luna", "kimi-k2.7-code-highspeed",
            "gpt-6-luna"],
     "T4": ["local_model"]
