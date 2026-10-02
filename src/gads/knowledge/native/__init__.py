@@ -20,7 +20,7 @@ from . import ml as _ml_mod
 from .ml import gads_automl_fit, gads_automl_predict, gads_calibrate_threshold
 from . import timeseries as _ts_mod
 from .timeseries import (gads_profile_timeseries, gads_forecast_scores,
-                         gads_timeseries_fit, gads_timeseries_predict)
+                         gads_timeseries_fit, gads_timeseries_predict, gads_plot_forecasts)
 from .causal import gads_causal_estimate_ate, gads_causal_bayesian_ate
 from .recommendation import (gads_build_interaction_matrix, gads_temporal_loo_split,
                              gads_fit_and_recommend, gads_evaluate_topn, gads_recommend_and_evaluate,
@@ -48,6 +48,7 @@ NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_timeseries_predict": gads_timeseries_predict,
     "gads_profile_timeseries": gads_profile_timeseries,
     "gads_forecast_scores": gads_forecast_scores,
+    "gads_plot_forecasts": gads_plot_forecasts,
     "gads_calibrate_threshold": gads_calibrate_threshold,
     "gads_causal_estimate_ate": gads_causal_estimate_ate,
     "gads_causal_bayesian_ate": gads_causal_bayesian_ate,
@@ -221,7 +222,7 @@ TIMESERIES_PREAMBLE = (
     "import warnings as _w_ts\n_w_ts.filterwarnings('ignore')\n\n"
     + "\n\n".join(_inspect.getsource(_fn) for _fn in (
         _ts_mod.gads_profile_timeseries, _ts_mod.gads_forecast_scores,
-        _ts_mod.gads_timeseries_fit, _ts_mod.gads_timeseries_predict))
+        _ts_mod.gads_timeseries_fit, _ts_mod.gads_timeseries_predict, _ts_mod.gads_plot_forecasts))
 )
 
 AUTOGLUON_PREAMBLE = (
@@ -493,7 +494,7 @@ _PREAMBLE_ROUTES = (
                    "gads_calibrate_threshold"),
      lambda: AUTOGLUON_PREAMBLE),
     ("timeseries", ("gads_profile_timeseries", "gads_forecast_scores", "gads_timeseries_fit",
-                    "gads_timeseries_predict"),
+                    "gads_timeseries_predict", "gads_plot_forecasts"),
      lambda: TIMESERIES_PREAMBLE),
     ("causal", ("CausalModel", "dowhy", "causal_estimate", "gads_causal_estimate_ate",
                 "gads_causal_bayesian_ate", "bambi", "bmb.Model"),

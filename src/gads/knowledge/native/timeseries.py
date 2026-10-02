@@ -192,3 +192,96 @@ def gads_timeseries_predict(predictor_ts, ts_df):
     forecasts = predictor_ts.predict(ts_df)
     print(f"[gads_timeseries_predict] Forecasts shape: {forecasts.shape}")
     return forecasts
+
+
+def gads_plot_forecasts(forecasts, ts_df, target_col=None, n_series=4,
+                        path="figure_1_forecast.json", history_points=None):
+    """History + forecast mean + prediction band for up to `n_series` series, saved as
+    dashboard-safe Plotly JSON (plain lists, no numpy `bdata`), plus a per-series summary.
+
+    Why a native: the reshaping is where generated code failed (2026-10-02, 8 of 13 local
+    node-4 attempts). `forecasts` is indexed (item_id, timestamp) with columns
+    mean, 0.1 … 0.9, so there is no `timestamp` or target column to plot against.
+    Interpreting the forecast stays model-written.
+
+    forecasts      : predictor_ts.predict(ts_df) (TimeSeriesDataFrame or DataFrame)
+    ts_df          : the history (TimeSeriesDataFrame indexed item_id, timestamp)
+    target_col     : history column to plot (default: the first column of ts_df)
+    history_points : last N history points per series (default max(3 x horizon, 100))
+
+    Returns: path, series_plotted, n_series_plotted, horizon, interval [lo, hi],
+    trend_up, trend_down, trend_flat, summary (DataFrame: item_id, last_timestamp,
+    last_observed, next_forecast, end_forecast, change_pct, trend).
+    """
+    import json
+    import pandas as pd
+
+    fc = pd.DataFrame(forecasts).reset_index()
+    hist = pd.DataFrame(ts_df).reset_index()
+    id_col, ts_col = fc.columns[0], fc.columns[1]
+    h_id, h_ts = hist.columns[0], hist.columns[1]
+    if target_col is None or target_col not in hist.columns:
+        target_col = [c for c in hist.columns if c not in (h_id, h_ts)][0]
+
+    qcols = {}
+    for c in fc.columns:
+        try:
+            qcols[float(c)] = c
+        except (TypeError, ValueError):
+            pass
+    lo_q = min(qcols) if qcols else None
+    hi_q = max(qcols) if qcols else None
+    if 0.1 in qcols and 0.9 in qcols:
+        lo_q, hi_q = 0.1, 0.9
+
+    horizon = int(fc.groupby(id_col).size().max())
+    keep = history_points or max(3 * horizon, 100)
+    series = sorted(fc[id_col].unique().tolist(), key=str)[:n_series]
+    palette = ["#2563eb", "#dc2626", "#16a34a", "#9333ea", "#ea580c", "#0891b2"]
+
+    traces, rows = [], []
+    for k, sid in enumerate(series):
+        color = palette[k % len(palette)]
+        hs = hist[hist[h_id] == sid].sort_values(h_ts).tail(keep)
+        fs = fc[fc[id_col] == sid].sort_values(ts_col)
+        hx = [str(v) for v in hs[h_ts]]
+        hy = [float(v) for v in hs[target_col]]
+        fx = [str(v) for v in fs[ts_col]]
+        fy = [float(v) for v in fs["mean"]]
+        traces.append({"type": "scatter", "mode": "lines", "x": hx, "y": hy,
+                       "name": f"{sid} history", "line": {"color": color}})
+        if lo_q is not None and hi_q is not None:
+            traces.append({"type": "scatter", "mode": "lines", "x": fx,
+                           "y": [float(v) for v in fs[qcols[hi_q]]], "line": {"width": 0},
+                           "showlegend": False, "hoverinfo": "skip", "name": f"{sid} {hi_q:g}"})
+            traces.append({"type": "scatter", "mode": "lines", "x": fx,
+                           "y": [float(v) for v in fs[qcols[lo_q]]], "line": {"width": 0},
+                           "fill": "tonexty", "fillcolor": "rgba(100,116,139,0.18)",
+                           "name": f"{sid} {int(round((hi_q - lo_q) * 100))}% interval"})
+        traces.append({"type": "scatter", "mode": "lines", "x": fx, "y": fy,
+                       "name": f"{sid} forecast", "line": {"color": color, "dash": "dash"}})
+        last_obs = hy[-1] if hy else float("nan")
+        change = (fy[-1] - last_obs) / abs(last_obs) * 100 if hy and last_obs else float("nan")
+        trend = "up" if change > 1 else "down" if change < -1 else "flat"
+        rows.append({"item_id": sid, "last_timestamp": hx[-1] if hx else None,
+                     "last_observed": last_obs, "next_forecast": fy[0] if fy else float("nan"),
+                     "end_forecast": fy[-1] if fy else float("nan"),
+                     "change_pct": round(change, 2), "trend": trend})
+
+    band = f", {int(round((hi_q - lo_q) * 100))}% interval" if lo_q is not None else ""
+    fig = {"data": traces,
+           "layout": {"title": {"text": f"Forecast: history, mean{band} ({horizon} steps)"},
+                      "xaxis": {"title": {"text": str(h_ts)}},
+                      "yaxis": {"title": {"text": str(target_col)}},
+                      "template": "plotly_white", "hovermode": "x unified"}}
+    with open(path, "w") as f:
+        json.dump(fig, f)
+
+    summary = pd.DataFrame(rows)
+    print(f"[gads_plot_forecasts] wrote {path}: {len(series)} series, horizon {horizon}{band}")
+    print(summary.to_string(index=False))
+    return {"path": path, "series_plotted": [str(s) for s in series],
+            "n_series_plotted": len(series), "horizon": horizon,
+            "interval": [lo_q, hi_q], "trend_up": int((summary["trend"] == "up").sum()),
+            "trend_down": int((summary["trend"] == "down").sum()),
+            "trend_flat": int((summary["trend"] == "flat").sum()), "summary": summary}

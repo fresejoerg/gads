@@ -1,6 +1,6 @@
 ---
 id: timeseries_forecast.autogluon.standard
-version: 1.3.1
+version: 1.4.0
 schema_version: 1
 author: gads-core
 
@@ -94,18 +94,25 @@ dag:
 
   - id: generate_forecasts_and_visualize
     intent: >
-      Generate quantile forecasts (`forecasts = predictor_ts.predict(ts_df)`). For up
-      to 4 series, plot history + forecast mean + 80% interval band; save as
-      figure_1_forecast.json. Print a summary table per series: last observed value,
-      next-period forecast, trend direction. Emit an insight summarizing
-      prediction_length, the best model, best_model_mase vs seasonal_naive_mase (the model
-      earns its keep only if best_model_mase < seasonal_naive_mase), and the dominant trend.
-      Do NOT describe MASE < 1 as beating seasonal-naive: MASE is scaled by the IN-SAMPLE
-      seasonal-naive error, so on a trending series seasonal-naive itself scores > 1 out of
-      sample.
+      Forecast and chart with the pre-loaded native, exactly:
+      `forecasts = predictor_ts.predict(ts_df)` and
+      `viz = gads_plot_forecasts(forecasts, ts_df, target_col=target_col)`. It writes
+      figure_1_forecast.json (history, forecast mean, 80% interval) and returns
+      `viz["summary"]` (per series: last observed, next and end forecast, change %, trend)
+      and `viz["trend_up"]`/`viz["trend_down"]`. Print `viz["summary"]`. Then write ONE
+      insight with gads_emit_insight("figure_1_forecast.json", <text>): the horizon
+      (`prediction_length`), the best model, best_model_mase vs seasonal_naive_mase (the
+      model earns its keep only if best_model_mase < seasonal_naive_mase), and the dominant
+      trend from the summary. Do NOT call MASE < 1 "beating seasonal-naive". Do nothing else
+      in this step: no refitting, no reconversion, no other charts.
     depends_on: [train_forecast_model]
     worker_tier: T2
-    attached_skills: [autogluon_timeseries, visualization_best_practices]
+    produces: [forecasts]
+    attached_skills: []
+    fallback_native: gads_plot_forecasts
+    fallback_call: >-
+      forecasts = predictor_ts.predict(ts_df);
+      viz = gads_plot_forecasts(forecasts, ts_df, target_col=globals().get("target_col"))
     postconditions:
       - "forecasts is not None"
 
