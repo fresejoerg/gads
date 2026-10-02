@@ -136,6 +136,47 @@ def start_trace(project_id: uuid.UUID, name: str, metadata: Optional[Dict[str, A
     return Trace(root)
 
 
+def _remote_parent(trace_id: str, parent_span_id: str):
+    """OTel context whose parent is an existing span known only by its ids.
+
+    Used where the Span object is out of reach (the executor runs under a stage span that
+    server.py created), the same way the proxy nests its spans under a traceparent header.
+    """
+    from opentelemetry.trace import NonRecordingSpan, SpanContext, TraceFlags
+    ctx = SpanContext(trace_id=int(trace_id, 16), span_id=int(parent_span_id, 16),
+                      is_remote=True, trace_flags=TraceFlags(TraceFlags.SAMPLED))
+    return otel_trace.set_span_in_context(NonRecordingSpan(ctx))
+
+
+def span_under(name: str, trace_id: Optional[str], parent_span_id: Optional[str],
+               metadata: Optional[Dict[str, Any]] = None) -> Optional[Span]:
+    """Start a live child span of the span `parent_span_id`. None when there is no trace
+    (e.g. a follow-up task outside run_agent_workflow): callers treat tracing as optional."""
+    if not trace_id or not parent_span_id:
+        return None
+    child = _tracer.start_span(name, context=_remote_parent(trace_id, parent_span_id))
+    _set_attrs(child, "gads.", metadata)
+    return Span(child)
+
+
+def record_span(name: str, trace_id: Optional[str], parent_span_id: Optional[str],
+                start_ns: int, end_ns: int, metadata: Optional[Dict[str, Any]] = None,
+                output: Any = None, error: Optional[str] = None) -> None:
+    """Record an already-finished span with explicit timing, e.g. a native-node call that
+    ran inside the sandbox and reported its own start/end (GADS_NATIVE_SPAN sentinel)."""
+    if not trace_id or not parent_span_id:
+        return
+    from opentelemetry.trace import Status, StatusCode
+    sp = _tracer.start_span(name, context=_remote_parent(trace_id, parent_span_id), start_time=int(start_ns))
+    _set_attrs(sp, "gads.", metadata)
+    if output is not None:
+        sp.set_attribute("mlflow.spanOutputs", _dumps(output))
+    if error:
+        sp.set_status(Status(StatusCode.ERROR, error[:500]))
+        sp.set_attribute("gads.error", error[:2000])
+    sp.end(end_time=max(int(end_ns), int(start_ns)))
+
+
 def traceparent(trace_id: Optional[str], span_id: Optional[str]) -> Optional[str]:
     """W3C traceparent for a model call made under `span_id` (sampled)."""
     if not trace_id or not span_id:

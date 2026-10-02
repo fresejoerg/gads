@@ -1180,6 +1180,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             session.commit()
             session.refresh(analyzer_task)
             analyzer_task_id = analyzer_task.id
+        da_span = trace.span("DataAnalyzer", metadata={"task_id": str(analyzer_task_id),
+                                                       "deterministic": True})
 
         planner_files = []
         detected_schemas = {}
@@ -1228,6 +1230,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                 }
                 session.add(at)
                 session.commit()
+        da_span.end(output={f: {"rows": p.get("row_count"), "columns": len(p.get("schema") or {})}
+                            for f, p in detected_schemas.items()})
 
         if await is_cancelled(): return
 
@@ -1458,6 +1462,11 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     )
                     session.add(route_task)
                     session.commit()
+                    trace.span("Architect Routing (deterministic: spec pin)",
+                               metadata={"task_id": str(route_task.id), "deterministic": True,
+                                         "recipe_id": pinned.id}).end(
+                        output={"task_type": intent.task_type, "data_modality": intent.data_modality,
+                                "recipe_id": pinned.id})
 
         while intent is None:
             with Session(engine) as session:
@@ -1720,6 +1729,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         )
                         session.add(sampler_task)
                         session.commit()
+                        trace.span("DataSampler", metadata={"task_id": str(sampler_task.id), "deterministic": True,
+                                                            "sample_rows": threshold, "source": "auto"}).end()
         else:
             # sample_rows is already present (e.g. set via fast_mode or explicitly in spec)
             with Session(engine) as session:
@@ -1739,6 +1750,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     )
                     session.add(sampler_task)
                     session.commit()
+                    trace.span("DataSampler", metadata={"task_id": str(sampler_task.id), "deterministic": True,
+                                                        "sample_rows": val, "source": "spec"}).end()
 
         # --- MAIN WORKFLOW LOOP (Planning -> Execution -> Synthesis -> Critique) ---
         MAX_WORKFLOW_ATTEMPTS = 3
@@ -1930,6 +1943,10 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     )
                     session.add(plan_task)
                     session.commit()
+                    trace.span(f"Project Planning (deterministic: recipe compile, Attempt {workflow_attempt})",
+                               metadata={"task_id": str(plan_task.id), "deterministic": True,
+                                         "recipe_id": knowledge_report.recipe_id}).end(
+                        output={"nodes": [st.description[:80] for st in enforced_steps]})
             elif recipe_tier == "advisory" and knowledge_report:
                 print(
                     f"  [Router] Recipe '{knowledge_report.recipe_id}' matched at confidence "
@@ -2041,6 +2058,8 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     )
                     session.add(pc_task)
                     session.commit()
+                    trace.span(f"Plan Critique (skipped: deterministic plan, Attempt {workflow_attempt})",
+                               metadata={"task_id": str(pc_task.id), "deterministic": True}).end()
 
             plan_critique_fallback = ["local_model"] if get_local_only() else ["gemini-3.7-flash"]
             plan_critique_model = resolve_stage_model("PlanCritique", hierarchy.get("T2", {}).get("models", plan_critique_fallback)[0])
@@ -2415,6 +2434,28 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                         _fb_call = _pc.get("fallback_call")
                         _model_required = bool(_pc.get("model_required"))
 
+                    # Scope gate input (deterministic recipe plans only, where `produces` is
+                    # curated): every variable a LATER node of this plan produces, mapped to
+                    # that node. A drafted plan's required_variables are looser (shared names
+                    # like `df`), so the gate stays off there until measured.
+                    _scope_forbidden = None
+                    if plan_is_deterministic:
+                        with Session(engine) as _ss:
+                            _later = task_ids[task_ids.index(task_id) + 1:] if task_id in task_ids else []
+                            _own_t = _ss.get(Task, task_id)
+                            _own = set(((_own_t.postcondition_json or {}).get("required_variables") or [])
+                                       if _own_t else [])
+                            _scope_forbidden = {}
+                            for _lid in _later:
+                                _lt = _ss.get(Task, _lid)
+                                if not _lt:
+                                    continue
+                                _pcj = _lt.postcondition_json or {}
+                                _owner = _pcj.get("recipe_node_id") or (_lt.description or "")[:60]
+                                for _v in _pcj.get("required_variables") or []:
+                                    if _v not in _own:
+                                        _scope_forbidden.setdefault(_v, _owner)
+
                     _hb_task = asyncio.create_task(_heartbeat_loop(task_id))
                     try:
                         res, model_used = await executor.run_task(
@@ -2433,6 +2474,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                             fallback_mode=_fb_mode,
                             run_mode=get_run_mode(),
                             model_required=_model_required,
+                            scope_forbidden=_scope_forbidden,
                         )
                     finally:
                         _hb_task.cancel()
@@ -2475,6 +2517,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                                     recipe_id=(knowledge_report.recipe_id if knowledge_report else None),
                                     fallback_mode="none",
                                     max_attempts=1,
+                                    scope_forbidden=_scope_forbidden,
                                 )
                                 if res2.error is None:
                                     res, model_used = res2, f"cloud_fallback:{model_used2}"

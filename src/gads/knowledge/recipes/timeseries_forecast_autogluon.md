@@ -1,6 +1,6 @@
 ---
 id: timeseries_forecast.autogluon.standard
-version: 1.2.0
+version: 1.3.1
 schema_version: 1
 author: gads-core
 
@@ -28,21 +28,26 @@ requires:
 dag:
   - id: profile_time_series
     intent: >
-      Profile the time-series structure:
-      (1) Identify `timestamp_col` (datetime dtype or a date/time-like name) and parse
-          it with pd.to_datetime.
-      (2) Identify `target_col` — the value to forecast.
-      (3) Identify `item_id_col` — the series identifier; if the data is a single
-          series, create a constant identifier column.
-      (4) Infer the frequency from the median delta between consecutive timestamps and
-          store in `inferred_freq`.
-      (5) Count rows, distinct series (`n_series`), and min/median/max series length.
-      (6) Compute `naive_mae` — the mean absolute deviation of the target from its own
-          mean — as the baseline any forecaster must beat.
-      Print a summary of all of it.
+      This is the first step, so load the data first: `import pandas as pd` and
+      `df = pd.read_csv("<the CSV from the available files>")`. Then profile it with the
+      pre-loaded native and bind its outputs, exactly:
+      `prof = gads_profile_timeseries(df, target_col=globals().get("target_column"))`,
+      `df = prof["df"]`, `timestamp_col = prof["timestamp_col"]`,
+      `target_col = prof["target_col"]`, `item_id_col = prof["item_id_col"]`,
+      `inferred_freq = prof["inferred_freq"]`, `n_series = prof["n_series"]`,
+      `naive_mae = prof["naive_mae"]`. Print one line summarising them. Do nothing else in
+      this step: no conversion, no model, no plots.
     worker_tier: T2
     produces: [timestamp_col, target_col, item_id_col, inferred_freq, n_series]
-    attached_skills: [autogluon_timeseries]
+    attached_skills: []
+    fallback_native: gads_profile_timeseries
+    fallback_call: >-
+      import glob, pandas as pd;
+      df = globals().get("df") if globals().get("df") is not None else pd.read_csv(sorted(glob.glob("*.csv"))[0]);
+      prof = gads_profile_timeseries(df, target_col=globals().get("target_column"));
+      df = prof["df"]; timestamp_col = prof["timestamp_col"]; target_col = prof["target_col"];
+      item_id_col = prof["item_id_col"]; inferred_freq = prof["inferred_freq"];
+      n_series = prof["n_series"]; naive_mae = prof["naive_mae"]
     postconditions:
       - "isinstance(timestamp_col, str)"
       - "isinstance(target_col, str)"
@@ -51,14 +56,16 @@ dag:
 
   - id: prepare_timeseries_dataframe
     intent: >
-      Convert to AutoGluon's long-format TimeSeriesDataFrame (`ts_df`) using the
-      conversion pattern in the attached skill. If there are more than 200 distinct
-      series, keep the 200 longest for tractability and say so. Print the resulting
-      shape and a sample.
+      Convert `df` to AutoGluon's long-format TimeSeriesDataFrame `ts_df`:
+      `from autogluon.timeseries import TimeSeriesDataFrame` and
+      `ts_df = TimeSeriesDataFrame.from_data_frame(df[[item_id_col, timestamp_col, target_col]],
+      id_column=item_id_col, timestamp_column=timestamp_col)`. If there are more than 200
+      distinct series, first keep the 200 longest and say so. Print the shape and a sample.
+      Do nothing else in this step: no model, no metrics, no plots.
     depends_on: [profile_time_series]
     worker_tier: T2
     produces: [ts_df]
-    attached_skills: [autogluon_timeseries]
+    attached_skills: []
     postconditions:
       - "ts_df is not None"
       - "len(ts_df) > 0"
@@ -67,12 +74,14 @@ dag:
     intent: >
       Train a TimeSeriesPredictor (fit pattern in the attached skill): derive
       `prediction_length` from the data (~10% of median series length, minimum 1 —
-      never a hardcoded number), eval_metric MASE, time-budgeted presets. Print the
-      leaderboard, store `best_model_mase`, and persist the predictor as
-      model_timeseries.joblib.
-      Also store `seasonal_naive_mase`: the SeasonalNaive row's validation MASE from the
-      same leaderboard (scores are negated, so MASE = -score_val). It is the baseline on the
-      identical window, and the only correct yardstick for best_model_mase.
+      never a hardcoded number), eval_metric MASE, time-budgeted presets, and persist the
+      predictor as model_timeseries.joblib.
+      Then read the scores with the pre-loaded native, exactly:
+      `scores = gads_forecast_scores(predictor_ts, ts_df)`,
+      `best_model_mase = scores["best_model_mase"]`,
+      `seasonal_naive_mase = scores["seasonal_naive_mase"]`. It undoes AutoGluon's negated
+      scores and selects the SeasonalNaive row (the baseline on the identical window); do not
+      read the leaderboard by hand.
     depends_on: [prepare_timeseries_dataframe]
     worker_tier: T2
     produces: [predictor_ts, prediction_length, best_model_mase, seasonal_naive_mase]

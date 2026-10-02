@@ -27,24 +27,6 @@ def gads_automl_predict(predictor: Any, df: pd.DataFrame) -> Dict[str, Any]:
     raise NotImplementedError("Call this via the sandbox preamble injection, not directly.")
 
 
-def gads_timeseries_fit(
-    df: pd.DataFrame,
-    target_col: str,
-    timestamp_col: str,
-    item_id_col: Optional[str] = None,
-    prediction_length: Optional[int] = None,
-    time_limit: int = 120,
-    presets: str = "fast_training",
-) -> Dict[str, Any]:
-    """Train AutoGluon TimeSeriesPredictor. See AUTOGLUON_PREAMBLE for full implementation."""
-    raise NotImplementedError("Call this via the sandbox preamble injection, not directly.")
-
-
-def gads_timeseries_predict(predictor_ts: Any, ts_df: Any) -> Any:
-    """Generate forecasts from a fitted TimeSeriesPredictor."""
-    raise NotImplementedError("Call this via the sandbox preamble injection, not directly.")
-
-
 # NOTE: unlike the AutoGluon wrappers above, this is the REAL implementation, not a stub.
 # AUTOGLUON_PREAMBLE splices it in via inspect.getsource, so there is exactly one copy and
 # NATIVE_SOURCE["gads_calibrate_threshold"] exports working code for the fallback path

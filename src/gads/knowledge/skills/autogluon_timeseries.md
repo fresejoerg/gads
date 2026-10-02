@@ -1,6 +1,6 @@
 ---
 id: autogluon_timeseries
-description: "AutoGluon TimeSeriesPredictor code patterns: long-format conversion, frequency inference, fit, quantile forecasts. Forecasting only."
+description: "AutoGluon TimeSeriesPredictor code patterns: long-format conversion, fit, scoring via gads_forecast_scores, quantile forecasts. Forecasting only."
 triggers: ["TimeSeriesPredictor", "TimeSeriesDataFrame", "forecast", "forecasting", "time series forecast", "MASE", "prediction_length"]
 ---
 # AutoGluon TimeSeriesPredictor — Canonical Patterns
@@ -27,12 +27,16 @@ ts_df = TimeSeriesDataFrame.from_data_frame(
 )
 ```
 
-## Frequency inference (needed to sanity-check the data, not passed to fit)
+## Profiling: use the native, never infer the frequency by hand
 
 ```python
-deltas = df.sort_values(timestamp_col)[timestamp_col].diff().dropna()
-median_delta = deltas.median()   # ~1 day → 'D', ~7 days → 'W', ~30 days → 'ME', ~1 hour → 'h'
+prof = gads_profile_timeseries(df, target_col=globals().get("target_column"))   # pre-loaded native
+# keys: df (timestamp parsed, item_id added for a single series), timestamp_col, target_col,
+#       item_id_col, inferred_freq ('h', 'D', 'W-SUN', 'MS', ...), season_length, n_series,
+#       n_rows, min_len, median_len, max_len, naive_mae
 ```
+Hand-written frequency maps were the most common local failure: `pd.Timedelta('D')` and
+`pd.Timedelta('MS')` raise "unit abbreviation w/o a number".
 
 ## Fit
 
@@ -44,9 +48,11 @@ predictor_ts = TimeSeriesPredictor(
     verbosity=0,
 ).fit(ts_df, presets='fast_training', time_limit=120)
 
-leaderboard = predictor_ts.leaderboard(ts_df, silent=True)
-best_model_mase = float(leaderboard.iloc[0]['score_val']) * -1   # AutoGluon reports negated scores
 import joblib; joblib.dump(predictor_ts, 'model_timeseries.joblib')
+
+scores = gads_forecast_scores(predictor_ts, ts_df)    # pre-loaded native
+best_model_mase = scores["best_model_mase"]            # positive MASE (AutoGluon's sign undone)
+seasonal_naive_mase = scores["seasonal_naive_mase"]    # SeasonalNaive on the SAME window
 ```
 
 **Reproducibility caveat:** `time_limit`/`presets` make the trained ensemble depend on
@@ -62,8 +68,10 @@ forecasts = predictor_ts.predict(ts_df)   # columns: mean + quantiles 0.1..0.9
 print(forecasts.head(20))
 ```
 
-Compare the best model against the **SeasonalNaive row of the same leaderboard** (MASE = -score_val):
-the model earns its keep only if its MASE is lower. Do not read "MASE < 1" as "beats seasonal-naive"
+Compare `best_model_mase` against `seasonal_naive_mase` from `gads_forecast_scores` (same
+validation window): the model earns its keep only if it is lower. Never read the leaderboard
+by hand: its index is a plain integer (`leaderboard.loc['SeasonalNaive']` raises KeyError), and
+AutoGluon negates error metrics. Do not read "MASE < 1" as "beats seasonal-naive"
 — MASE is scaled by the in-sample seasonal-naive error, and on trending data seasonal-naive itself
 scores well above 1 out of sample (AirPassengers: 1.94).
 

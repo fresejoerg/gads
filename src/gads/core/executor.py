@@ -70,6 +70,123 @@ def _detect_kernel_poisoning(code: str):
     return None
 
 
+class ScopeViolationError(CodeGenerationError):
+    """The generated code does a LATER node's job (assigns a variable a downstream node
+    produces). Nothing runs: the attempt is rejected before execution and the model gets a
+    remedy naming the owner of each variable."""
+
+    def __init__(self, message, names):
+        super().__init__(message)
+        self.names = names
+
+
+def _module_level_assignments(tree: ast.AST) -> set:
+    """Names bound at module level (assign/annassign/augassign/for/with/walrus targets).
+    Function and class bodies are skipped: a helper's local `predictor_ts` is not the
+    kernel binding a later node relies on."""
+    names: set = set()
+
+    def visit(node):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)):
+            return
+        targets = []
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, (ast.AnnAssign, ast.AugAssign, ast.NamedExpr)):
+            targets = [node.target]
+        elif isinstance(node, (ast.For, ast.AsyncFor)):
+            targets = [node.target]
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            targets = [i.optional_vars for i in node.items if i.optional_vars is not None]
+        for t in targets:
+            for x in ast.walk(t):
+                if isinstance(x, ast.Name):
+                    names.add(x.id)
+        for child in ast.iter_child_nodes(node):
+            visit(child)
+
+    visit(tree)
+    return names
+
+
+def _scope_violations(code: str, forbidden: Dict[str, str]) -> Dict[str, str]:
+    """{name: owning node} for every forbidden name the code binds at module level.
+
+    `forbidden` maps each variable a LATER node of a deterministic (recipe) plan produces
+    to that node. Measured 2026-10-02 on the forecasting recipe: 17/17 local node-1
+    attempts bound later nodes' variables (predictor_ts, ts_df, best_model_mase, ...),
+    0/4 cloud attempts did."""
+    if not forbidden:
+        return {}
+    try:
+        bound = _module_level_assignments(ast.parse(code))
+    except SyntaxError:
+        return {}
+    return {n: forbidden[n] for n in sorted(bound & set(forbidden))}
+
+
+def _extract_native_spans(stdout: str):
+    """Split GADS_NATIVE_SPAN sentinel lines (one per native call, printed by the tracing
+    wrapper in gads.knowledge.native) out of stdout. Returns (clean_stdout, [span dicts])."""
+    try:
+        from gads.knowledge.native import NATIVE_SPAN_PREFIX
+    except Exception:
+        return stdout, []
+    if not stdout or NATIVE_SPAN_PREFIX not in stdout:
+        return stdout, []
+    spans, keep = [], []
+    for line in stdout.split("\n"):
+        i = line.find(NATIVE_SPAN_PREFIX)
+        if i < 0:
+            keep.append(line)
+            continue
+        try:
+            spans.append(json.loads(line[i + len(NATIVE_SPAN_PREFIX):]))
+            if line[:i].strip():
+                keep.append(line[:i])
+        except Exception:
+            keep.append(line)
+    return "\n".join(keep), spans
+
+
+def _record_native_spans(spans, invocation: str) -> None:
+    """Record native-node calls as MLflow spans under the current stage span.
+    `invocation`: model_code (the Coder's program called it) | native_fallback |
+    native_primary (production mode)."""
+    if not spans:
+        return
+    try:
+        from gads.core import tracing
+        from gads.core.llm import trace_context
+        ctx = trace_context.get() or {}
+        for sp in spans:
+            tracing.record_span(
+                f"Native: {sp.get('name')}", ctx.get("trace_id"), ctx.get("parent_span_id"),
+                sp.get("start_ns") or 0, sp.get("end_ns") or 0,
+                metadata={"native": sp.get("name"), "invocation": invocation, "ok": sp.get("ok"),
+                          "task_id": ctx.get("task_id"), "attempt": ctx.get("attempt")},
+                output=sp.get("outputs"), error=sp.get("error"))
+    except Exception as e:  # tracing must never break execution
+        print(f"    [Executor] Warning: could not record native spans: {e}", flush=True)
+
+
+def _record_scope_guard(attempt, forbidden: Dict[str, str], violations: Dict[str, str]) -> None:
+    try:
+        from gads.core import tracing
+        from gads.core.llm import trace_context
+        ctx = trace_context.get() or {}
+        now = time.time_ns()
+        tracing.record_span(
+            "Scope Guard", ctx.get("trace_id"), ctx.get("parent_span_id"), now, now,
+            metadata={"verdict": "violation" if violations else "pass", "attempt": attempt,
+                      "task_id": ctx.get("task_id"), "forbidden": sorted(forbidden),
+                      "violations": sorted(violations)},
+            output=violations or None,
+            error=(f"binds later nodes' variables: {sorted(violations)}" if violations else None))
+    except Exception as e:
+        print(f"    [Executor] Warning: could not record scope-guard span: {e}", flush=True)
+
+
 def _parses(code: str) -> bool:
     """Does this text compile as Python? Used to gate repairs that can do harm."""
     try:
@@ -838,6 +955,7 @@ class ExecutionManager:
         run_mode: str = "research",
         model_required: bool = False,
         max_attempts: int = 10,
+        scope_forbidden: Optional[Dict[str, str]] = None,
     ) -> Tuple[ExecutionResult, str]:
         """
         Runs the full loop with State Introspection. 
@@ -868,7 +986,8 @@ class ExecutionManager:
             print(f"    [Executor] ⚙ Production mode: invoking native '{fallback_native}' "
                   f"directly (model attempt skipped).", flush=True)
             _np_result = await self._run_native_fallback(
-                fallback_native, fallback_call, project_id, session_id)
+                fallback_native, fallback_call, project_id, session_id,
+                invocation="native_primary")
             if _np_result is not None:
                 return _np_result, f"native_primary:{fallback_native}"
             # The native failed. Fall through to the model rather than failing the node —
@@ -1062,6 +1181,23 @@ class ExecutionManager:
                     _err.text = current_code
                     raise _err from None
 
+                # Scope gate (deterministic recipe plans): reject code that does a LATER
+                # node's job before it runs. Local models wrote the whole pipeline into the
+                # profiling node and died on its late parts (2026-10-02); this turns that
+                # into an early, legible failure the model can fix.
+                if scope_forbidden:
+                    _viol = _scope_violations(current_code, scope_forbidden)
+                    _record_scope_guard(retry_count + 1, scope_forbidden, _viol)
+                    if _viol:
+                        print(f"    [Executor] 🚫 Scope guard: code binds later nodes' variables "
+                              f"{sorted(_viol)} — rejected before execution.", flush=True)
+                        _err = ScopeViolationError(
+                            "this step's code does the work of later steps — it assigns "
+                            + ", ".join(f"`{n}` (produced by: {o})" for n, o in _viol.items()),
+                            names=sorted(_viol))
+                        _err.text = current_code
+                        raise _err from None
+
                 # --- PREDICTIVE RUNTIME ORACLE ---
                 # 1. Gather Data Dimensions
                 n_rows, m_cols = 0, 0
@@ -1120,6 +1256,8 @@ class ExecutionManager:
                         timeout=_sandbox_timeout
                     )
                     exec_result.code = current_code # Attach ORIGINAL code for persistence
+                    exec_result.stdout, _native_spans = _extract_native_spans(exec_result.stdout)
+                    _record_native_spans(_native_spans, "model_code")
                     
                     # Parse Semantic Insights
                     if "GADS_INSIGHTS_JSON:" in exec_result.stdout:
@@ -1277,6 +1415,38 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                         break
                     retry_count += 1
 
+            except ScopeViolationError as e:
+                print(f"    [Executor] ❌ Scope violation: {e}", flush=True)
+                self._capture_attempt("scope_violation", getattr(e, "text", None), None, str(e),
+                                      task_id, task_description, recipe_id)
+                attempt_msg = (
+                    f"ScopeViolation: {e}.\n\n"
+                    "REMEDY: Do ONLY what THIS step's instructions ask. Those variables are "
+                    "created by later steps, which run after this one — do not fit models, "
+                    "build their inputs or compute their metrics here. Delete that code and "
+                    "end once this step's own outputs exist."
+                )
+                error_history.append(attempt_msg)
+                error_feedback = "\n".join(
+                    f"  Attempt {i + 1} — {_truncate_error_msg(m)}"
+                    for i, m in enumerate(error_history)
+                )
+                record_error(recipe_id, recipe_version, task_description,
+                             "ScopeViolation", ", ".join(e.names), self.coder.model)
+                reason = normalize_error_reason("ScopeViolation", ", ".join(e.names))
+                error_reason_counts[reason] = error_reason_counts.get(reason, 0) + 1
+                if error_reason_counts[reason] >= 2:
+                    print(f"    [Executor] 🛑 Same scope violation twice — stopping retries "
+                          f"after {retry_count + 1} attempt(s).", flush=True)
+                    exec_result = ExecutionResult(
+                        stdout="", stderr=(getattr(e, "text", "") or "")[:8000],
+                        error={"ename": "ScopeViolation", "evalue": str(e)},
+                        execution_time_ms=0, kernel_state={}
+                    )
+                    break
+                retry_count += 1
+                continue
+
             except CodeGenerationError as e:
                 # Nothing ran: the model emitted no parseable program (reasoning models
                 # leak deliberation prose when they never open a fence). Returning here
@@ -1384,7 +1554,8 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                 execution_time_ms=0, kernel_state={})
         return exec_result, self.coder.model
 
-    async def _run_native_fallback(self, fallback_native, fallback_call, project_id, session_id):
+    async def _run_native_fallback(self, fallback_native, fallback_call, project_id, session_id,
+                                   invocation: str = "native_fallback"):
         """Inject one native's source into the live kernel and run its canonical call to
         satisfy a node whose model codegen exhausted retries. Returns a successful
         ExecutionResult, or None if the native is unavailable / the fallback itself errored.
@@ -1399,9 +1570,13 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
             return None
         print(f"    [Executor] ⛑ Native fallback: model exhausted retries — invoking "
               f"'{fallback_native}' for this node.", flush=True)
+        try:
+            from gads.knowledge.native import traced as _traced
+        except Exception:
+            _traced = lambda src: src
         fb_preamble = (
             "import warnings as _wfb\n_wfb.filterwarnings('ignore')\n"
-            + NATIVE_SOURCE[fallback_native] + "\n"
+            + _traced(NATIVE_SOURCE[fallback_native]) + "\n"
             "if '_gads_insights' not in globals(): _gads_insights = []\n"
             "def gads_emit_insight(artifact, insight, evidence=''):\n"
             "    _gads_insights.append({'artifact': artifact, 'insight': insight, 'evidence': evidence})\n"
@@ -1418,6 +1593,8 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
             print(f"    [Executor] ⚠ Native fallback '{fallback_native}' raised: {e}", flush=True)
             return None
         fb_result.code = fallback_call
+        fb_result.stdout, _fb_spans = _extract_native_spans(fb_result.stdout)
+        _record_native_spans(_fb_spans, invocation)
         if fb_result.error is not None:
             print(f"    [Executor] ⚠ Native fallback '{fallback_native}' also failed: "
                   f"{fb_result.error.get('evalue', '')[:120]}", flush=True)

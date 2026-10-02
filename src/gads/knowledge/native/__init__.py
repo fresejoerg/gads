@@ -17,7 +17,10 @@ from typing import Callable, Dict
 
 # Import all native modules — functions are registered at module level
 from . import ml as _ml_mod
-from .ml import gads_automl_fit, gads_automl_predict, gads_timeseries_fit, gads_timeseries_predict, gads_calibrate_threshold
+from .ml import gads_automl_fit, gads_automl_predict, gads_calibrate_threshold
+from . import timeseries as _ts_mod
+from .timeseries import (gads_profile_timeseries, gads_forecast_scores,
+                         gads_timeseries_fit, gads_timeseries_predict)
 from .causal import gads_causal_estimate_ate, gads_causal_bayesian_ate
 from .recommendation import (gads_build_interaction_matrix, gads_temporal_loo_split,
                              gads_fit_and_recommend, gads_evaluate_topn, gads_recommend_and_evaluate,
@@ -43,6 +46,8 @@ NATIVE_REGISTRY: Dict[str, Callable] = {
     "gads_automl_predict": gads_automl_predict,
     "gads_timeseries_fit": gads_timeseries_fit,
     "gads_timeseries_predict": gads_timeseries_predict,
+    "gads_profile_timeseries": gads_profile_timeseries,
+    "gads_forecast_scores": gads_forecast_scores,
     "gads_calibrate_threshold": gads_calibrate_threshold,
     "gads_causal_estimate_ate": gads_causal_estimate_ate,
     "gads_causal_bayesian_ate": gads_causal_bayesian_ate,
@@ -208,79 +213,16 @@ def gads_automl_predict(predictor, df):
         return {"predictions": y_pred}
 
 
-def gads_timeseries_fit(df, target_col, timestamp_col, item_id_col=None,
-                        prediction_length=None, time_limit=120, presets="fast_training"):
-    """
-    Train an AutoGluon TimeSeriesPredictor.
-
-    Args:
-        df: pandas DataFrame with timestamp and target columns.
-        target_col: column to forecast.
-        timestamp_col: datetime column name.
-        item_id_col: series grouping column; if None, treats whole df as one series.
-        prediction_length: steps ahead to forecast; defaults to 10% of median series length.
-        time_limit: max training seconds (default 120).
-        presets: 'fast_training', 'medium_quality'.
-
-    Returns:
-        dict with keys: predictor_ts, prediction_length, best_model_mase
-    """
-    import pandas as pd
-    import joblib
-    from autogluon.timeseries import TimeSeriesPredictor, TimeSeriesDataFrame
-
-    df = df.copy()
-    df[timestamp_col] = pd.to_datetime(df[timestamp_col])
-
-    # Add constant item_id if not provided
-    if item_id_col is None or item_id_col not in df.columns:
-        df["item_id"] = "series_1"
-        item_id_col = "item_id"
-
-    # Keep only needed columns
-    keep_cols = [item_id_col, timestamp_col, target_col]
-    ts_df = TimeSeriesDataFrame.from_data_frame(
-        df[keep_cols], id_column=item_id_col, timestamp_column=timestamp_col
-    )
-    print(f"[gads_timeseries_fit] TimeSeriesDataFrame: {ts_df.num_items} series, {len(ts_df)} rows")
-
-    # Derive prediction_length from data
-    if prediction_length is None:
-        lengths = ts_df.groupby(level=0).size()
-        median_len = int(lengths.median())
-        prediction_length = max(1, int(median_len * 0.1))
-        print(f"[gads_timeseries_fit] Auto prediction_length={prediction_length} (10% of median series length {median_len})")
-
-    predictor_ts = TimeSeriesPredictor(
-        prediction_length=prediction_length,
-        target=target_col,
-        eval_metric="MASE",
-        verbosity=0
-    ).fit(ts_df, presets=presets, time_limit=time_limit)
-
-    lb = predictor_ts.leaderboard(ts_df, silent=True)
-    best_model_mase = float(lb["score_val"].iloc[0]) if len(lb) > 0 else float("nan")
-    print(f"[gads_timeseries_fit] Best model MASE: {best_model_mase:.4f}  (<1.0 beats naive baseline)")
-    print(lb[["model", "score_val", "fit_time"]].head(6).to_string(index=False))
-
-    joblib.dump(predictor_ts, "model_timeseries.joblib")
-    print("[gads_timeseries_fit] Saved to model_timeseries.joblib")
-
-    return {
-        "predictor_ts": predictor_ts,
-        "ts_df": ts_df,
-        "prediction_length": prediction_length,
-        "best_model_mase": best_model_mase,
-        "leaderboard_ts": lb,
-    }
-
-
-def gads_timeseries_predict(predictor_ts, ts_df):
-    """Generate forecasts from a fitted TimeSeriesPredictor."""
-    forecasts = predictor_ts.predict(ts_df)
-    print(f"[gads_timeseries_predict] Forecasts shape: {forecasts.shape}")
-    return forecasts
 '''
+
+# Time-series natives: real functions in timeseries.py, spliced in via inspect.getsource so
+# the kernel copy and NATIVE_SOURCE (the fallback path) are the same code.
+TIMESERIES_PREAMBLE = (
+    "import warnings as _w_ts\n_w_ts.filterwarnings('ignore')\n\n"
+    + "\n\n".join(_inspect.getsource(_fn) for _fn in (
+        _ts_mod.gads_profile_timeseries, _ts_mod.gads_forecast_scores,
+        _ts_mod.gads_timeseries_fit, _ts_mod.gads_timeseries_predict))
+)
 
 AUTOGLUON_PREAMBLE = (
     'import warnings\nwarnings.filterwarnings("ignore")\n\n'
@@ -547,9 +489,12 @@ NATIVE_SOURCE = {name: _inspect.getsource(fn) for name, fn in NATIVE_REGISTRY.it
 # by kernel rehydration when replaying a prior run's code into a fresh session (the replayed
 # code calls the same natives, so it needs the same definitions).
 _PREAMBLE_ROUTES = (
-    ("AutoGluon", ("autogluon", "TabularPredictor", "TimeSeriesPredictor",
-                   "gads_automl_fit", "gads_timeseries_fit", "gads_calibrate_threshold"),
+    ("AutoGluon", ("TabularPredictor", "gads_automl_fit", "gads_automl_predict",
+                   "gads_calibrate_threshold"),
      lambda: AUTOGLUON_PREAMBLE),
+    ("timeseries", ("gads_profile_timeseries", "gads_forecast_scores", "gads_timeseries_fit",
+                    "gads_timeseries_predict"),
+     lambda: TIMESERIES_PREAMBLE),
     ("causal", ("CausalModel", "dowhy", "causal_estimate", "gads_causal_estimate_ate",
                 "gads_causal_bayesian_ate", "bambi", "bmb.Model"),
      lambda: CAUSAL_PREAMBLE),
@@ -582,6 +527,71 @@ _PREAMBLE_ROUTES = (
 )
 
 
+# ——— Native-node tracing (GADS_NATIVE_SPAN) ———————————————————————————————————————
+# Natives run inside the sandbox kernel, out of reach of the tracer. Every injected `gads_*`
+# function is therefore wrapped so that each CALL prints one sentinel line with its name,
+# wall-clock start/end (ns), success/error and a scalar-only summary of a dict return. The
+# executor strips these lines from stdout and records them as spans under the task's stage
+# span (core/tracing.record_span), so deterministic nodes appear in the MLflow run tree next
+# to the model calls. Summaries never stringify frames/models: only bool/number/short-str
+# values pass through; everything else is reported as <TypeName>.
+NATIVE_SPAN_PREFIX = "GADS_NATIVE_SPAN:"
+
+_TRACE_WRAPPER_SRC = """
+def _gads_traced(_fn, _name):
+    if getattr(_fn, "_gads_traced", False):
+        return _fn
+    import functools as _ft
+    @_ft.wraps(_fn)
+    def _gads_traced_call(*_a, **_k):
+        import json as _j, numbers as _num, time as _t
+        _t0 = _t.time_ns(); _ok = True; _err = None; _res = None
+        try:
+            _res = _fn(*_a, **_k)
+            return _res
+        except BaseException as _e:
+            _ok = False; _err = type(_e).__name__ + ": " + str(_e)[:300]
+            raise
+        finally:
+            _summary = {}
+            if isinstance(_res, dict):
+                for _kk, _vv in list(_res.items())[:40]:
+                    if isinstance(_vv, (bool, _num.Number)) or (isinstance(_vv, str) and len(_vv) <= 200):
+                        _summary[str(_kk)] = _vv
+                    else:
+                        _summary[str(_kk)] = "<" + type(_vv).__name__ + ">"
+            elif _res is not None:
+                _summary["return"] = "<" + type(_res).__name__ + ">"
+            try:
+                print("GADS_NATIVE_SPAN:" + _j.dumps({"name": _name, "start_ns": _t0,
+                      "end_ns": _t.time_ns(), "ok": _ok, "error": _err, "outputs": _summary},
+                      default=str), flush=True)
+            except Exception:
+                pass
+    _gads_traced_call._gads_traced = True
+    return _gads_traced_call
+"""
+
+
+def _native_function_names(source: str):
+    """Top-level `gads_*` function names defined in a preamble."""
+    import ast as _ast
+    try:
+        tree = _ast.parse(source)
+    except SyntaxError:
+        return []
+    return [n.name for n in tree.body if isinstance(n, _ast.FunctionDef) and n.name.startswith("gads_")]
+
+
+def traced(source: str) -> str:
+    """`source` plus the tracing wrapper applied to every gads_* function it defines."""
+    names = _native_function_names(source)
+    if not names:
+        return source
+    return (source + "\n" + _TRACE_WRAPPER_SRC + "\n"
+            + "\n".join(f'{n} = _gads_traced({n}, "{n}")' for n in names) + "\n")
+
+
 def preamble_for_code(code: str):
     """Return (preamble_text, [names]) for the native groups this code references.
 
@@ -596,4 +606,4 @@ def preamble_for_code(code: str):
                 names.append(name)
             except Exception as e:  # pragma: no cover - defensive
                 print(f"    [Native] Warning: could not load {name} preamble: {e}", flush=True)
-    return "".join(parts), names
+    return traced("".join(parts)), names

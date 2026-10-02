@@ -103,14 +103,16 @@
    "TimeSeriesPredictor\\(",
    "TimeSeriesDataFrame",
    "eval_metric\\s*=\\s*[\"']MASE[\"']",
-   "prediction_length"
+   "prediction_length",
+   "gads_forecast_scores\\("
   ],
   "forbidden_patterns": [
    "from statsmodels\\.tsa",
    "import pmdarima",
    "from prophet",
    "prediction_length\\s*=\\s*(48|24|12)\\b"
-  ]
+  ],
+  "note": "gads_forecast_scores( is required since recipe 1.3.0 (2026-10-02): it is what makes the baseline comparison correct (sign + SeasonalNaive row). Runs on recipe <= 1.2.0 fail this check by design."
  },
  "reference": {
   "protocol": {
