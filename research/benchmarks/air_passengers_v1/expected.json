@@ -11,6 +11,16 @@
    "best_model_mase": 0.3517,
    "quality_band": "classical_par",
    "score": "PASS 16/16 (research/benchmarks/results.jsonl)"
+  },
+  "cloud_recipe_1_2_0": {
+   "project_id": "77654023-ae1c-4719-b282-3569757ceaf6",
+   "date": "2026-10-02",
+   "recipe_version": "1.2.0",
+   "worker_model": "gemini-3.7-flash",
+   "best_model_mase": 0.3517,
+   "seasonal_naive_mase": 1.9414,
+   "score": "PASS 17/17",
+   "note": "best_model_mase identical to run b7f5853a (recipe 1.1.0) \u2014 reproducible"
   }
  },
  "metrics": {
@@ -38,6 +48,14 @@
    "source": "reference.py: seasonal-naive holdout MASE on the same 14-month window (1959-11 \u2026 1960-12), m=12",
    "tol_basis": "Threshold, not a target value: the run must beat seasonal-naive on the identical holdout. Quality beyond the floor is graded against the reference block (see notes.md), not pass/fail.",
    "note": "The floor is seasonal-naive's own holdout MASE (1.94), NOT 1.0. MASE divides by the in-sample seasonal-naive error, and on a trending series seasonal-naive falls further behind every year, so it scores well above 1 out of sample. 'MASE < 1 = beats seasonal-naive' only holds in-sample."
+  },
+  "seasonal_naive_mase": {
+   "value": 1.9414,
+   "exact": false,
+   "tol": 0.001,
+   "provenance": "analytic",
+   "source": "reference.py seasonal_naive (equals AutoGluon's SeasonalNaive score_val on the same window: 1.941386 on run b7f5853a)",
+   "note": "Recipe >= 1.2.0 reports the baseline it compares against. Checking it catches a run that compares against the wrong yardstick. Run b7f5853a used recipe 1.1.0, which did not emit it."
   }
  },
  "informational": {

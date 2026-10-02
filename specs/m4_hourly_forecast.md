@@ -28,4 +28,4 @@ misleading.
 
 Train a forecasting model, report MASE against the seasonal-naive baseline, and
 visualise history plus the forecast interval for a sample of series. A model only
-earns its keep if MASE < 1.
+earns its keep if it beats seasonal-naive on the same holdout window.

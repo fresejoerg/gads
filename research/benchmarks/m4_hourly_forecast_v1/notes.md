@@ -186,6 +186,11 @@ less useful of the two readings — it remains informational, not a criterion.
   trends (air_passengers_v1 measured 1.94). The current threshold is therefore stricter than
   "beats seasonal-naive", by an unknown margin. Fix: an analytic `reference.py` here (as in
   air_passengers_v1) that computes seasonal-naive's holdout MASE on the same 70-step window,
-  with `provenance` on each metric. Until then this benchmark stays provisional (L3*).
+  with `provenance` on each metric.
+  **Resolved 2026-10-02:** `reference.py` added. The floor is now seasonal-naive's holdout MASE of
+  2.0187, which equals AutoGluon's own SeasonalNaive row (2.018697). Every metric is `analytic`, and
+  recipe 1.2.0 also reports `seasonal_naive_mase`, which is checked too. References: AutoTheta 1.578,
+  AutoETS 2.772, naive 3.928. Cloud run 15af1437 scored PASS 17/17 with best_model_mase 0.9757,
+  identical to the Sep 4 run.
 - `score_benchmark.py` gained comparator support on 2026-10-01. Before that, this benchmark's
   `comparator: lt` with `tol: null` could not be scored at all.

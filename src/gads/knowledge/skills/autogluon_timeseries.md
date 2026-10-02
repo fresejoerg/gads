@@ -62,7 +62,10 @@ forecasts = predictor_ts.predict(ts_df)   # columns: mean + quantiles 0.1..0.9
 print(forecasts.head(20))
 ```
 
-MASE < 1 means the model beats the seasonal-naive baseline — always report that comparison.
+Compare the best model against the **SeasonalNaive row of the same leaderboard** (MASE = -score_val):
+the model earns its keep only if its MASE is lower. Do not read "MASE < 1" as "beats seasonal-naive"
+— MASE is scaled by the in-sample seasonal-naive error, and on trending data seasonal-naive itself
+scores well above 1 out of sample (AirPassengers: 1.94).
 
 ## Scale limit
 

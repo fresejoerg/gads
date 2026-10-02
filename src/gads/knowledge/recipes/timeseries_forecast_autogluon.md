@@ -1,6 +1,6 @@
 ---
 id: timeseries_forecast.autogluon.standard
-version: 1.1.0
+version: 1.2.0
 schema_version: 1
 author: gads-core
 
@@ -70,14 +70,18 @@ dag:
       never a hardcoded number), eval_metric MASE, time-budgeted presets. Print the
       leaderboard, store `best_model_mase`, and persist the predictor as
       model_timeseries.joblib.
+      Also store `seasonal_naive_mase`: the SeasonalNaive row's validation MASE from the
+      same leaderboard (scores are negated, so MASE = -score_val). It is the baseline on the
+      identical window, and the only correct yardstick for best_model_mase.
     depends_on: [prepare_timeseries_dataframe]
     worker_tier: T2
-    produces: [predictor_ts, prediction_length, best_model_mase]
+    produces: [predictor_ts, prediction_length, best_model_mase, seasonal_naive_mase]
     attached_skills: [autogluon_timeseries]
     postconditions:
       - "predictor_ts is not None"
       - "isinstance(best_model_mase, float)"
-    required_metrics: [best_model_mase, prediction_length]
+      - "isinstance(seasonal_naive_mase, float)"
+    required_metrics: [best_model_mase, seasonal_naive_mase, prediction_length]
 
   - id: generate_forecasts_and_visualize
     intent: >
@@ -85,8 +89,11 @@ dag:
       to 4 series, plot history + forecast mean + 80% interval band; save as
       figure_1_forecast.json. Print a summary table per series: last observed value,
       next-period forecast, trend direction. Emit an insight summarizing
-      prediction_length, the best model, MASE vs the naive baseline (MASE < 1 beats
-      seasonal-naive), and the dominant trend.
+      prediction_length, the best model, best_model_mase vs seasonal_naive_mase (the model
+      earns its keep only if best_model_mase < seasonal_naive_mase), and the dominant trend.
+      Do NOT describe MASE < 1 as beating seasonal-naive: MASE is scaled by the IN-SAMPLE
+      seasonal-naive error, so on a trending series seasonal-naive itself scores > 1 out of
+      sample.
     depends_on: [train_forecast_model]
     worker_tier: T2
     attached_skills: [autogluon_timeseries, visualization_best_practices]
@@ -99,7 +106,7 @@ invariants:
   - "TIME BUDGET: always set time_limit=120 with presets='fast_training'. NOTE: a wall-clock budget makes model selection machine-load-dependent — this recipe is for exploratory forecasting; reproducibility-critical runs must pin an explicit fixed model set instead."
   - "ITEM_ID: every dataset needs a series-identifier column; add a constant one for a single series."
   - "PREDICTION_LENGTH: derive from the data (~10% of median series length, min 1). Never hardcode."
-  - "BASELINE COMPARISON: always report MASE against the naive baseline — MASE < 1 means the model earns its keep."
+  - "BASELINE COMPARISON: always report best_model_mase against seasonal_naive_mase from the same leaderboard (same validation window). The model earns its keep only if it is lower. MASE < 1 is NOT that test: it compares against the in-sample seasonal-naive error, and seasonal-naive itself exceeds 1 out of sample on trending data."
   - "PERSIST: save the fitted predictor as model_timeseries.joblib."
 ---
 
