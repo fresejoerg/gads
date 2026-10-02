@@ -895,6 +895,28 @@ class ExecutionManager:
             if info is not None:
                 self.protected_state[name] = self._signature(info)
 
+    async def _missing_outputs(self, names, kernel_state, project_id, session_id) -> list:
+        """Declared outputs not bound in the kernel after a successful execution.
+
+        kernel_state is the sandbox's post-run snapshot, but it omits callables. So a name
+        absent from it is confirmed with a one-line probe before a node is failed for it.
+        Fail-open: if the snapshot is empty or the probe errors, report nothing."""
+        if not kernel_state:
+            return []
+        candidates = [n for n in names if n not in kernel_state]
+        if not candidates:
+            return []
+        try:
+            probe = await asyncio.wait_for(self.sandbox.execute(
+                "import json as _jo\nprint('GADS_MISSING_OUTPUTS:' + _jo.dumps("
+                f"[_n for _n in {candidates!r} if _n not in globals()]))",
+                project_id=project_id, session_id=session_id), timeout=30.0)
+            line = next((ln for ln in (probe.stdout or "").splitlines()
+                         if ln.startswith("GADS_MISSING_OUTPUTS:")), None)
+            return json.loads(line.split(":", 1)[1]) if line else []
+        except Exception:
+            return []
+
     def check_state_drift(self, own_produces) -> list:
         """Report upstream outputs this node changed without declaring them.
 
@@ -1353,6 +1375,21 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                         exec_result.error = {"ename": "StateDriftError", "evalue": _msg}
                         self._capture_attempt("state_drift", coder_res.content.code, current_code,
                                               _msg, task_id, task_description, recipe_id)
+                    # OUTPUT GATE (recipe nodes): a node that "succeeded" without binding a
+                    # variable it declares in `produces` has not done its job. The next node
+                    # then dies on a NameError that blames the wrong step (gemma-4-12b,
+                    # 2026-10-02: profiling completed without `item_id_col`).
+                    elif (contract or {}).get("recipe_node_id") and _own and (
+                            _missing := await self._missing_outputs(
+                                _own, exec_result.kernel_state, project_id, session_id)):
+                        _msg = ("This step finished without creating its declared outputs: "
+                                + ", ".join(f"`{n}`" for n in _missing)
+                                + ". Bind every one of them as a top-level variable before the step "
+                                  "ends; later steps read them by exactly these names.")
+                        print(f"    [Executor] 🚫 Missing outputs: {_missing}", flush=True)
+                        exec_result.error = {"ename": "MissingOutputsError", "evalue": _msg}
+                        self._capture_attempt("missing_outputs", coder_res.content.code, current_code,
+                                              _msg, task_id, task_description, recipe_id)
                     else:
                         # Step succeeded after ≥1 failure → record that its prior errors were
                         # recoverable (distinguishes recurring-but-fixable from hard dead ends).
@@ -1362,12 +1399,17 @@ print("GADS_FLOOR_JSON:" + _json.dumps(_floor))
                         self._capture_attempt("executed", coder_res.content.code, current_code,
                                               None, task_id, task_description, recipe_id)
                         return exec_result, coder_res.model_used
-                else:
+                # Not `else`: the state-drift and output gates above turn a successful
+                # execution into a failure, and it must get the same feedback, ledger entry
+                # and same-reason accounting as any other (previously a drift error fell
+                # through here unhandled, with no feedback and no attempt counted).
+                if exec_result.error is not None:
                     ename = exec_result.error.get("ename", "Error")
                     evalue = exec_result.error.get("evalue", "Unknown error")
                     print(f"    [Executor] ❌ Failure: {ename} - {evalue}", flush=True)
-                    self._capture_attempt("exec_error", coder_res.content.code, current_code,
-                                          f"{ename}: {evalue}", task_id, task_description, recipe_id)
+                    if ename not in ("StateDriftError", "MissingOutputsError"):  # captured above
+                        self._capture_attempt("exec_error", coder_res.content.code, current_code,
+                                              f"{ename}: {evalue}", task_id, task_description, recipe_id)
 
                     attempt_msg = f"{ename}: {evalue}"
 

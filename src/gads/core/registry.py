@@ -409,6 +409,29 @@ def resolve_served_model(timeout: float = 20.0, force: bool = False) -> Optional
     # would stamp every run of the backend session `unknown` long after a model came back.
     if _SERVED_MODEL_PROBED and _SERVED_MODEL and not force:
         return _SERVED_MODEL
+    # Primary: ask LM Studio which model is loaded, via the proxy's key-authenticated
+    # pass-through (MyLocalStack litellm_config.yaml, /lmstudio/api/v0/models). Since LiteLLM
+    # 1.105 the completion probe below gets the alias echoed back in response.model, so it
+    # can no longer identify the weights; all 8 local runs of 2026-10-02 were stamped
+    # `unknown` that way. Exactly one loaded chat model is required. With several, the
+    # alias's target is ambiguous and we fall through rather than guess.
+    try:
+        base = LITELLM_URL.rstrip("/").removesuffix("/v1")
+        r = httpx.get(f"{base}/lmstudio/api/v0/models",
+                      headers={"Authorization": f"Bearer {LITELLM_KEY}"}, timeout=timeout)
+        r.raise_for_status()
+        loaded = [m.get("id") for m in (r.json() or {}).get("data", [])
+                  if m.get("state") == "loaded" and m.get("type") in ("llm", "vlm") and m.get("id")]
+        if len(loaded) == 1:
+            _SERVED_MODEL, _SERVED_MODEL_PROBED = loaded[0], True
+            print(f"  [Registry] Served local engine: {_SERVED_MODEL} (LM Studio loaded model)", flush=True)
+            return _SERVED_MODEL
+        if len(loaded) > 1:
+            print(f"  [Registry] {len(loaded)} chat models loaded in LM Studio {loaded}: "
+                  "local_model target is ambiguous; trying the completion probe.", flush=True)
+    except Exception as e:
+        print(f"  [Registry] LM Studio model list unavailable ({type(e).__name__}); "
+              "trying the completion probe.", flush=True)
     try:
         r = httpx.post(
             f"{LITELLM_URL.rstrip('/')}/chat/completions",
