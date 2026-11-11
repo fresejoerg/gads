@@ -218,6 +218,13 @@ def resolve_stage_model(stage: str, tier_default: str) -> str:
 #               same model at a higher price and is not served. k2.7-code / k2.7-code-highspeed
 #               stay at T2/T3 (k2.x/2.6 sunset). Placement of the new models is reasoned, not
 #               measured, like the rest of this table.
+#               RETIRING: Kimi lists k2.7-code and k2.7-code-highspeed as Deprecated, closed to
+#               accounts registered after 2026-11-01 (ours predates it), "deprecation expected
+#               in late December 2026", with NO code-model successor. Remove both from this
+#               table and the MyLocalStack gateway when Moonshot shuts them off; Kimi is then T1
+#               only. (A dead entry still lists as served, because the gateway's list is static, so
+#               each T2/T3 call landing on it would 404 and fall back.) kimi-k3.1-pro is pinned to
+#               reasoning_effort=high at the gateway (Moonshot's default is max, always-on).
 #   OpenAI    — refreshed 2026-11-11 after the gateway key was replaced (it was 401ing):
 #               gpt-6.1-terra (GA 2026-10-26, on the key's /v1/models, verified live through the
 #               proxy incl. max_tokens translation + JSON mode) replaces gpt-5.6-terra (T2 -> T3).
