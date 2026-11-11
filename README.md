@@ -101,9 +101,9 @@ Models are accessed only through the LiteLLM proxy, so *"which model"* is pure c
 
 | Tier | Role | Gemini | Anthropic | OpenAI | Kimi |
 |------|------|--------|-----------|--------|------|
-| **T1** | Architect | gemini-3.1-pro-preview | claude-opus-4.8, claude-fable-5 | gpt-5.6-sol | kimi-k3 |
-| **T2** | Coder | gemini-3.7-flash | claude-sonnet-5 | gpt-5.6-terra | kimi-k2.7-code |
-| **T3** | Worker | gemini-3.5-flash-lite | claude-haiku-4.5 | gpt-5.6-luna | kimi-k2.7-code-highspeed |
+| **T1** | Architect | gemini-4-argon, gemini-4-carbon | claude-opus-5.5, claude-fable-5.2 | gpt-6-astra | kimi-k3.1-pro |
+| **T2** | Coder | gemini-3.8-flash | claude-sonnet-5.5 | gpt-6.1-sol | kimi-k2.7-code |
+| **T3** | Worker | gemini-3.5-flash-lite | claude-haiku-5.5 | gpt-6-luna, gpt-6.1-terra | kimi-k2.7-code-highspeed |
 | **T4** | Local | — | — | — | `local_model` (isolated; never escalates to cloud) |
 
 Escalation climbs `T3 → T2 → T1` (intra-tier fallback first). **Routing modes** (`POST /config` or `.env`): `cloud` (tiered + escalation), `local` (everything on `local_model`), `hybrid` (plan/report on cloud, execution local), `cloud_pinned` (one operator-chosen cloud model, no ladder).

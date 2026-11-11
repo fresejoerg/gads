@@ -184,21 +184,43 @@ def resolve_stage_model(stage: str, tier_default: str) -> str:
         return "local_model"
     return tier_default
 
+# DECOMMISSIONED 2026-11-10 (removed from this ladder only; the gateway still serves them for its
+# other clients, and they remain selectable in cloud_pinned mode): a model is dropped once a newer
+# model of the same line is on the ladder. Removed: claude-opus-4.8 (-> opus-5.5), claude-fable-5 and
+# 5.1 (-> fable-5.2), claude-sonnet-5 (-> sonnet-5.5), claude-haiku-4.5 (-> haiku-5.5),
+# gemini-3.1-pro-preview (-> gemini-4-argon), gemini-3.7-flash (-> 3.8-flash), gpt-5.6-sol and
+# gpt-5.6-luna (-> the gpt-6 family), kimi-k3 (-> k3.1-pro); 2026-11-11: gpt-5.6-terra (->
+# gpt-6.1-terra). Kept: kimi-k2.7-code (+ highspeed), a code-specialised line distinct from k3.x.
+# Historical runs and benchmark records name the removed models; that is the record, not a bug.
 # Hardcoded rules for mapping model names to Tiers. Latest generation per provider,
 # placed by capability; Gemini/Local are kept at index 0 so they are the primary
 # (cheapest-first) choice. Currency per provider (2026-07-22; OpenAI 2026-09-29):
-#   OpenAI    — GPT-6 generation (astra T1 / 6.1-sol T2 / luna T3) per the current docs
-#               lineup; GPT-5.6 (sol/terra/luna) still served, not deprecated, kept as
-#               intra-tier fallback; 5.4/5.5 retired. gpt-6-sol is on the key but omitted —
-#               superseded by gpt-6.1-sol, which the docs list in its place.
-#   Anthropic — (2026-09-30) Opus 5.5 + Fable 5.1 (T1), Sonnet 5.5 (T2), Haiku 4.5 (T3, still
-#               the newest Haiku). Predecessors Opus 4.8 / Fable 5 / Sonnet 5 are still served
-#               with no shutdown date and stay as intra-tier fallback. The 5.5 / 5.1 models
+#   OpenAI    — (2026-11-11) GPT-6 generation (astra T1 / 6.1-sol T2 / luna + 6.1-terra T3).
+#               terra sits at T3, not T2: OpenAI positions it for "visual reasoning, precise
+#               computer use, and clear, natural writing" (not coding, which is T2's Coder work)
+#               and prices it at $1/$5 per 1M, the Haiku class; sol is $2/$10, luna $0.10/$0.50.
+#               no GPT-5.6 model remains on the ladder (see DECOMMISSIONED above); 5.4/5.5
+#               retired. gpt-6-sol is on the key but omitted — superseded by gpt-6.1-sol.
+#   Anthropic — (2026-11-10) Opus 5.5 + Fable 5.2 (T1), Sonnet 5.5 (T2), Haiku 5.5 (T3).
+#               Fable 5.2 (released 2026-11-09) and Haiku 5.5 (2026-10-07) were added 2026-11-10;
+#               Their predecessors (Opus 4.8, Fable 5 / 5.1, Sonnet 5, Haiku 4.5) are still served by
+#               the gateway with no shutdown date but were taken off the ladder (see below). The 5.5 / 5.1 models
 #               reject forced tool_choice, so they need LiteLLM >=1.105 on the proxy (native
 #               output_format for response_format); on older proxies every structured call
 #               400s and lands on llm.py's manual_fallback.
-#   Gemini    — 3.6-flash (T2), 3.5-flash-lite (T3); Pro is 3.1-pro-preview (latest Pro).
-#   Kimi      — k3 flagship (T1) + k2.7-code / k2.7-code-highspeed (k2.x/2.6 sunset).
+#   Gemini    — (2026-11-10) Gemini 4 Argon (GA 2026-10-13, 1M in / 32,768 out) heads T1 ahead of
+#               the 3.1-pro-preview it replaces; 3.8-flash (T2), 3.5-flash-lite (T3). (2026-11-11)
+#               Gemini 4 Carbon added to T1 behind Argon: Stable since 2026-11-10, paid tier only
+#               (the earlier "restricted tier" note was wrong). Same per-token price as Argon
+#               ($2/$10 per 1M, $4/$20 from 2026-12-01) but "strongest reasoning" with more tokens
+#               per turn, so Argon stays at index 0.
+#   Kimi      — (2026-11-10) k3.1-pro (API 2026-10-23) replaces k3 at T1; its -highspeed variant is the
+#               same model at a higher price and is not served. k2.7-code / k2.7-code-highspeed
+#               stay at T2/T3 (k2.x/2.6 sunset). Placement of the new models is reasoned, not
+#               measured, like the rest of this table.
+#   OpenAI    — refreshed 2026-11-11 after the gateway key was replaced (it was 401ing):
+#               gpt-6.1-terra (GA 2026-10-26, on the key's /v1/models, verified live through the
+#               proxy incl. max_tokens translation + JSON mode) replaces gpt-5.6-terra (T2 -> T3).
 # The live hierarchy intersects this with LiteLLM's served models, so any newer ID
 # must also be added to the MyLocalStack gateway to become reachable; until then
 # intra-tier fallback covers interim 404s and the mapping self-heals.
@@ -216,12 +238,10 @@ def resolve_stage_model(stage: str, tier_default: str) -> str:
 # gemini-3.8-flash (added 2026-09-04) takes T2 alongside the 3.7-flash it succeeds: Google's
 # model endpoint reports identical limits for both (1,048,576 in / 65,536 out).
 TIER_MAPPING = {
-    "T1": ["gemini-3.1-pro-preview", "claude-opus-4.8", "claude-fable-5", "gpt-5.6-sol",
-           "kimi-k3", "gpt-6-astra", "claude-opus-5.5", "claude-fable-5.1"],
-    "T2": ["gemini-3.7-flash", "gemini-3.8-flash", "claude-sonnet-5", "gpt-5.6-terra",
-           "kimi-k2.7-code", "gpt-6.1-sol", "claude-sonnet-5.5"],
-    "T3": ["gemini-3.5-flash-lite", "claude-haiku-4.5", "gpt-5.6-luna", "kimi-k2.7-code-highspeed",
-           "gpt-6-luna"],
+    "T1": ["gemini-4-argon", "gemini-4-carbon", "gpt-6-astra", "claude-opus-5.5", "claude-fable-5.2", "kimi-k3.1-pro"],
+    "T2": ["gemini-3.8-flash", "claude-sonnet-5.5", "kimi-k2.7-code", "gpt-6.1-sol"],
+    "T3": ["gemini-3.5-flash-lite", "claude-haiku-5.5", "kimi-k2.7-code-highspeed", "gpt-6-luna",
+           "gpt-6.1-terra"],
     "T4": ["local_model"]
 }
 
