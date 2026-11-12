@@ -31,8 +31,14 @@ else:
     problem_type = 'regression'
 print("problem_type:", problem_type)
 
-# 4. Identifier-like columns (leakage risk) — heuristic, so print what it caught
-drop_cols = [c for c in df.columns if any(x in c.lower() for x in ['id', 'index', 'key', 'name'])]
+# 4. Identifier columns (leakage risk). Match whole names or per-row uniqueness, NEVER substrings:
+#    'consumer_price_index', 'valid' and 'keyword' are features, not identifiers.
+import re
+_ID_NAME = re.compile(r'^(id|uuid|guid|index|rownum|row_id|unnamed: 0)$|_(id|uuid|guid)$')
+drop_cols = [c for c in df.columns if c != target_col and (
+    _ID_NAME.search(str(c).lower())  # the name IS an identifier (id, customer_id, uuid, index) - never a substring
+    or (not pd.api.types.is_float_dtype(df[c]) and len(df) > 20
+        and df[c].nunique(dropna=True) == df[c].notna().sum()))]  # or it is unique on every row
 print("drop_cols:", drop_cols)
 
 # 5. Naive baseline — majority-class fraction (classification) or target std (regression)

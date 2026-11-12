@@ -29,12 +29,17 @@ target — do not decide by dtype alone.
 ## Leakage guard: drop identifier-like columns before fitting
 
 ```python
-drop_cols = [c for c in df.columns if any(x in c.lower() for x in ['id', 'index', 'key', 'name'])]
+import re
+_ID_NAME = re.compile(r'^(id|uuid|guid|index|rownum|row_id|unnamed: 0)$|_(id|uuid|guid)$')
+drop_cols = [c for c in df.columns if c != target_col and (
+    _ID_NAME.search(str(c).lower())  # the name IS an identifier (id, customer_id, uuid, index) - never a substring
+    or (not pd.api.types.is_float_dtype(df[c]) and len(df) > 20
+        and df[c].nunique(dropna=True) == df[c].notna().sum()))]  # or it is unique on every row
 df_clean = df.drop(columns=drop_cols, errors='ignore')
 print("drop_cols:", drop_cols)
 ```
 
-This is a name heuristic — always print what it dropped so a false positive is visible.
+Match whole names (`id`, `customer_id`, `uuid`, `index`) or per-row uniqueness. Never match substrings: `consumer_price_index`, `valid` and `keyword` are real features. Always print what was dropped so a false positive is visible.
 
 ## Split (seeded, stratified when possible)
 

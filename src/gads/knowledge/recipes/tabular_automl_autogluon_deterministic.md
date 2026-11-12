@@ -1,6 +1,6 @@
 ---
 id: tabular_automl.autogluon.deterministic
-version: 1.2.0
+version: 1.2.1
 schema_version: 1
 author: gads-core
 
@@ -39,7 +39,7 @@ dag:
       global variables: `target_col` (the target named in the objective/spec hints),
       `problem_type` (one of 'binary', 'multiclass', 'regression' — remember that a
       numeric target with few distinct values is a coded class label, not regression),
-      `drop_cols` (identifier-like columns that would leak), and `naive_baseline`
+      `drop_cols` (identifier columns that would leak: whole-name or per-row-unique matches, never substrings), and `naive_baseline`
       (majority-class fraction for classification). Print the dataset shape, dtypes,
       null counts, and target distribution as evidence.
     worker_tier: T2
@@ -131,7 +131,7 @@ invariants:
   - "DETERMINISM: NEVER pass time_limit or presets to .fit(). Always pass EXACTLY hyperparameters={'GBM': {}, 'XGB': {}, 'RF': {}}, num_bag_folds=0, fit_weighted_ensemble=True — a fixed model portfolio makes the trained ensemble independent of wall-clock and machine load, so repeat runs reproduce identical scores."
   - "MODEL PORTFOLIO IS FIXED: do not add, remove, or configure models beyond the mandated hyperparameters dict — no neural nets, no CatBoost, no extra params."
   - "VERBOSITY: always set verbosity=0 in TabularPredictor()."
-  - "DROP ID COLUMNS: remove columns whose names contain 'id', 'index', 'key', or 'name' (case-insensitive) before fitting — they cause leakage. Print what was dropped."
+  - "DROP ID COLUMNS: before fitting, remove only columns that ARE identifiers: a name that equals id/uuid/guid/index/row_id or ends in _id/_uuid/_guid (case-insensitive), or a non-float column that is unique on every row. NEVER match substrings of a name: consumer_price_index, valid and keyword are real features, not identifiers. Print what was dropped."
   - "EVAL METRIC: roc_auc for binary, f1_macro for multiclass, rmse for regression."
   - "Random state must be 42 everywhere."
   - "THRESHOLD CALIBRATION: for binary classification, calibrate the decision threshold with gads_calibrate_threshold() before evaluating predictions or confusion matrices."

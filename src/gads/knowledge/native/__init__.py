@@ -141,11 +141,15 @@ def gads_automl_fit(df, target_col, time_limit=120, presets="good_quality", eval
     from autogluon.tabular import TabularPredictor
     from sklearn.model_selection import train_test_split
 
-    # Drop obvious ID columns
-    id_patterns = ['id', 'index', 'key', 'name', 'uuid', 'rownum']
-    drop_cols = [c for c in df.columns if c != target_col and
-                 any(p == c.lower() or c.lower().endswith('_' + p) or c.lower().startswith(p + '_')
-                     for p in id_patterns)]
+    # Drop identifier columns: the whole name IS an identifier (id, customer_id, uuid, index)
+    # or the column is unique on every row. Never substrings or prefixes: consumer_price_index,
+    # first_name and keyword are features. Same rule as the AutoGluon recipes 1.2.1 + skills.
+    import re
+    _id_name = re.compile(r'^(id|uuid|guid|index|rownum|row_id|unnamed: 0)$|_(id|uuid|guid)$')
+    drop_cols = [c for c in df.columns if c != target_col and (
+        _id_name.search(str(c).lower())
+        or (not pd.api.types.is_float_dtype(df[c]) and len(df) > 20
+            and df[c].nunique(dropna=True) == df[c].notna().sum()))]
     if drop_cols:
         print(f"[gads_automl_fit] Dropping ID-like columns: {drop_cols}")
         df = df.drop(columns=drop_cols)
