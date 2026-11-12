@@ -576,23 +576,27 @@ def render_orchestrator_panel():
     with st.expander("LAUNCH FROM SPEC", expanded=False):
         specs = api_get("/specs")
         if specs:
-            def _fmt_ts(iso):
-                if not iso:
-                    return "never"
-                try:
-                    return datetime.fromisoformat(iso).strftime("%b %d %Y %H:%M")
-                except Exception:
-                    return iso
-
             import pandas as pd
+
+            def _to_dt(iso):
+                # Real datetimes (not formatted strings) so column sorting is chronological.
+                if not iso:
+                    return pd.NaT
+                try:
+                    return pd.to_datetime(iso)
+                except Exception:
+                    return pd.NaT
+
             spec_df = pd.DataFrame([{
                 "Spec": s["filename"],
-                "Created": _fmt_ts(s.get("created_at")),
-                "Last Used": _fmt_ts(s.get("last_used_at")),
+                "Created": _to_dt(s.get("created_at")),
+                "Last Used": _to_dt(s.get("last_used_at")),
             } for s in specs])
+            _dt_cfg = st.column_config.DatetimeColumn(format="MMM DD YYYY HH:mm")
 
             sel = st.dataframe(
                 spec_df,
+                column_config={"Created": _dt_cfg, "Last Used": _dt_cfg},
                 use_container_width=True,
                 hide_index=True,
                 on_select="rerun",
