@@ -1,0 +1,490 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "a9ad8214-1f69-4ea9-a5f2-cffb642163a4",
+ "name": "Adult census — reasoned model selection",
+ "verdict": "pass",
+ "critical": {
+  "pass": 12,
+  "fail": 0,
+  "not_evaluable": 0
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 3,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 10,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "integrity": {
+   "pass": 10,
+   "fail": 0,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": null,
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 10,
+  "created_at": "2026-08-23T07:00:24.511235",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "adult_model_selection.md",
+  "recipe_id": null,
+  "recipe_version": "1.5.0",
+  "engine_id": null,
+  "routing_mode": "cloud",
+  "run_mode": "research",
+  "rung": "D2"
+ },
+ "attribution": {
+  "exec_nodes": 26,
+  "attempted_nodes": 28,
+  "failed_nodes": 2,
+  "native_primary": 0,
+  "model_pass": 26,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.929
+ },
+ "usage": {
+  "calls": 88,
+  "prompt_tokens": 510545,
+  "completion_tokens": 58348,
+  "cost_usd": 0.761627,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "claude-sonnet-5",
+   "gemini-3.5-flash-lite",
+   "gemini-3.7-flash",
+   "gpt-5.6-terra",
+   "kimi-k2.7-code"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "task:load_adult_csv_and_bind_target_class_apply_sample_limit_if_r",
+   "task_id": "8f23796a-383e-42c2-b7d2-3071cb2632f5",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.5-flash-lite",
+   "model_used": "gemini-3.5-flash-lite",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0030006,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:derive_dataset_facts_for_model_selection_into_dictionary_dat",
+   "task_id": "46e39132-6709-4e2e-a870-8328d88d20fe",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.5-flash-lite",
+   "model_used": "gemini-3.5-flash-lite",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0056419,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:nominate_2_to_4_candidate_estimators_based_on_dataset_facts_",
+   "task_id": "21bc3489-7fb3-449c-8d74-0b5239e751e1",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": "gemini-3.7-flash",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.00816218,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:run_identical_cross_validation_protocol_using_gads_candidate",
+   "task_id": "ca60c01b-48a6-48a3-9307-c3e8ee26a6b6",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": "gemini-3.7-flash",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 3,
+   "cost_usd": 0.0167655,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:define_optuna_search_space_for_best_candidate_and_execute_ga",
+   "task_id": "37b2982f-ebba-45b2-a058-40d90c3350e6",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": "gemini-3.7-flash",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.00648075,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:audit_model_selection_and_fit_using_gads_audit_model_choice_",
+   "task_id": "f6891fe2-91e5-4984-9976-7a0701616bae",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": "gemini-3.7-flash",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.013386,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:refit_tuned_model_on_full_x_train_y_train_calibrate_binary_t",
+   "task_id": "3181de18-7310-4a55-9aec-095095cb603c",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gpt-5.6-terra",
+   "model_used": "gpt-5.6-terra",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 5,
+   "cost_usd": 0.07802975,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:plot_roc_and_precision_recall_diagnostic_curves_using_gads_p",
+   "task_id": "522f242b-8f7b-4a3b-b909-413865264245",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.5-flash-lite",
+   "model_used": "gemini-3.5-flash-lite",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0029456,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:compute_permutation_feature_importance_on_held_out_test_data",
+   "task_id": "c9711603-cc7c-410e-a7f0-6972a00b60fc",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": "gemini-3.7-flash",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.012648,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:write_a_comprehensive_model_card_and_defense_narrative_to_mo",
+   "task_id": "ae477b5f-dfd4-4463-b888-2c06351fec56",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": "gemini-3.7-flash",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 4,
+   "cost_usd": 0.03241125,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 10,
+   "completed": 8,
+   "failed": [
+    {
+     "node": "task:compute_permutation_feature_importance_on_held_out_test_data",
+     "error": "line 31: `_HGBCOrig.fit = ...` monkey-patches an estimator method. This is banned: retries re-run your code in the SAME kernel, so the second run captures the already-patched function as the 'original"
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 10,
+   "completed": 8,
+   "failed": [
+    {
+     "node": "task:compute_permutation_feature_importance_on_held_out_test_data",
+     "error": "line 31: `_HGBCOrig.fit = ...` monkey-patches an estimator method. This is banned: retries re-run your code in the SAME kernel, so the second run captures the already-patched function as the 'original"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 10 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:load_adult_csv_and_bind_target_class_apply_sample_limit_if_r"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:load_adult_csv_and_bind_target_class_apply_sample_limit_if_r"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:derive_dataset_facts_for_model_selection_into_dictionary_dat"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:derive_dataset_facts_for_model_selection_into_dictionary_dat"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:nominate_2_to_4_candidate_estimators_based_on_dataset_facts_"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:nominate_2_to_4_candidate_estimators_based_on_dataset_facts_"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:run_identical_cross_validation_protocol_using_gads_candidate"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:run_identical_cross_validation_protocol_using_gads_candidate"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:define_optuna_search_space_for_best_candidate_and_execute_ga"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:define_optuna_search_space_for_best_candidate_and_execute_ga"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:audit_model_selection_and_fit_using_gads_audit_model_choice_"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:audit_model_selection_and_fit_using_gads_audit_model_choice_"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:refit_tuned_model_on_full_x_train_y_train_calibrate_binary_t"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:refit_tuned_model_on_full_x_train_y_train_calibrate_binary_t"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:plot_roc_and_precision_recall_diagnostic_curves_using_gads_p"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:plot_roc_and_precision_recall_diagnostic_curves_using_gads_p"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:compute_permutation_feature_importance_on_held_out_test_data"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:compute_permutation_feature_importance_on_held_out_test_data"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:write_a_comprehensive_model_card_and_defense_narrative_to_mo"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:write_a_comprehensive_model_card_and_defense_narrative_to_mo"
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:59+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

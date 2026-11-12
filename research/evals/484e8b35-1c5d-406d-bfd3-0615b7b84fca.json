@@ -1,0 +1,580 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "484e8b35-1c5d-406d-bfd3-0615b7b84fca",
+ "name": "Adult census — reasoned model selection",
+ "verdict": "fail",
+ "critical": {
+  "pass": 2,
+  "fail": 10,
+  "not_evaluable": 14
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 4,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "integrity": {
+   "pass": 0,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "contract": {
+   "pass": 0,
+   "fail": 10,
+   "not_evaluable": 20
+  }
+ },
+ "benchmark": null,
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 10,
+  "created_at": "2026-08-23T09:20:41.899766",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "adult_model_selection.md",
+  "recipe_id": null,
+  "recipe_version": "1.5.0",
+  "engine_id": null,
+  "routing_mode": "local",
+  "run_mode": "research",
+  "rung": "D2"
+ },
+ "attribution": {
+  "exec_nodes": 2,
+  "attempted_nodes": 4,
+  "failed_nodes": 2,
+  "native_primary": 0,
+  "model_pass": 2,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.5
+ },
+ "usage": {
+  "calls": 16,
+  "prompt_tokens": 98305,
+  "completion_tokens": 10342,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "local_model"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t",
+   "task_id": "d5648706-1fd9-45dd-91aa-6de9c58b2ede",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 6
+   }
+  },
+  {
+   "node": "task:derive_the_facts_that_drive_model_choice_and_store_them_in_d",
+   "task_id": "475c695c-8078-4c67-8067-b2daeb1018da",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 2
+   }
+  },
+  {
+   "node": "task:the_reasoning_step_this_is_the_node_the_recipe_exists_for_us",
+   "task_id": "027a1ce4-513d-46fd-b654-d5729e5152d3",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "task:score_every_shortlisted_candidate_under_one_protocol_by_call",
+   "task_id": "b23393df-4298-4fda-a503-31996e85c9e9",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 2
+   }
+  },
+  {
+   "node": "task:define_an_optuna_search_space_for_best_candidate_the_width_t",
+   "task_id": "b46bc074-43e6-4013-8734-44151eddc75d",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 2
+   }
+  },
+  {
+   "node": "task:run_both_gates_on_what_was_chosen_and_fitted_and_do_not_re_i",
+   "task_id": "777e8d1e-a2db-47fe-94ab-4ff7f424dc6a",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva",
+   "task_id": "3cffc8d7-d424-4055-ae4a-761f0a6254f7",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 3
+   }
+  },
+  {
+   "node": "task:plot_the_roc_and_precision_recall_curves_for_the_final_model",
+   "task_id": "c04f5c35-a7e6-439a-bbcd-e2467b181282",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "task:measure_what_actually_drives_the_predictions_importance_gads",
+   "task_id": "14f7735c-0cfe-41d6-958f-1452200d65f9",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 2
+   }
+  },
+  {
+   "node": "task:write_the_model_card_to_model_card_md_and_bind_model_card_te",
+   "task_id": "95721821-3aaa-400a-a5ce-fb6fef63bf76",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 10,
+   "completed": 2,
+   "failed": [
+    {
+     "node": "task:nominate_2_to_4_candidate_estimators_and_justify_them_using_",
+     "error": "Required metrics not produced: n_candidates. Code must bind these as top-level scalar variables."
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 10,
+   "completed": 0,
+   "failed": [
+    {
+     "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t",
+     "error": "Contract Violation: required column concepts not found: X_train; y_train; X_test; y_test"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 10 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.metrics.json",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.metrics_consistent",
+   "dimension": "integrity",
+   "status": "not_evaluable",
+   "detail": "no captured metric appears in metrics.json",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "failed: Contract Violation: required column concepts not found: X_train; y_train; X_test; y_test",
+   "critical": true,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t"
+  },
+  {
+   "id": "node.metric.n_train_rows",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t"
+  },
+  {
+   "id": "node.metric.n_features",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t"
+  },
+  {
+   "id": "node.column.X_train",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t"
+  },
+  {
+   "id": "node.column.y_train",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t"
+  },
+  {
+   "id": "node.column.X_test",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t"
+  },
+  {
+   "id": "node.column.y_test",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:derive_the_facts_that_drive_model_choice_and_store_them_in_d"
+  },
+  {
+   "id": "node.metric.n_classes",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:derive_the_facts_that_drive_model_choice_and_store_them_in_d"
+  },
+  {
+   "id": "node.metric.minority_class_rate",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:derive_the_facts_that_drive_model_choice_and_store_them_in_d"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:the_reasoning_step_this_is_the_node_the_recipe_exists_for_us"
+  },
+  {
+   "id": "node.metric.n_candidates",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:the_reasoning_step_this_is_the_node_the_recipe_exists_for_us"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:score_every_shortlisted_candidate_under_one_protocol_by_call"
+  },
+  {
+   "id": "node.metric.best_cv_score",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:score_every_shortlisted_candidate_under_one_protocol_by_call"
+  },
+  {
+   "id": "node.column.bakeoff_table",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:score_every_shortlisted_candidate_under_one_protocol_by_call"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:define_an_optuna_search_space_for_best_candidate_the_width_t"
+  },
+  {
+   "id": "node.metric.n_trials_completed",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:define_an_optuna_search_space_for_best_candidate_the_width_t"
+  },
+  {
+   "id": "node.metric.best_cv_score_tuned",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:define_an_optuna_search_space_for_best_candidate_the_width_t"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:run_both_gates_on_what_was_chosen_and_fitted_and_do_not_re_i"
+  },
+  {
+   "id": "node.metric.n_selection_issues",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:run_both_gates_on_what_was_chosen_and_fitted_and_do_not_re_i"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva"
+  },
+  {
+   "id": "node.metric.macro_f1",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva"
+  },
+  {
+   "id": "node.metric.roc_auc",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva"
+  },
+  {
+   "id": "node.metric.log_loss",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:plot_the_roc_and_precision_recall_curves_for_the_final_model"
+  },
+  {
+   "id": "node.metric.average_precision",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:plot_the_roc_and_precision_recall_curves_for_the_final_model"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:measure_what_actually_drives_the_predictions_importance_gads"
+  },
+  {
+   "id": "node.metric.n_features_reported",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:measure_what_actually_drives_the_predictions_importance_gads"
+  },
+  {
+   "id": "node.column.importance_table",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:measure_what_actually_drives_the_predictions_importance_gads"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:write_the_model_card_to_model_card_md_and_bind_model_card_te"
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:59+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

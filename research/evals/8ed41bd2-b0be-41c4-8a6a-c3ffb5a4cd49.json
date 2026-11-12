@@ -1,0 +1,309 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "8ed41bd2-b0be-41c4-8a6a-c3ffb5a4cd49",
+ "name": "Years of schooling effect on wages (compulsory-schooling natural experiment)",
+ "verdict": "fail",
+ "critical": {
+  "pass": 4,
+  "fail": 2,
+  "not_evaluable": 0
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 3,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 2,
+   "fail": 2,
+   "not_evaluable": 0
+  },
+  "integrity": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "benchmark": {
+   "pass": 3,
+   "fail": 1,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "ak91_schooling_wages_v1",
+  "verdict": "fail",
+  "passed": 3,
+  "total": 4
+ },
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 4,
+  "created_at": "2026-08-21T17:19:36.923239",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "ak91_schooling_wages.md",
+  "recipe_id": null,
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": "cloud",
+  "run_mode": "research",
+  "rung": "D0"
+ },
+ "attribution": {
+  "exec_nodes": 4,
+  "attempted_nodes": 6,
+  "failed_nodes": 2,
+  "native_primary": 0,
+  "model_pass": 4,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.667
+ },
+ "usage": {
+  "calls": 22,
+  "prompt_tokens": 144808,
+  "completion_tokens": 25044,
+  "cost_usd": 0.280216,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "gemini-3.1-pro-preview",
+   "gemini-3.5-flash-lite",
+   "gemini-3.7-flash",
+   "gpt-5.6-terra",
+   "kimi-k2.7-code"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "task:load_ak91_schooling_wages_csv_and_perform_exploratory_analys",
+   "task_id": "130110ca-8058-4890-bd95-8be236d38593",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": "gemini-3.7-flash",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.011052,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:estimate_naive_baseline_ols_regressions_of_log_wage_on_years",
+   "task_id": "76d9e2d9-57db-4234-b4d3-dc396b8322f8",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": "gemini-3.7-flash",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.01077825,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:implement_two_stage_least_squares_2sls_instrumental_variable",
+   "task_id": "0bec68b2-f755-4651-9477-5e9dd5ddf3c7",
+   "status": "failed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.1-pro-preview",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": 3,
+   "cost_usd": 0.123656,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:compare_ols_versus_2sls_causal_estimates_assess_instrument_s",
+   "task_id": "07195f1e-9787-445a-ad2b-503fae6e37ac",
+   "status": "failed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 0,
+   "completed": 0,
+   "failed": []
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 4,
+   "completed": 2,
+   "failed": [
+    {
+     "node": "task:implement_two_stage_least_squares_2sls_instrumental_variable",
+     "error": "JSON Parsing Error: <failed_attempts>\n\n<generation number=\"1\">\n<exception>\n    litellm.BadRequestError: OpenAIException - litellm.BadRequestError: OpenAIException - Invalid request: the message at pos"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 4 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:load_ak91_schooling_wages_csv_and_perform_exploratory_analys"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:load_ak91_schooling_wages_csv_and_perform_exploratory_analys"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:estimate_naive_baseline_ols_regressions_of_log_wage_on_years"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:estimate_naive_baseline_ols_regressions_of_log_wage_on_years"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "failed: Operation timed out (LLM generation or sandbox execution exceeded limit)",
+   "critical": true,
+   "node": "task:implement_two_stage_least_squares_2sls_instrumental_variable"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:compare_ols_versus_2sls_causal_estimates_assess_instrument_s"
+  },
+  {
+   "id": "benchmark.reproducibility.metrics.json exists",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "file missing",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact final_dashboard.html",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact research_report.md",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact workflow_execution.py",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:59+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

@@ -1,0 +1,323 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "64dc97ce-b4e4-4380-9363-15388b0c301d",
+ "name": "GBSG2 Breast Cancer — Cox survival regression (hazard ratios + PH check)",
+ "verdict": "fail",
+ "critical": {
+  "pass": 5,
+  "fail": 1,
+  "not_evaluable": 5
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 3,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 3,
+   "fail": 1,
+   "not_evaluable": 5
+  },
+  "integrity": {
+   "pass": 3,
+   "fail": 0,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": null,
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 4,
+  "created_at": "2026-07-31T22:02:52.573453",
+  "excluded_followup_tasks": 1,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "gbsg2_survival_cox.md",
+  "recipe_id": null,
+  "recipe_version": "1.2.0",
+  "engine_id": null,
+  "routing_mode": "local",
+  "run_mode": null,
+  "rung": "D4"
+ },
+ "attribution": {
+  "exec_nodes": 3,
+  "attempted_nodes": 4,
+  "failed_nodes": 1,
+  "native_primary": 0,
+  "model_pass": 3,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.75
+ },
+ "usage": {
+  "calls": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": []
+ },
+ "nodes": [
+  {
+   "node": "task:load_the_dataset_into_df_identify_the_duration_column_time_o",
+   "task_id": "af16e178-8698-47f8-a96d-4196474284be",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 3
+   }
+  },
+  {
+   "node": "task:describe_survival_before_modeling_using_lifelines_see_the_su",
+   "task_id": "88a265a5-f1d3-49b9-bb25-a1fe9932b2ed",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "task:fit_the_cox_model_and_test_its_core_assumption_in_one_native",
+   "task_id": "5d9b1238-0d2f-4dbd-923f-18563981ba1b",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "task:turn_the_cox_fit_into_a_defensible_interpretation_produce_a_",
+   "task_id": "ac79b663-bcfe-4865-9a77-8faf37f3a9d7",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 4,
+   "completed": 3,
+   "failed": [
+    {
+     "node": "task:turn_the_cox_fit_into_a_defensible_interpretation_produce_a_",
+     "error": "Value of 'error_x' is not the name of a column in 'data_frame'. Expected one of ['Covariate', 'Hazard Ratio', 'CI Lower', 'CI Upper', 'p-value'] but received: CI"
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 4,
+   "completed": 3,
+   "failed": [
+    {
+     "node": "task:turn_the_cox_fit_into_a_defensible_interpretation_produce_a_",
+     "error": "name 'Plot_df' is not defined"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 4 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:load_the_dataset_into_df_identify_the_duration_column_time_o"
+  },
+  {
+   "id": "node.variable.df",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:load_the_dataset_into_df_identify_the_duration_column_time_o",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.time_col",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:load_the_dataset_into_df_identify_the_duration_column_time_o",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.event_col",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:load_the_dataset_into_df_identify_the_duration_column_time_o",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:load_the_dataset_into_df_identify_the_duration_column_time_o"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:describe_survival_before_modeling_using_lifelines_see_the_su"
+  },
+  {
+   "id": "node.variable.km_median",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:describe_survival_before_modeling_using_lifelines_see_the_su",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:describe_survival_before_modeling_using_lifelines_see_the_su"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:fit_the_cox_model_and_test_its_core_assumption_in_one_native"
+  },
+  {
+   "id": "node.variable.cox_report",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:fit_the_cox_model_and_test_its_core_assumption_in_one_native",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:fit_the_cox_model_and_test_its_core_assumption_in_one_native"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "failed: name 'Plot_df' is not defined",
+   "critical": true,
+   "node": "task:turn_the_cox_fit_into_a_defensible_interpretation_produce_a_"
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:58+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

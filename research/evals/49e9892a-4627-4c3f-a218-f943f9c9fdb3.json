@@ -1,0 +1,120 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "49e9892a-4627-4c3f-a218-f943f9c9fdb3",
+ "name": "Recovered 49e9892a",
+ "verdict": "not_evaluable",
+ "critical": {
+  "pass": 0,
+  "fail": 0,
+  "not_evaluable": 2
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 0,
+   "fail": 0,
+   "not_evaluable": 3
+  },
+  "deliverables": {
+   "pass": 0,
+   "fail": 0,
+   "not_evaluable": 3
+  }
+ },
+ "benchmark": null,
+ "run": {
+  "terminal_state": "record_missing",
+  "void_suspected": false,
+  "workflow_attempts": 0,
+  "recipe_id": null,
+  "plan": null,
+  "exec_nodes": 0,
+  "created_at": "2026-07-31T23:57:03.611960",
+  "excluded_followup_tasks": 2,
+  "executions_on_project": 0
+ },
+ "fingerprint": {
+  "spec": "gbsg2_survival_ml.md",
+  "recipe_id": null,
+  "recipe_version": "1.1.0",
+  "engine_id": null,
+  "routing_mode": "local",
+  "run_mode": null,
+  "rung": "D4"
+ },
+ "attribution": {
+  "exec_nodes": 0,
+  "attempted_nodes": 0,
+  "failed_nodes": 0,
+  "native_primary": 0,
+  "model_pass": 0,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": null
+ },
+ "usage": {
+  "calls": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": []
+ },
+ "nodes": [],
+ "prior_attempts": [],
+ "llm_judgments": {
+  "critique_attempts": 0,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "pass"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "the main workflow's task rows are gone (only follow-ups remain)",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "the main workflow's task rows are gone (only follow-ups remain)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (record_missing)",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (record_missing)",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (record_missing)",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:58+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

@@ -1,0 +1,120 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "79b2f28d-9bd4-44a0-815e-4f9040b4a581",
+ "name": "SAP Subscription (binary classification, minimal guidance)",
+ "verdict": "not_evaluable",
+ "critical": {
+  "pass": 0,
+  "fail": 0,
+  "not_evaluable": 2
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 0,
+   "fail": 0,
+   "not_evaluable": 3
+  },
+  "deliverables": {
+   "pass": 0,
+   "fail": 0,
+   "not_evaluable": 3
+  }
+ },
+ "benchmark": null,
+ "run": {
+  "terminal_state": "never_started",
+  "void_suspected": false,
+  "workflow_attempts": 0,
+  "recipe_id": null,
+  "plan": null,
+  "exec_nodes": 0,
+  "created_at": "2026-11-10T12:27:48.203729",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 0
+ },
+ "fingerprint": {
+  "spec": "sap_term_deposit_subscription.md",
+  "recipe_id": null,
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": null,
+  "run_mode": null,
+  "rung": null
+ },
+ "attribution": {
+  "exec_nodes": 0,
+  "attempted_nodes": 0,
+  "failed_nodes": 0,
+  "native_primary": 0,
+  "model_pass": 0,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": null
+ },
+ "usage": {
+  "calls": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": []
+ },
+ "nodes": [],
+ "prior_attempts": [],
+ "llm_judgments": {
+  "critique_attempts": 0,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": null
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "no tasks: the workflow was never launched",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "no tasks: the workflow was never launched",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (never_started)",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (never_started)",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (never_started)",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:59+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

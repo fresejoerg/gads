@@ -1,0 +1,523 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "d454a8af-8167-4fa5-afd6-b61ddc2cc691",
+ "name": "Social-network information effect on insurance take-up",
+ "verdict": "fail",
+ "critical": {
+  "pass": 2,
+  "fail": 7,
+  "not_evaluable": 2
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 3,
+   "fail": 1,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 0,
+   "fail": 7,
+   "not_evaluable": 19
+  },
+  "benchmark": {
+   "pass": 3,
+   "fail": 1,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "social_insurance_takeup_v1",
+  "verdict": "fail",
+  "passed": 3,
+  "total": 4
+ },
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 7,
+  "created_at": "2026-08-22T02:40:13.281536",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "social_insurance_takeup.md",
+  "recipe_id": null,
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": "local",
+  "run_mode": "research",
+  "rung": "D0"
+ },
+ "attribution": {
+  "exec_nodes": 1,
+  "attempted_nodes": 4,
+  "failed_nodes": 3,
+  "native_primary": 0,
+  "model_pass": 1,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.25
+ },
+ "usage": {
+  "calls": 16,
+  "prompt_tokens": 55019,
+  "completion_tokens": 12758,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "local_model"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "task:load_the_dataset_and_perform_initial_data_cleaning_handle_mi",
+   "task_id": "5606699c-c3be-4b10-925c-7b454345bbc9",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 5
+   }
+  },
+  {
+   "node": "task:create_a_binary_treatment_variable_treatment_where_1_indicat",
+   "task_id": "951cc87d-9486-4641-a7e4-0dfc0a87f45b",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 7
+   }
+  },
+  {
+   "node": "task:visualize_the_distribution_of_insurance_take_up_rates_across",
+   "task_id": "b511b240-2367-453e-901e-9c14af71094b",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:analyze_the_relationship_between_rice_production_area_and_in",
+   "task_id": "d3ce454f-ad8a-41aa-a9fc-cb4cc5c02642",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:estimate_the_average_treatment_effect_ate_on_insurance_take_",
+   "task_id": "2ab22771-6ed7-4323-ac4c-64c8aa3fe0cd",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 2
+   }
+  },
+  {
+   "node": "task:evaluate_the_robustness_of_the_ate_estimate_by_checking_for_",
+   "task_id": "b9abb7a7-8944-4a9a-8eca-4a1895b0c77c",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 2
+   }
+  },
+  {
+   "node": "task:interpret_the_results_and_provide_insights_into_how_intensiv",
+   "task_id": "cc36dd03-cefa-40cf-af47-a258dd6ecc3c",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 3
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 4,
+   "completed": 1,
+   "failed": [
+    {
+     "node": "task:perform_exploratory_data_analysis_to_understand_the_distribu",
+     "error": "Validation Error: sequence item 13: expected str instance, int found"
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 5,
+   "completed": 0,
+   "failed": [
+    {
+     "node": "task:load_the_dataset_and_perform_initial_data_cleaning_handle_mi",
+     "error": "Validation Error: sequence item 13: expected str instance, int found"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 7 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.metrics.json",
+   "dimension": "deliverables",
+   "status": "fail",
+   "detail": "missing or unparseable",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "failed: Validation Error: sequence item 13: expected str instance, int found",
+   "critical": true,
+   "node": "task:load_the_dataset_and_perform_initial_data_cleaning_handle_mi"
+  },
+  {
+   "id": "node.column.age",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_the_dataset_and_perform_initial_data_cleaning_handle_mi"
+  },
+  {
+   "id": "node.column.agpop",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_the_dataset_and_perform_initial_data_cleaning_handle_mi"
+  },
+  {
+   "id": "node.column.ricearea_2010",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_the_dataset_and_perform_initial_data_cleaning_handle_mi"
+  },
+  {
+   "id": "node.column.male",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_the_dataset_and_perform_initial_data_cleaning_handle_mi"
+  },
+  {
+   "id": "node.column.literacy",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_the_dataset_and_perform_initial_data_cleaning_handle_mi"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:create_a_binary_treatment_variable_treatment_where_1_indicat"
+  },
+  {
+   "id": "node.column.age",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:create_a_binary_treatment_variable_treatment_where_1_indicat"
+  },
+  {
+   "id": "node.column.agpop",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:create_a_binary_treatment_variable_treatment_where_1_indicat"
+  },
+  {
+   "id": "node.column.ricearea_2010",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:create_a_binary_treatment_variable_treatment_where_1_indicat"
+  },
+  {
+   "id": "node.column.male",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:create_a_binary_treatment_variable_treatment_where_1_indicat"
+  },
+  {
+   "id": "node.column.intensive",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:create_a_binary_treatment_variable_treatment_where_1_indicat"
+  },
+  {
+   "id": "node.column.literacy",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:create_a_binary_treatment_variable_treatment_where_1_indicat"
+  },
+  {
+   "id": "node.column.treatment",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:create_a_binary_treatment_variable_treatment_where_1_indicat"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:visualize_the_distribution_of_insurance_take_up_rates_across"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:analyze_the_relationship_between_rice_production_area_and_in"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_ate_on_insurance_take_"
+  },
+  {
+   "id": "node.metric.ate",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_ate_on_insurance_take_"
+  },
+  {
+   "id": "node.column.treatment",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:estimate_the_average_treatment_effect_ate_on_insurance_take_"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:evaluate_the_robustness_of_the_ate_estimate_by_checking_for_"
+  },
+  {
+   "id": "node.metric.ate_sensitivity",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:evaluate_the_robustness_of_the_ate_estimate_by_checking_for_"
+  },
+  {
+   "id": "node.column.treatment",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:evaluate_the_robustness_of_the_ate_estimate_by_checking_for_"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:interpret_the_results_and_provide_insights_into_how_intensiv"
+  },
+  {
+   "id": "node.insight.causal_effect",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:interpret_the_results_and_provide_insights_into_how_intensiv"
+  },
+  {
+   "id": "node.insight.confounding_factors",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:interpret_the_results_and_provide_insights_into_how_intensiv"
+  },
+  {
+   "id": "node.insight.policy_implications",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:interpret_the_results_and_provide_insights_into_how_intensiv"
+  },
+  {
+   "id": "benchmark.reproducibility.metrics.json exists",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "file missing",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact final_dashboard.html",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact research_report.md",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact workflow_execution.py",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:59+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

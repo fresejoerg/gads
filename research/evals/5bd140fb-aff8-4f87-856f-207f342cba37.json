@@ -1,0 +1,421 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "5bd140fb-aff8-4f87-856f-207f342cba37",
+ "name": "Growth-mindset intervention effect on academic achievement",
+ "verdict": "pass",
+ "critical": {
+  "pass": 6,
+  "fail": 0,
+  "not_evaluable": 0
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 3,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "integrity": {
+   "pass": 4,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "contract": {
+   "pass": 13,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "benchmark": {
+   "pass": 3,
+   "fail": 2,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "learning_mindset_achievement_v1",
+  "verdict": "fail",
+  "passed": 3,
+  "total": 5
+ },
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 4,
+  "created_at": "2026-08-22T01:54:43.549839",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "learning_mindset_achievement.md",
+  "recipe_id": null,
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": "local",
+  "run_mode": "research",
+  "rung": "D0"
+ },
+ "attribution": {
+  "exec_nodes": 7,
+  "attempted_nodes": 9,
+  "failed_nodes": 2,
+  "native_primary": 0,
+  "model_pass": 7,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.778
+ },
+ "usage": {
+  "calls": 32,
+  "prompt_tokens": 112341,
+  "completion_tokens": 15789,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "local_model"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "task:load_the_dataset_and_apply_the_sample_rows_constraint_to_ens",
+   "task_id": "5fdc3454-f158-4934-968b-d1420f42d129",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e",
+   "task_id": "46bf3a7c-82be-4d73-b3d7-f0179b15a2c6",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 5,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:analyze_the_distribution_of_achievement_scores_by_interventi",
+   "task_id": "e9e3e9a0-db52-4f57-85c9-19d62d5d0ae2",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 5,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:evaluate_the_robustness_of_the_causal_effect_by_checking_for",
+   "task_id": "dc1f18dc-3958-449d-9c2f-4774640a82a1",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 5,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 6,
+   "completed": 1,
+   "failed": [
+    {
+     "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e",
+     "error": "module 'plotly.express' has no attribute 'barh'"
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 6,
+   "completed": 4,
+   "failed": [
+    {
+     "node": "task:evaluate_the_robustness_of_the_causal_effect_by_checking_for",
+     "error": "index 0 is out of bounds for axis 0 with size 0"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 4 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.metrics_consistent",
+   "dimension": "integrity",
+   "status": "not_evaluable",
+   "detail": "no captured metric appears in metrics.json",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:load_the_dataset_and_apply_the_sample_rows_constraint_to_ens"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:load_the_dataset_and_apply_the_sample_rows_constraint_to_ens"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e"
+  },
+  {
+   "id": "node.column.intervention",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.column.achievement_score",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.column.success_expect",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:analyze_the_distribution_of_achievement_scores_by_interventi"
+  },
+  {
+   "id": "node.column.intervention",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:analyze_the_distribution_of_achievement_scores_by_interventi",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.column.achievement_score",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:analyze_the_distribution_of_achievement_scores_by_interventi",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.column.success_expect",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:analyze_the_distribution_of_achievement_scores_by_interventi",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:analyze_the_distribution_of_achievement_scores_by_interventi"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:evaluate_the_robustness_of_the_causal_effect_by_checking_for"
+  },
+  {
+   "id": "node.column.intervention",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:evaluate_the_robustness_of_the_causal_effect_by_checking_for",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.column.achievement_score",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:evaluate_the_robustness_of_the_causal_effect_by_checking_for",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.column.success_expect",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:evaluate_the_robustness_of_the_causal_effect_by_checking_for",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:evaluate_the_robustness_of_the_causal_effect_by_checking_for"
+  },
+  {
+   "id": "benchmark.reproducibility.metric estimate",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "not in metrics.json",
+   "critical": false
+  },
+  {
+   "id": "benchmark.reproducibility.metric linear_dml_estimate",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "not in metrics.json",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact final_dashboard.html",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact research_report.md",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact workflow_execution.py",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:59+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

@@ -1,0 +1,482 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "319e8d4e-12d9-439a-bf59-24ab24b8796c",
+ "name": "Adult Census — EDA & modelling preparation",
+ "verdict": "fail",
+ "critical": {
+  "pass": 2,
+  "fail": 6,
+  "not_evaluable": 22
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 3,
+   "fail": 1,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 0,
+   "fail": 6,
+   "not_evaluable": 22
+  }
+ },
+ "benchmark": null,
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 6,
+  "created_at": "2026-08-14T18:16:44.162680",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "eda_adult_ml_prep.md",
+  "recipe_id": null,
+  "recipe_version": "1.1.1",
+  "engine_id": null,
+  "routing_mode": "local",
+  "run_mode": null,
+  "rung": "D3"
+ },
+ "attribution": {
+  "exec_nodes": 0,
+  "attempted_nodes": 1,
+  "failed_nodes": 1,
+  "native_primary": 0,
+  "model_pass": 0,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.0
+ },
+ "usage": {
+  "calls": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": []
+ },
+ "nodes": [
+  {
+   "node": "task:load_the_dataset_into_df_and_profile_every_column_on_the_ful",
+   "task_id": "5b744a0b-cb63-4111-b706-68cf7b7e3442",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 8
+   }
+  },
+  {
+   "node": "task:assess_data_quality_and_store_the_result_in_quality_report_t",
+   "task_id": "dc37bab7-0266-4ff9-97dd-7b9437913666",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 3
+   }
+  },
+  {
+   "node": "task:visualise_the_distribution_of_the_columns_histograms_for_num",
+   "task_id": "ba51fa99-1097-4296-9721-5723ff6a197e",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 3
+   }
+  },
+  {
+   "node": "task:examine_relationships_between_columns_compute_and_plot_a_cor",
+   "task_id": "664da30d-a09a-4630-9b64-dd464ba51ffd",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 4
+   }
+  },
+  {
+   "node": "task:decide_how_each_column_should_be_prepared_then_hand_those_de",
+   "task_id": "4cac99c9-92dc-4361-b409-b2a12ca3dc03",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 3
+   }
+  },
+  {
+   "node": "task:write_a_short_narrative_summary_of_the_analysis_to_eda_summa",
+   "task_id": "9a5f842b-5a8b-4438-9088-456d9503ca5e",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 1
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 6,
+   "completed": 0,
+   "failed": [
+    {
+     "node": "task:load_the_dataset_into_df_and_profile_every_column_on_the_ful",
+     "error": "generated text is not valid Python (unmatched ')' at line 17)"
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 6,
+   "completed": 0,
+   "failed": [
+    {
+     "node": "task:load_the_dataset_into_df_and_profile_every_column_on_the_ful",
+     "error": "generated text is not valid Python (unmatched ')' at line 9)"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 6 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.metrics.json",
+   "dimension": "deliverables",
+   "status": "fail",
+   "detail": "missing or unparseable",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "failed: generated text is not valid Python (unmatched ')' at line 29)",
+   "critical": true,
+   "node": "task:load_the_dataset_into_df_and_profile_every_column_on_the_ful"
+  },
+  {
+   "id": "node.metric.n_rows",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:load_the_dataset_into_df_and_profile_every_column_on_the_ful"
+  },
+  {
+   "id": "node.metric.n_cols",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:load_the_dataset_into_df_and_profile_every_column_on_the_ful"
+  },
+  {
+   "id": "node.metric.missing_cell_rate",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:load_the_dataset_into_df_and_profile_every_column_on_the_ful"
+  },
+  {
+   "id": "node.variable.df",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:load_the_dataset_into_df_and_profile_every_column_on_the_ful"
+  },
+  {
+   "id": "node.variable.profile",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:load_the_dataset_into_df_and_profile_every_column_on_the_ful"
+  },
+  {
+   "id": "node.variable.n_rows",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:load_the_dataset_into_df_and_profile_every_column_on_the_ful"
+  },
+  {
+   "id": "node.variable.n_cols",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:load_the_dataset_into_df_and_profile_every_column_on_the_ful"
+  },
+  {
+   "id": "node.variable.missing_cell_rate",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:load_the_dataset_into_df_and_profile_every_column_on_the_ful"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:assess_data_quality_and_store_the_result_in_quality_report_t"
+  },
+  {
+   "id": "node.metric.n_flagged_columns",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:assess_data_quality_and_store_the_result_in_quality_report_t"
+  },
+  {
+   "id": "node.variable.quality",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:assess_data_quality_and_store_the_result_in_quality_report_t"
+  },
+  {
+   "id": "node.variable.n_flagged_columns",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:assess_data_quality_and_store_the_result_in_quality_report_t"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:visualise_the_distribution_of_the_columns_histograms_for_num"
+  },
+  {
+   "id": "node.metric.n_univariate_figures",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:visualise_the_distribution_of_the_columns_histograms_for_num"
+  },
+  {
+   "id": "node.variable.univariate_figures",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:visualise_the_distribution_of_the_columns_histograms_for_num"
+  },
+  {
+   "id": "node.variable.n_univariate_figures",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:visualise_the_distribution_of_the_columns_histograms_for_num"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:examine_relationships_between_columns_compute_and_plot_a_cor"
+  },
+  {
+   "id": "node.metric.n_bivariate_figures",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:examine_relationships_between_columns_compute_and_plot_a_cor"
+  },
+  {
+   "id": "node.variable.correlations",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:examine_relationships_between_columns_compute_and_plot_a_cor"
+  },
+  {
+   "id": "node.variable.bivariate_figures",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:examine_relationships_between_columns_compute_and_plot_a_cor"
+  },
+  {
+   "id": "node.variable.n_bivariate_figures",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:examine_relationships_between_columns_compute_and_plot_a_cor"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:decide_how_each_column_should_be_prepared_then_hand_those_de"
+  },
+  {
+   "id": "node.metric.n_manifest_columns",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:decide_how_each_column_should_be_prepared_then_hand_those_de"
+  },
+  {
+   "id": "node.variable.transformations",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:decide_how_each_column_should_be_prepared_then_hand_those_de"
+  },
+  {
+   "id": "node.variable.n_manifest_columns",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:decide_how_each_column_should_be_prepared_then_hand_those_de"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:write_a_short_narrative_summary_of_the_analysis_to_eda_summa"
+  },
+  {
+   "id": "node.variable.eda_summary_text",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:write_a_short_narrative_summary_of_the_analysis_to_eda_summa"
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:58+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

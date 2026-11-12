@@ -1,0 +1,415 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "b797c4b8-c8cd-461e-8a59-8697915df977",
+ "name": "Years of schooling effect on wages (compulsory-schooling natural experiment)",
+ "verdict": "fail",
+ "critical": {
+  "pass": 6,
+  "fail": 2,
+  "not_evaluable": 0
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 4,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "integrity": {
+   "pass": 4,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 6,
+   "fail": 2,
+   "not_evaluable": 4
+  },
+  "benchmark": {
+   "pass": 3,
+   "fail": 1,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "ak91_schooling_wages_v1",
+  "verdict": "fail",
+  "passed": 3,
+  "total": 4
+ },
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 5,
+  "created_at": "2026-08-22T02:16:46.927803",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "ak91_schooling_wages.md",
+  "recipe_id": null,
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": "local",
+  "run_mode": "research",
+  "rung": "D0"
+ },
+ "attribution": {
+  "exec_nodes": 6,
+  "attempted_nodes": 9,
+  "failed_nodes": 3,
+  "native_primary": 0,
+  "model_pass": 6,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.667
+ },
+ "usage": {
+  "calls": 30,
+  "prompt_tokens": 98856,
+  "completion_tokens": 6988,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "local_model"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "task:load_the_dataset_and_apply_the_sample_rows_constraint_to_ens",
+   "task_id": "9be4f89c-fe09-4214-8dd1-086f5d8588d8",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:create_a_binary_treatment_variable_indicating_whether_the_in",
+   "task_id": "4c6fb202-5a6c-4c59-9cec-1f677567e7b9",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 3,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:fit_a_linear_regression_model_to_estimate_the_causal_effect_",
+   "task_id": "44b292ee-0fee-46f2-9319-c603bec66a05",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 4,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:visualize_the_causal_effect_estimate_and_its_confidence_inte",
+   "task_id": "9edbe07c-d1fe-4ec0-a51b-54d97b966822",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": 4,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 2
+   }
+  },
+  {
+   "node": "task:interpret_the_causal_effect_of_an_additional_year_of_schooli",
+   "task_id": "e2666d1a-0063-423b-a661-e38c57701cbb",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 2
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 3,
+   "completed": 2,
+   "failed": [
+    {
+     "node": "task:fit_a_linear_regression_model_to_estimate_the_causal_effect_",
+     "error": "generated text is not valid Python (closing parenthesis ')' does not match opening parenthesis '[' at line 15)"
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 3,
+   "completed": 2,
+   "failed": [
+    {
+     "node": "task:fit_a_linear_regression_model_to_estimate_the_causal_effect_",
+     "error": "generated text is not valid Python ('[' was never closed at line 6)"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 5 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.metrics.json",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.metrics_consistent",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "1 captured metric(s) match metrics.json",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:load_the_dataset_and_apply_the_sample_rows_constraint_to_ens"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:load_the_dataset_and_apply_the_sample_rows_constraint_to_ens"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:create_a_binary_treatment_variable_indicating_whether_the_in"
+  },
+  {
+   "id": "node.column.treatment",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:create_a_binary_treatment_variable_indicating_whether_the_in",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:create_a_binary_treatment_variable_indicating_whether_the_in"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:fit_a_linear_regression_model_to_estimate_the_causal_effect_"
+  },
+  {
+   "id": "node.metric.ate_estimate",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.3919855461665751",
+   "critical": true,
+   "node": "task:fit_a_linear_regression_model_to_estimate_the_causal_effect_"
+  },
+  {
+   "id": "node.column.treatment",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:fit_a_linear_regression_model_to_estimate_the_causal_effect_",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:fit_a_linear_regression_model_to_estimate_the_causal_effect_"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "failed: scatter() got an unexpected keyword argument 'size_outlier'",
+   "critical": true,
+   "node": "task:visualize_the_causal_effect_estimate_and_its_confidence_inte"
+  },
+  {
+   "id": "node.insight.causal_effect_direction",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:visualize_the_causal_effect_estimate_and_its_confidence_inte"
+  },
+  {
+   "id": "node.insight.statistical_significance",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:visualize_the_causal_effect_estimate_and_its_confidence_inte"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:interpret_the_causal_effect_of_an_additional_year_of_schooli"
+  },
+  {
+   "id": "node.insight.wage_impact_per_year",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:interpret_the_causal_effect_of_an_additional_year_of_schooli"
+  },
+  {
+   "id": "node.insight.policy_relevance",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:interpret_the_causal_effect_of_an_additional_year_of_schooli"
+  },
+  {
+   "id": "benchmark.reproducibility.metric estimate",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "not in metrics.json",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact final_dashboard.html",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact research_report.md",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact workflow_execution.py",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:59+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

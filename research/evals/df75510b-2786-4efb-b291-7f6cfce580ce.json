@@ -1,0 +1,451 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "df75510b-2786-4efb-b291-7f6cfce580ce",
+ "name": "National Supported Work job-training program (LaLonde)",
+ "verdict": "pass",
+ "critical": {
+  "pass": 10,
+  "fail": 0,
+  "not_evaluable": 0
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 4,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "integrity": {
+   "pass": 6,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 15,
+   "fail": 3,
+   "not_evaluable": 0
+  },
+  "benchmark": {
+   "pass": 0,
+   "fail": 1,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "jobs_lalonde_training_v1",
+  "verdict": "fail",
+  "passed": 0,
+  "total": 1
+ },
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 2,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 5,
+  "created_at": "2026-08-22T01:14:54.564035",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "jobs_lalonde_training.md",
+  "recipe_id": null,
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": "local",
+  "run_mode": "research",
+  "rung": "D0"
+ },
+ "attribution": {
+  "exec_nodes": 6,
+  "attempted_nodes": 7,
+  "failed_nodes": 1,
+  "native_primary": 0,
+  "model_pass": 6,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.857
+ },
+ "usage": {
+  "calls": 26,
+  "prompt_tokens": 88135,
+  "completion_tokens": 14171,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "local_model"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "task:load_the_dataset_and_perform_initial_data_quality_checks_inc",
+   "task_id": "f67f1605-5eca-4487-95e7-b920fdb35d48",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 4,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:perform_exploratory_data_analysis_to_understand_the_distribu",
+   "task_id": "91076b7a-ac09-4dc6-8a97-9e10952c8c2b",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 4,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:estimate_the_average_treatment_effect_ate_using_dowhy_s_caus",
+   "task_id": "9b575ea6-5390-49a5-8bf8-a70c472b9d21",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 7,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:visualize_the_estimated_ate_with_confidence_intervals_to_ass",
+   "task_id": "ed8d90f3-89de-4a6b-90ce-e0a02d101fc1",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 3,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:interpret_the_results_and_provide_insights_into_the_effectiv",
+   "task_id": "ac37ba73-24f3-4d5c-a699-92abdb398a6f",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 5,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 2,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 6,
+   "completed": 1,
+   "failed": [
+    {
+     "node": "task:identify_and_handle_missing_values_in_the_dataset_to_ensure_",
+     "error": "'>' not supported between instances of 'list' and 'int'"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": true,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 2 has 5 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.metrics.json",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.metrics_consistent",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "3 captured metric(s) match metrics.json",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:load_the_dataset_and_perform_initial_data_quality_checks_inc"
+  },
+  {
+   "id": "node.insight.missing_values_handled",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "not emitted (runtime only warns)",
+   "critical": false,
+   "node": "task:load_the_dataset_and_perform_initial_data_quality_checks_inc"
+  },
+  {
+   "id": "node.column.t",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:load_the_dataset_and_perform_initial_data_quality_checks_inc",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.column.y",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:load_the_dataset_and_perform_initial_data_quality_checks_inc",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:load_the_dataset_and_perform_initial_data_quality_checks_inc"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:perform_exploratory_data_analysis_to_understand_the_distribu"
+  },
+  {
+   "id": "node.insight.distribution_analysis",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "not emitted (runtime only warns)",
+   "critical": false,
+   "node": "task:perform_exploratory_data_analysis_to_understand_the_distribu"
+  },
+  {
+   "id": "node.column.t",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:perform_exploratory_data_analysis_to_understand_the_distribu",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.column.y",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:perform_exploratory_data_analysis_to_understand_the_distribu",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:perform_exploratory_data_analysis_to_understand_the_distribu"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_ate_using_dowhy_s_caus"
+  },
+  {
+   "id": "node.metric.ate_estimate",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.07568273203250186",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_ate_using_dowhy_s_caus"
+  },
+  {
+   "id": "node.metric.ate_ci_lower",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.0",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_ate_using_dowhy_s_caus"
+  },
+  {
+   "id": "node.metric.ate_ci_upper",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.0",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_ate_using_dowhy_s_caus"
+  },
+  {
+   "id": "node.column.t",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:estimate_the_average_treatment_effect_ate_using_dowhy_s_caus",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.column.y",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:estimate_the_average_treatment_effect_ate_using_dowhy_s_caus",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:estimate_the_average_treatment_effect_ate_using_dowhy_s_caus"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:visualize_the_estimated_ate_with_confidence_intervals_to_ass"
+  },
+  {
+   "id": "node.insight.ate_visualization",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "emitted",
+   "critical": false,
+   "node": "task:visualize_the_estimated_ate_with_confidence_intervals_to_ass"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:visualize_the_estimated_ate_with_confidence_intervals_to_ass"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:interpret_the_results_and_provide_insights_into_the_effectiv"
+  },
+  {
+   "id": "node.insight.program_effectiveness",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "not emitted (runtime only warns)",
+   "critical": false,
+   "node": "task:interpret_the_results_and_provide_insights_into_the_effectiv"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:interpret_the_results_and_provide_insights_into_the_effectiv"
+  },
+  {
+   "id": "benchmark.reproducibility.metric estimate",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "not in metrics.json",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:59+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

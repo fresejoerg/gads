@@ -1,0 +1,859 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "ea7593b6-70f8-4ba2-a1b2-8ef513b4fa4d",
+ "name": "Adult census — reasoned model selection",
+ "verdict": "fail",
+ "critical": {
+  "pass": 10,
+  "fail": 1,
+  "not_evaluable": 46
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 1,
+   "fail": 1,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 0,
+   "fail": 0,
+   "not_evaluable": 3
+  },
+  "integrity": {
+   "pass": 9,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "contract": {
+   "pass": 9,
+   "fail": 0,
+   "not_evaluable": 46
+  }
+ },
+ "benchmark": null,
+ "run": {
+  "terminal_state": "halted",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 9,
+  "created_at": "2026-08-17T16:41:14.178299",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "adult_model_selection.md",
+  "recipe_id": null,
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": null,
+  "run_mode": null,
+  "rung": "D3"
+ },
+ "attribution": {
+  "exec_nodes": 9,
+  "attempted_nodes": 9,
+  "failed_nodes": 0,
+  "native_primary": 0,
+  "model_pass": 9,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 1.0
+ },
+ "usage": {
+  "calls": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": []
+ },
+ "nodes": [
+  {
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t",
+   "task_id": "5598720e-ae42-4074-9093-71b1a23444cf",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 8
+   }
+  },
+  {
+   "node": "task:derive_the_facts_that_drive_model_choice_and_store_them_in_d",
+   "task_id": "fc0747e1-b5bc-4ff8-8017-218ec262ae4d",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 5
+   }
+  },
+  {
+   "node": "task:the_reasoning_step_this_is_the_node_the_recipe_exists_for_us",
+   "task_id": "e530a564-28c7-40b5-884d-6c8fccedfbae",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 4
+   }
+  },
+  {
+   "node": "task:score_every_shortlisted_candidate_under_one_protocol_by_call",
+   "task_id": "4d894454-972b-4527-b2c7-6c58363e2bdc",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 4
+   }
+  },
+  {
+   "node": "task:define_an_optuna_search_space_for_best_candidate_the_width_t",
+   "task_id": "a4e44e33-eec5-44bb-a041-d54e76bec8dc",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 7
+   }
+  },
+  {
+   "node": "task:run_both_gates_on_what_was_chosen_and_fitted_and_do_not_re_i",
+   "task_id": "6e0f76e7-031d-4717-8503-cacb5052376e",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 4
+   }
+  },
+  {
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva",
+   "task_id": "606be2be-5883-4b77-bd59-17aabae6a955",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 9
+   }
+  },
+  {
+   "node": "task:measure_what_actually_drives_the_predictions_importance_gads",
+   "task_id": "7b607363-2e87-4538-95f6-c909ba65a7f8",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 4
+   }
+  },
+  {
+   "node": "task:write_the_model_card_to_model_card_md_and_bind_model_card_te",
+   "task_id": "eb617a91-961a-4539-9f81-51a771926bbf",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 1
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 9,
+   "completed": 6,
+   "failed": [
+    {
+     "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva",
+     "error": "'threshold'"
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 9,
+   "completed": 6,
+   "failed": [
+    {
+     "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva",
+     "error": "'threshold'"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 0,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": null
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "fail",
+   "detail": "[HALTED] Fatal system error: <failed_attempts> <generation number=\"1\"> <exception> litellm.BadRequestError: OpenAIException - litellm.BadRequestError: OpenAIException - Error code: 400 - {'error': 'Engine protocol predict request returned …",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 9 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (halted)",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (halted)",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (halted)",
+   "critical": false
+  },
+  {
+   "id": "run.metrics_consistent",
+   "dimension": "integrity",
+   "status": "not_evaluable",
+   "detail": "no captured metric appears in metrics.json",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t"
+  },
+  {
+   "id": "node.metric.n_train_rows",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "result has no metrics_captured (run predates metric capture)",
+   "critical": true,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t"
+  },
+  {
+   "id": "node.metric.n_features",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "result has no metrics_captured (run predates metric capture)",
+   "critical": true,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t"
+  },
+  {
+   "id": "node.variable.X_train",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.y_train",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.X_test",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.y_test",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_train_rows",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_features",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:load_the_modelling_table_and_bind_x_train_y_train_x_test_y_t"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:derive_the_facts_that_drive_model_choice_and_store_them_in_d"
+  },
+  {
+   "id": "node.metric.n_classes",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "result has no metrics_captured (run predates metric capture)",
+   "critical": true,
+   "node": "task:derive_the_facts_that_drive_model_choice_and_store_them_in_d"
+  },
+  {
+   "id": "node.metric.minority_class_rate",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "result has no metrics_captured (run predates metric capture)",
+   "critical": true,
+   "node": "task:derive_the_facts_that_drive_model_choice_and_store_them_in_d"
+  },
+  {
+   "id": "node.variable.dataset_facts",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:derive_the_facts_that_drive_model_choice_and_store_them_in_d",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_classes",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:derive_the_facts_that_drive_model_choice_and_store_them_in_d",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.minority_class_rate",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:derive_the_facts_that_drive_model_choice_and_store_them_in_d",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:derive_the_facts_that_drive_model_choice_and_store_them_in_d"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:the_reasoning_step_this_is_the_node_the_recipe_exists_for_us"
+  },
+  {
+   "id": "node.metric.n_candidates",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "result has no metrics_captured (run predates metric capture)",
+   "critical": true,
+   "node": "task:the_reasoning_step_this_is_the_node_the_recipe_exists_for_us"
+  },
+  {
+   "id": "node.variable.candidates",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:the_reasoning_step_this_is_the_node_the_recipe_exists_for_us",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.selection_rationale",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:the_reasoning_step_this_is_the_node_the_recipe_exists_for_us",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_candidates",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:the_reasoning_step_this_is_the_node_the_recipe_exists_for_us",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:the_reasoning_step_this_is_the_node_the_recipe_exists_for_us"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:score_every_shortlisted_candidate_under_one_protocol_by_call"
+  },
+  {
+   "id": "node.metric.best_cv_score",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "result has no metrics_captured (run predates metric capture)",
+   "critical": true,
+   "node": "task:score_every_shortlisted_candidate_under_one_protocol_by_call"
+  },
+  {
+   "id": "node.variable.bakeoff_table",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:score_every_shortlisted_candidate_under_one_protocol_by_call",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.best_candidate",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:score_every_shortlisted_candidate_under_one_protocol_by_call",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.best_cv_score",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:score_every_shortlisted_candidate_under_one_protocol_by_call",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:score_every_shortlisted_candidate_under_one_protocol_by_call"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:define_an_optuna_search_space_for_best_candidate_the_width_t"
+  },
+  {
+   "id": "node.metric.n_trials_completed",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "result has no metrics_captured (run predates metric capture)",
+   "critical": true,
+   "node": "task:define_an_optuna_search_space_for_best_candidate_the_width_t"
+  },
+  {
+   "id": "node.metric.best_cv_score_tuned",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "result has no metrics_captured (run predates metric capture)",
+   "critical": true,
+   "node": "task:define_an_optuna_search_space_for_best_candidate_the_width_t"
+  },
+  {
+   "id": "node.variable.tuned_model",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:define_an_optuna_search_space_for_best_candidate_the_width_t",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.best_params",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:define_an_optuna_search_space_for_best_candidate_the_width_t",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.tuning_result",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:define_an_optuna_search_space_for_best_candidate_the_width_t",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_trials_completed",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:define_an_optuna_search_space_for_best_candidate_the_width_t",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.best_cv_score_tuned",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:define_an_optuna_search_space_for_best_candidate_the_width_t",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:define_an_optuna_search_space_for_best_candidate_the_width_t"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:run_both_gates_on_what_was_chosen_and_fitted_and_do_not_re_i"
+  },
+  {
+   "id": "node.metric.n_selection_issues",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "result has no metrics_captured (run predates metric capture)",
+   "critical": true,
+   "node": "task:run_both_gates_on_what_was_chosen_and_fitted_and_do_not_re_i"
+  },
+  {
+   "id": "node.variable.selection_audit",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:run_both_gates_on_what_was_chosen_and_fitted_and_do_not_re_i",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.selection_issues",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:run_both_gates_on_what_was_chosen_and_fitted_and_do_not_re_i",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_selection_issues",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:run_both_gates_on_what_was_chosen_and_fitted_and_do_not_re_i",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:run_both_gates_on_what_was_chosen_and_fitted_and_do_not_re_i"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva"
+  },
+  {
+   "id": "node.metric.macro_f1",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "result has no metrics_captured (run predates metric capture)",
+   "critical": true,
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva"
+  },
+  {
+   "id": "node.metric.roc_auc",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "result has no metrics_captured (run predates metric capture)",
+   "critical": true,
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva"
+  },
+  {
+   "id": "node.metric.log_loss",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "result has no metrics_captured (run predates metric capture)",
+   "critical": true,
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva"
+  },
+  {
+   "id": "node.variable.y_pred",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.y_prob",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.evaluation",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.macro_f1",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.roc_auc",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.log_loss",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:refit_the_tuned_model_on_the_full_training_partition_and_eva"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:measure_what_actually_drives_the_predictions_importance_gads"
+  },
+  {
+   "id": "node.metric.n_features_reported",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "result has no metrics_captured (run predates metric capture)",
+   "critical": true,
+   "node": "task:measure_what_actually_drives_the_predictions_importance_gads"
+  },
+  {
+   "id": "node.variable.importance_table",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:measure_what_actually_drives_the_predictions_importance_gads",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.importance",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:measure_what_actually_drives_the_predictions_importance_gads",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_features_reported",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:measure_what_actually_drives_the_predictions_importance_gads",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:measure_what_actually_drives_the_predictions_importance_gads"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:write_the_model_card_to_model_card_md_and_bind_model_card_te"
+  },
+  {
+   "id": "node.variable.model_card_text",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:write_the_model_card_to_model_card_md_and_bind_model_card_te",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:write_the_model_card_to_model_card_md_and_bind_model_card_te"
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:58+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

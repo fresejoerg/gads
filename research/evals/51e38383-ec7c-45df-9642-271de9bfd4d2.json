@@ -1,0 +1,353 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "51e38383-ec7c-45df-9642-271de9bfd4d2",
+ "name": "Amazon Fashion Product Recommendation (Implicit CF)",
+ "verdict": "fail",
+ "critical": {
+  "pass": 5,
+  "fail": 2,
+  "not_evaluable": 5
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 3,
+   "fail": 1,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 3,
+   "fail": 2,
+   "not_evaluable": 5
+  },
+  "integrity": {
+   "pass": 3,
+   "fail": 0,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": null,
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 5,
+  "created_at": "2026-08-03T14:09:46.469356",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "amazon_reviews_recommendation.md",
+  "recipe_id": null,
+  "recipe_version": "2.0.0",
+  "engine_id": null,
+  "routing_mode": "local",
+  "run_mode": null,
+  "rung": "D3"
+ },
+ "attribution": {
+  "exec_nodes": 3,
+  "attempted_nodes": 4,
+  "failed_nodes": 1,
+  "native_primary": 0,
+  "model_pass": 3,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.75
+ },
+ "usage": {
+  "calls": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": []
+ },
+ "nodes": [
+  {
+   "node": "task:first_load_the_interaction_dataset_from_the_workspace_into_d",
+   "task_id": "6abed98f-e557-47e3-95dd-469e13e8c181",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "task:call_bundle_gads_temporal_loo_split_bundle_time_col_timestam",
+   "task_id": "e36e99d5-cccb-49c2-9678-045b0e2f6d59",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "task:call_bundle_gads_fit_and_recommend_bundle_method_als_n_20_it",
+   "task_id": "e52e1577-47ae-45eb-bb90-38ce9ebc7bd3",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "task:call_metrics_gads_evaluate_topn_bundle_k_values_10_20_it_com",
+   "task_id": "da91f1af-2f52-4c79-ac94-4ce0baaf9403",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 2
+   }
+  },
+  {
+   "node": "task:using_bundle_recommendations_and_the_index_maps_in_bundle_in",
+   "task_id": "ea7b04ad-fd8c-4162-abb4-a7f56c033588",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 5,
+   "completed": 3,
+   "failed": [
+    {
+     "node": "task:call_metrics_gads_evaluate_topn_bundle_k_values_10_20_it_com",
+     "error": "Syntax Error: unexpected indent at line 261"
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 5,
+   "completed": 3,
+   "failed": [
+    {
+     "node": "task:call_metrics_gads_evaluate_topn_bundle_k_values_10_20_it_com",
+     "error": "Syntax Error: unexpected indent at line 261"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 5 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.metrics.json",
+   "dimension": "deliverables",
+   "status": "fail",
+   "detail": "missing or unparseable",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:first_load_the_interaction_dataset_from_the_workspace_into_d"
+  },
+  {
+   "id": "node.variable.bundle",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:first_load_the_interaction_dataset_from_the_workspace_into_d",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:first_load_the_interaction_dataset_from_the_workspace_into_d"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:call_bundle_gads_temporal_loo_split_bundle_time_col_timestam"
+  },
+  {
+   "id": "node.variable.bundle",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:call_bundle_gads_temporal_loo_split_bundle_time_col_timestam",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:call_bundle_gads_temporal_loo_split_bundle_time_col_timestam"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:call_bundle_gads_fit_and_recommend_bundle_method_als_n_20_it"
+  },
+  {
+   "id": "node.variable.bundle",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:call_bundle_gads_fit_and_recommend_bundle_method_als_n_20_it",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:call_bundle_gads_fit_and_recommend_bundle_method_als_n_20_it"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "failed: Syntax Error: unexpected indent at line 261",
+   "critical": true,
+   "node": "task:call_metrics_gads_evaluate_topn_bundle_k_values_10_20_it_com"
+  },
+  {
+   "id": "node.metric.recall_at_10",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:call_metrics_gads_evaluate_topn_bundle_k_values_10_20_it_com"
+  },
+  {
+   "id": "node.metric.ndcg_at_10",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:call_metrics_gads_evaluate_topn_bundle_k_values_10_20_it_com"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:using_bundle_recommendations_and_the_index_maps_in_bundle_in"
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:58+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

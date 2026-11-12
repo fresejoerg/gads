@@ -1,0 +1,876 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "0fbafb4c-88f6-47e4-9960-ba305110555d",
+ "name": "Adult census — reasoned model selection",
+ "verdict": "fail",
+ "critical": {
+  "pass": 39,
+  "fail": 5,
+  "not_evaluable": 17
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 1,
+   "not_evaluable": 0
+  },
+  "deliverables": {
+   "pass": 0,
+   "fail": 0,
+   "not_evaluable": 3
+  },
+  "integrity": {
+   "pass": 7,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 38,
+   "fail": 4,
+   "not_evaluable": 17
+  }
+ },
+ "benchmark": null,
+ "run": {
+  "terminal_state": "halted",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": "tabular_supervised.selection.classification",
+  "plan": "recipe_compiled",
+  "exec_nodes": 10,
+  "created_at": "2026-09-07T11:22:58.393878",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "adult_model_selection.md",
+  "recipe_id": "tabular_supervised.selection.classification",
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": null,
+  "run_mode": null,
+  "rung": "D3"
+ },
+ "attribution": {
+  "exec_nodes": 6,
+  "attempted_nodes": 7,
+  "failed_nodes": 1,
+  "native_primary": 0,
+  "model_pass": 6,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.857
+ },
+ "usage": {
+  "calls": 17,
+  "prompt_tokens": 118812,
+  "completion_tokens": 64921,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "local_model"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "load_prepared_data",
+   "task_id": "ca8f1d2c-17b1-4211-9237-c66d63ee9085",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": 2,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 10,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "characterize_task",
+   "task_id": "907e137f-4753-4f76-aee7-d759ac9773be",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 7,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "shortlist_candidates",
+   "task_id": "5b980ec9-6e5a-4a2a-8308-b788cd814d3f",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 6,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "bakeoff",
+   "task_id": "33bba90e-e531-4db1-a209-62e35da44351",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 6,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "tune_best",
+   "task_id": "ee3bd147-24db-4bd5-9c35-b4e6e4c889cb",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 9,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "selection_audit",
+   "task_id": "2eb1897a-fad3-4785-95aa-6c25073d7b35",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 6,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "holdout_evaluation",
+   "task_id": "7a3d3ab5-4e94-4bf1-b98d-078bc2156560",
+   "status": "failed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": 4,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 9
+   }
+  },
+  {
+   "node": "diagnostic_curves",
+   "task_id": "2564479c-5784-453f-88f3-94fb987e219f",
+   "status": "failed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 3
+   }
+  },
+  {
+   "node": "feature_importance",
+   "task_id": "da0604ce-e0c3-4e72-bda6-681b195fe88e",
+   "status": "failed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 4
+   }
+  },
+  {
+   "node": "performance_report",
+   "task_id": "50613c77-03c8-4d79-bc54-65befd83f1c0",
+   "status": "failed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 1
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 10,
+   "completed": 3,
+   "failed": [
+    {
+     "node": "bakeoff",
+     "error": "'name'"
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 10,
+   "completed": 6,
+   "failed": [
+    {
+     "node": "holdout_evaluation",
+     "error": "Classification metrics can't handle a mix of binary and multiclass-multioutput targets"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 0,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": null
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "fail",
+   "detail": "[HALTED] Fatal system error: <failed_attempts> <generation number=\"1\"> <exception> litellm.BadRequestError: OpenAIException - litellm.BadRequestError: OpenAIException - Error code: 400 - {'error': 'Engine protocol predict request returned …",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 10 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "all 10 recipe nodes planned",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (halted)",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (halted)",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (halted)",
+   "critical": false
+  },
+  {
+   "id": "run.metrics_consistent",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "9 captured metric(s) match metrics.json",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "load_prepared_data"
+  },
+  {
+   "id": "node.metric.n_train_rows",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 16000.0",
+   "critical": true,
+   "node": "load_prepared_data"
+  },
+  {
+   "id": "node.metric.n_features",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 14.0",
+   "critical": true,
+   "node": "load_prepared_data"
+  },
+  {
+   "id": "node.variable.X_train",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (DataFrame)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.y_train",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (Series)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.X_test",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (DataFrame)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.y_test",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (Series)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_train_rows",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_features",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "load_prepared_data"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "characterize_task"
+  },
+  {
+   "id": "node.metric.n_classes",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 2.0",
+   "critical": true,
+   "node": "characterize_task"
+  },
+  {
+   "id": "node.metric.minority_class_rate",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.2379",
+   "critical": true,
+   "node": "characterize_task"
+  },
+  {
+   "id": "node.variable.dataset_facts",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (dict)",
+   "critical": true,
+   "node": "characterize_task",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_classes",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "characterize_task",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.minority_class_rate",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "characterize_task",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "characterize_task"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "shortlist_candidates"
+  },
+  {
+   "id": "node.metric.n_candidates",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 4.0",
+   "critical": true,
+   "node": "shortlist_candidates"
+  },
+  {
+   "id": "node.variable.candidates",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (list)",
+   "critical": true,
+   "node": "shortlist_candidates",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.selection_rationale",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "shortlist_candidates",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_candidates",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "shortlist_candidates",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "shortlist_candidates"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "bakeoff"
+  },
+  {
+   "id": "node.metric.best_cv_score",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.925928751173838",
+   "critical": true,
+   "node": "bakeoff"
+  },
+  {
+   "id": "node.variable.bakeoff_table",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (DataFrame)",
+   "critical": true,
+   "node": "bakeoff",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.best_candidate",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "bakeoff",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.best_cv_score",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "bakeoff",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "bakeoff"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "tune_best"
+  },
+  {
+   "id": "node.metric.n_trials_completed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 40.0",
+   "critical": true,
+   "node": "tune_best"
+  },
+  {
+   "id": "node.metric.best_cv_score_tuned",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.9284641735762731",
+   "critical": true,
+   "node": "tune_best"
+  },
+  {
+   "id": "node.variable.tuned_model",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (Pipeline)",
+   "critical": true,
+   "node": "tune_best",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.best_params",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (dict)",
+   "critical": true,
+   "node": "tune_best",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.tuning_result",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (dict)",
+   "critical": true,
+   "node": "tune_best",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_trials_completed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "tune_best",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.best_cv_score_tuned",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "tune_best",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "tune_best"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "selection_audit"
+  },
+  {
+   "id": "node.metric.n_selection_issues",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.0",
+   "critical": true,
+   "node": "selection_audit"
+  },
+  {
+   "id": "node.variable.selection_audit",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (dict)",
+   "critical": true,
+   "node": "selection_audit",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.selection_issues",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (list)",
+   "critical": true,
+   "node": "selection_audit",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_selection_issues",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "selection_audit",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "selection_audit"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "failed: 'numpy.ndarray' object has no attribute 'iloc'",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.metric.macro_f1",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.metric.roc_auc",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.metric.log_loss",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.variable.y_pred",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.variable.y_prob",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.variable.evaluation",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.variable.macro_f1",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.variable.roc_auc",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.variable.log_loss",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Fatal system error: <failed_attempts> <generation number=\"1\"> <exception> litellm.BadRequestError: OpenAIException - litellm.BadRequestError: OpenAIException - Error code: 400 - {'error': 'Engine protocol predict request returned 400: {\"er…",
+   "critical": true,
+   "node": "diagnostic_curves"
+  },
+  {
+   "id": "node.metric.average_precision",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "diagnostic_curves"
+  },
+  {
+   "id": "node.variable.curve_diagnostics",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "diagnostic_curves"
+  },
+  {
+   "id": "node.variable.average_precision",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "diagnostic_curves"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Fatal system error: <failed_attempts> <generation number=\"1\"> <exception> litellm.BadRequestError: OpenAIException - litellm.BadRequestError: OpenAIException - Error code: 400 - {'error': 'Engine protocol predict request returned 400: {\"er…",
+   "critical": true,
+   "node": "feature_importance"
+  },
+  {
+   "id": "node.metric.n_features_reported",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "feature_importance"
+  },
+  {
+   "id": "node.variable.importance_table",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "feature_importance"
+  },
+  {
+   "id": "node.variable.importance",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "feature_importance"
+  },
+  {
+   "id": "node.variable.n_features_reported",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "feature_importance"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Fatal system error: <failed_attempts> <generation number=\"1\"> <exception> litellm.BadRequestError: OpenAIException - litellm.BadRequestError: OpenAIException - Error code: 400 - {'error': 'Engine protocol predict request returned 400: {\"er…",
+   "critical": true,
+   "node": "performance_report"
+  },
+  {
+   "id": "node.variable.model_card_text",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "performance_report"
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:59+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

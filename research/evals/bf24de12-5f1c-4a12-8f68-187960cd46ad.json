@@ -1,0 +1,339 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "bf24de12-5f1c-4a12-8f68-187960cd46ad",
+ "name": "Active-choice organ-donor registration effect",
+ "verdict": "pass",
+ "critical": {
+  "pass": 7,
+  "fail": 0,
+  "not_evaluable": 0
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 3,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 5,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "integrity": {
+   "pass": 5,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "benchmark": {
+   "pass": 3,
+   "fail": 1,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "organ_donation_nudge_v1",
+  "verdict": "fail",
+  "passed": 3,
+  "total": 4
+ },
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 1,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 5,
+  "created_at": "2026-08-21T17:59:56.512722",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "organ_donation_nudge.md",
+  "recipe_id": null,
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": "cloud",
+  "run_mode": "research",
+  "rung": "D0"
+ },
+ "attribution": {
+  "exec_nodes": 5,
+  "attempted_nodes": 5,
+  "failed_nodes": 0,
+  "native_primary": 0,
+  "model_pass": 5,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 1.0
+ },
+ "usage": {
+  "calls": 30,
+  "prompt_tokens": 176460,
+  "completion_tokens": 53504,
+  "cost_usd": 0.349363,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "claude-sonnet-5",
+   "gemini-3.5-flash-lite",
+   "gemini-3.7-flash",
+   "kimi-k2.7-code"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "task:load_organ_donation_nudge_csv_parse_the_panel_structure_map_",
+   "task_id": "e8fc7c73-de95-4285-b998-0aaff4206316",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.5-flash-lite",
+   "model_used": "gemini-3.5-flash-lite",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0038472,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:compute_and_plot_the_average_organ_donation_rate_trajectory_",
+   "task_id": "9d17caeb-5291-4190-98a9-c8933a220c2a",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "kimi-k2.7-code",
+   "model_used": "kimi-k2.7-code",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 5,
+   "cost_usd": 0.01160175,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:estimate_the_causal_effect_of_the_active_choice_wording_poli",
+   "task_id": "6c507315-56b4-49ca-96a8-3932f302e59e",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": "gemini-3.7-flash",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.01415925,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:perform_causal_identification_and_robustness_checks_run_an_e",
+   "task_id": "056137b6-f439-4dc7-af56-7966acc4df55",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "claude-sonnet-5",
+   "model_used": "claude-sonnet-5",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 11,
+   "cost_usd": 0.28807255,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:synthesize_findings_into_a_final_summary_evaluating_whether_",
+   "task_id": "c32599f2-a13d-43f9-a02f-f0b582c60a41",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.5-flash-lite",
+   "model_used": "gemini-3.5-flash-lite",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 4,
+   "cost_usd": 0.0090912,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": true,
+  "dial_ledger_outcome": "pass"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 1 has 5 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:load_organ_donation_nudge_csv_parse_the_panel_structure_map_"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:load_organ_donation_nudge_csv_parse_the_panel_structure_map_"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:compute_and_plot_the_average_organ_donation_rate_trajectory_"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:compute_and_plot_the_average_organ_donation_rate_trajectory_"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:estimate_the_causal_effect_of_the_active_choice_wording_poli"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:estimate_the_causal_effect_of_the_active_choice_wording_poli"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:perform_causal_identification_and_robustness_checks_run_an_e"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:perform_causal_identification_and_robustness_checks_run_an_e"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:synthesize_findings_into_a_final_summary_evaluating_whether_"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:synthesize_findings_into_a_final_summary_evaluating_whether_"
+  },
+  {
+   "id": "benchmark.reproducibility.metrics.json exists",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "file missing",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact final_dashboard.html",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact research_report.md",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact workflow_execution.py",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:59+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

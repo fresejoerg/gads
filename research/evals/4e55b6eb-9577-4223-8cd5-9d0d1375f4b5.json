@@ -1,0 +1,442 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "4e55b6eb-9577-4223-8cd5-9d0d1375f4b5",
+ "name": "Cash incentive effect on learning HIV test results",
+ "verdict": "fail",
+ "critical": {
+  "pass": 5,
+  "fail": 4,
+  "not_evaluable": 0
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 3,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 4,
+   "fail": 4,
+   "not_evaluable": 5
+  },
+  "integrity": {
+   "pass": 3,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "benchmark": {
+   "pass": 3,
+   "fail": 1,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "thornton_hiv_incentive_v1",
+  "verdict": "fail",
+  "passed": 3,
+  "total": 4
+ },
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 7,
+  "created_at": "2026-08-22T02:47:34.512815",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "thornton_hiv_incentive.md",
+  "recipe_id": null,
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": "local",
+  "run_mode": "research",
+  "rung": "D0"
+ },
+ "attribution": {
+  "exec_nodes": 4,
+  "attempted_nodes": 6,
+  "failed_nodes": 2,
+  "native_primary": 0,
+  "model_pass": 4,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.667
+ },
+ "usage": {
+  "calls": 26,
+  "prompt_tokens": 88225,
+  "completion_tokens": 37100,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "local_model"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "task:load_the_dataset_and_apply_the_mandatory_sample_rows_constra",
+   "task_id": "3910f367-2568-46bb-9c6f-895055fc80a4",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:handle_missing_values_by_imputing_numeric_columns_with_media",
+   "task_id": "831e30df-5a96-4f97-a305-f8b86b1f1ff5",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:create_a_binary_outcome_variable_got_already_present_and_pre",
+   "task_id": "3a81a2ba-fe1d-41f0-9097-cdbbef0319f2",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 3,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:perform_causal_effect_estimation_using_propensity_score_matc",
+   "task_id": "85d992ce-5e43-42d9-b2ac-45af487bd8af",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "task:visualize_the_causal_effect_estimate_and_its_confidence_inte",
+   "task_id": "e56de57f-269f-4551-87ce-4adb3d712f71",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 2
+   }
+  },
+  {
+   "node": "task:analyze_the_distribution_of_incentives_and_their_impact_on_t",
+   "task_id": "1c7b73fa-3f2b-4946-8c32-d7c3da43f1d6",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "task:generate_a_summary_report_of_the_causal_analysis_results_and",
+   "task_id": "dab5a826-ae96-468b-9f01-770538f3cad2",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 1
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 4,
+   "completed": 0,
+   "failed": [
+    {
+     "node": "task:load_the_dataset_and_apply_the_mandatory_sample_rows_constra",
+     "error": "String or int arguments are only possible when a DataFrame or an array is provided in the `data_frame` argument. No DataFrame was provided, but argument 'y' is of type str or int."
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 7,
+   "completed": 3,
+   "failed": [
+    {
+     "node": "task:perform_causal_effect_estimation_using_propensity_score_matc",
+     "error": "Execution exceeded 600.0s"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 7 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:load_the_dataset_and_apply_the_mandatory_sample_rows_constra"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:load_the_dataset_and_apply_the_mandatory_sample_rows_constra"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:handle_missing_values_by_imputing_numeric_columns_with_media"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:handle_missing_values_by_imputing_numeric_columns_with_media"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:create_a_binary_outcome_variable_got_already_present_and_pre"
+  },
+  {
+   "id": "node.column.got",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "column present",
+   "critical": false,
+   "node": "task:create_a_binary_outcome_variable_got_already_present_and_pre",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:create_a_binary_outcome_variable_got_already_present_and_pre"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "failed: Execution exceeded 600.0s",
+   "critical": true,
+   "node": "task:perform_causal_effect_estimation_using_propensity_score_matc"
+  },
+  {
+   "id": "node.column.got",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:perform_causal_effect_estimation_using_propensity_score_matc"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:visualize_the_causal_effect_estimate_and_its_confidence_inte"
+  },
+  {
+   "id": "node.insight.causal_effect_direction",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:visualize_the_causal_effect_estimate_and_its_confidence_inte"
+  },
+  {
+   "id": "node.column.got",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:visualize_the_causal_effect_estimate_and_its_confidence_inte"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:analyze_the_distribution_of_incentives_and_their_impact_on_t"
+  },
+  {
+   "id": "node.column.got",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:analyze_the_distribution_of_incentives_and_their_impact_on_t"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:generate_a_summary_report_of_the_causal_analysis_results_and"
+  },
+  {
+   "id": "node.column.got",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:generate_a_summary_report_of_the_causal_analysis_results_and"
+  },
+  {
+   "id": "benchmark.reproducibility.metrics.json exists",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "file missing",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact final_dashboard.html",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact research_report.md",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact workflow_execution.py",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:59+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

@@ -1,0 +1,343 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "41a4d912-fc83-462c-bc41-015f5b0b9a6c",
+ "name": "QRData IHDP-0 (causal effect, semi-synthetic) [dial D3-ols]",
+ "verdict": "fail",
+ "critical": {
+  "pass": 3,
+  "fail": 2,
+  "not_evaluable": 12
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 3,
+   "fail": 1,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 1,
+   "fail": 2,
+   "not_evaluable": 12
+  },
+  "integrity": {
+   "pass": 1,
+   "fail": 0,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": null,
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 3,
+  "created_at": "2026-08-13T16:52:42.579158",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "qrdata_ihdp_0_d3ols.md",
+  "recipe_id": null,
+  "recipe_version": "1.1.0",
+  "engine_id": null,
+  "routing_mode": "local",
+  "run_mode": null,
+  "rung": "D3"
+ },
+ "attribution": {
+  "exec_nodes": 1,
+  "attempted_nodes": 2,
+  "failed_nodes": 1,
+  "native_primary": 0,
+  "model_pass": 1,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.5
+ },
+ "usage": {
+  "calls": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": []
+ },
+ "nodes": [
+  {
+   "node": "task:identify_the_variable_roles_from_the_objective_and_the_live_",
+   "task_id": "14ceb331-1210-41c8-b78f-a61812eb846f",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 3
+   }
+  },
+  {
+   "node": "task:estimate_the_average_treatment_effect_by_linear_regression_a",
+   "task_id": "d17f7370-ffff-4834-a1fa-cdf8fbc5dd1b",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 8
+   }
+  },
+  {
+   "node": "task:visualize_the_causal_result_using_the_variables_already_in_t",
+   "task_id": "b81a8038-3820-41ab-8bf1-bfbda8ec794c",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 1
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 3,
+   "completed": 0,
+   "failed": [
+    {
+     "node": "task:identify_the_variable_roles_from_the_objective_and_the_live_",
+     "error": "generated text is not valid Python (unmatched ')' at line 23)"
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 3,
+   "completed": 1,
+   "failed": [
+    {
+     "node": "task:estimate_the_average_treatment_effect_by_linear_regression_a",
+     "error": "generated text is not valid Python (unexpected indent at line 2)"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 3 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.metrics.json",
+   "dimension": "deliverables",
+   "status": "fail",
+   "detail": "missing or unparseable",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:identify_the_variable_roles_from_the_objective_and_the_live_"
+  },
+  {
+   "id": "node.variable.treatment_col",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:identify_the_variable_roles_from_the_objective_and_the_live_",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.outcome_col",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:identify_the_variable_roles_from_the_objective_and_the_live_",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.confounder_cols",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:identify_the_variable_roles_from_the_objective_and_the_live_",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:identify_the_variable_roles_from_the_objective_and_the_live_"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "failed: generated text is not valid Python (unexpected indent at line 2)",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_by_linear_regression_a"
+  },
+  {
+   "id": "node.metric.ate",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_by_linear_regression_a"
+  },
+  {
+   "id": "node.metric.placebo_new_effect",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_by_linear_regression_a"
+  },
+  {
+   "id": "node.metric.subset_new_effect",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_by_linear_regression_a"
+  },
+  {
+   "id": "node.variable.ate",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_by_linear_regression_a"
+  },
+  {
+   "id": "node.variable.placebo_new_effect",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_by_linear_regression_a"
+  },
+  {
+   "id": "node.variable.subset_new_effect",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_by_linear_regression_a"
+  },
+  {
+   "id": "node.variable.treatment_col",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_by_linear_regression_a"
+  },
+  {
+   "id": "node.variable.df_sample",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_by_linear_regression_a"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow terminated by user.",
+   "critical": true,
+   "node": "task:visualize_the_causal_result_using_the_variables_already_in_t"
+  },
+  {
+   "id": "node.variable.causal_effect_summary_path",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:visualize_the_causal_result_using_the_variables_already_in_t"
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:58+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

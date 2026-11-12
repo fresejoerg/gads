@@ -1,0 +1,380 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "e06bf428-74b4-4fcf-b84a-277df2b64472",
+ "name": "California Proposition 99 effect on cigarette sales",
+ "verdict": "fail",
+ "critical": {
+  "pass": 7,
+  "fail": 1,
+  "not_evaluable": 0
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 4,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "integrity": {
+   "pass": 5,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 5,
+   "fail": 1,
+   "not_evaluable": 0
+  },
+  "benchmark": {
+   "pass": 3,
+   "fail": 2,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "prop99_cigarette_sales_v1",
+  "verdict": "fail",
+  "passed": 3,
+  "total": 5
+ },
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 5,
+  "created_at": "2026-08-22T01:42:32.679898",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "prop99_cigarette_sales.md",
+  "recipe_id": null,
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": "local",
+  "run_mode": "research",
+  "rung": "D0"
+ },
+ "attribution": {
+  "exec_nodes": 8,
+  "attempted_nodes": 10,
+  "failed_nodes": 2,
+  "native_primary": 0,
+  "model_pass": 8,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.8
+ },
+ "usage": {
+  "calls": 26,
+  "prompt_tokens": 94360,
+  "completion_tokens": 10104,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "local_model"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "task:load_the_dataset_and_apply_the_sample_rows_constraint_to_ens",
+   "task_id": "1792d4c1-61fd-4a1e-a940-fce1c933e042",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:handle_missing_values_in_covariates_by_imputing_with_median_",
+   "task_id": "f274543a-9404-4168-977f-575964651274",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e",
+   "task_id": "cc5ae5ed-b46d-4731-8bae-674db1c02c1f",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 3,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:visualize_the_causal_effect_estimate_and_save_as_figure_1",
+   "task_id": "01b102f7-9304-478b-b4e2-6fb157c9eb06",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:generate_a_summary_report_of_the_causal_effect_estimation_re",
+   "task_id": "384d5fcc-2918-4fd7-94bd-6ef06f61aa77",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 2,
+   "completed": 1,
+   "failed": [
+    {
+     "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e",
+     "error": "exog contains inf or nans"
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 5,
+   "completed": 3,
+   "failed": [
+    {
+     "node": "task:visualize_the_causal_effect_estimate_and_save_as_figure_1",
+     "error": "module 'plotly.express' has no attribute 'subplots'"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 5 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.metrics.json",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.metrics_consistent",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "1 captured metric(s) match metrics.json",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:load_the_dataset_and_apply_the_sample_rows_constraint_to_ens"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:load_the_dataset_and_apply_the_sample_rows_constraint_to_ens"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:handle_missing_values_in_covariates_by_imputing_with_median_"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:handle_missing_values_in_covariates_by_imputing_with_median_"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e"
+  },
+  {
+   "id": "node.metric.ate",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= -6.3107533387385075",
+   "critical": true,
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:visualize_the_causal_effect_estimate_and_save_as_figure_1"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:visualize_the_causal_effect_estimate_and_save_as_figure_1"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "failed: gads_causal_estimate_ate() missing 1 required positional argument: 'confounder_cols'",
+   "critical": true,
+   "node": "task:generate_a_summary_report_of_the_causal_effect_estimation_re"
+  },
+  {
+   "id": "benchmark.reproducibility.metric estimate",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "not in metrics.json",
+   "critical": false
+  },
+  {
+   "id": "benchmark.reproducibility.metric twfe_did_coefficient",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "not in metrics.json",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact final_dashboard.html",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact research_report.md",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact workflow_execution.py",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:59+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

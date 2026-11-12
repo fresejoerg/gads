@@ -1,0 +1,841 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "03fcded1-f53d-42bb-b2e3-c639000a9500",
+ "name": "Adult census — reasoned model selection",
+ "verdict": "fail",
+ "critical": {
+  "pass": 21,
+  "fail": 8,
+  "not_evaluable": 32
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 1,
+   "not_evaluable": 0
+  },
+  "deliverables": {
+   "pass": 0,
+   "fail": 0,
+   "not_evaluable": 3
+  },
+  "integrity": {
+   "pass": 4,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 20,
+   "fail": 7,
+   "not_evaluable": 32
+  }
+ },
+ "benchmark": null,
+ "run": {
+  "terminal_state": "cancelled",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": "tabular_supervised.selection.classification",
+  "plan": "recipe_compiled",
+  "exec_nodes": 10,
+  "created_at": "2026-08-20T08:42:28.673218",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "adult_model_selection.md",
+  "recipe_id": "tabular_supervised.selection.classification",
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": null,
+  "run_mode": null,
+  "rung": "D3"
+ },
+ "attribution": {
+  "exec_nodes": 3,
+  "attempted_nodes": 4,
+  "failed_nodes": 1,
+  "native_primary": 0,
+  "model_pass": 3,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.75
+ },
+ "usage": {
+  "calls": 5,
+  "prompt_tokens": 39368,
+  "completion_tokens": 1692,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "local_model"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "load_prepared_data",
+   "task_id": "1b39127c-1259-45e7-b959-2e68213f3ef7",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 10,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "characterize_task",
+   "task_id": "d683f9e9-75cf-4b2e-9949-8784cb8482a5",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 7,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "shortlist_candidates",
+   "task_id": "c865b1bd-1870-483c-b671-8f5ab48bc0d8",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 6,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "bakeoff",
+   "task_id": "7a0cf450-58a4-4e00-873c-31fd29a03bd2",
+   "status": "failed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 4
+   }
+  },
+  {
+   "node": "tune_best",
+   "task_id": "9af44194-e0da-4579-91ee-ab37cee29238",
+   "status": "failed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 7
+   }
+  },
+  {
+   "node": "selection_audit",
+   "task_id": "4ee41c35-f752-489a-aad8-a885d7f1ab97",
+   "status": "failed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 4
+   }
+  },
+  {
+   "node": "holdout_evaluation",
+   "task_id": "f3b78912-923c-4d34-b545-0dcc457d8968",
+   "status": "failed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 9
+   }
+  },
+  {
+   "node": "diagnostic_curves",
+   "task_id": "50cb097c-4f12-4573-9a6d-1424c46175b9",
+   "status": "failed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 3
+   }
+  },
+  {
+   "node": "feature_importance",
+   "task_id": "32e01839-a10f-472c-85db-60c0c7e54d30",
+   "status": "failed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 4
+   }
+  },
+  {
+   "node": "performance_report",
+   "task_id": "77d4e9da-9252-40ce-9fb8-04ae28f7ceba",
+   "status": "failed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 1
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 10,
+   "completed": 3,
+   "failed": [
+    {
+     "node": "bakeoff",
+     "error": "Operation timed out (LLM generation or sandbox execution exceeded limit)"
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 10,
+   "completed": 3,
+   "failed": [
+    {
+     "node": "bakeoff",
+     "error": "Operation timed out (LLM generation or sandbox execution exceeded limit)"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 0,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": null
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "fail",
+   "detail": "[CANCELLED] User requested termination.",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 10 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "all 10 recipe nodes planned",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (cancelled)",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (cancelled)",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (cancelled)",
+   "critical": false
+  },
+  {
+   "id": "run.metrics_consistent",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "5 captured metric(s) match metrics.json",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "load_prepared_data"
+  },
+  {
+   "id": "node.metric.n_train_rows",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 16000.0",
+   "critical": true,
+   "node": "load_prepared_data"
+  },
+  {
+   "id": "node.metric.n_features",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 14.0",
+   "critical": true,
+   "node": "load_prepared_data"
+  },
+  {
+   "id": "node.variable.X_train",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (DataFrame)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.y_train",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (Series)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.X_test",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (DataFrame)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.y_test",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (Series)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_train_rows",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_features",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "load_prepared_data"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "characterize_task"
+  },
+  {
+   "id": "node.metric.n_classes",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 2.0",
+   "critical": true,
+   "node": "characterize_task"
+  },
+  {
+   "id": "node.metric.minority_class_rate",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.237875",
+   "critical": true,
+   "node": "characterize_task"
+  },
+  {
+   "id": "node.variable.dataset_facts",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (dict)",
+   "critical": true,
+   "node": "characterize_task",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_classes",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "characterize_task",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.minority_class_rate",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "characterize_task",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "characterize_task"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "shortlist_candidates"
+  },
+  {
+   "id": "node.metric.n_candidates",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 3.0",
+   "critical": true,
+   "node": "shortlist_candidates"
+  },
+  {
+   "id": "node.variable.candidates",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (list)",
+   "critical": true,
+   "node": "shortlist_candidates",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.selection_rationale",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "shortlist_candidates",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_candidates",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "shortlist_candidates",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "shortlist_candidates"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow terminated by user.",
+   "critical": true,
+   "node": "bakeoff"
+  },
+  {
+   "id": "node.metric.best_cv_score",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "bakeoff"
+  },
+  {
+   "id": "node.variable.bakeoff_table",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "bakeoff"
+  },
+  {
+   "id": "node.variable.best_candidate",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "bakeoff"
+  },
+  {
+   "id": "node.variable.best_cv_score",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "bakeoff"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow terminated by user.",
+   "critical": true,
+   "node": "tune_best"
+  },
+  {
+   "id": "node.metric.n_trials_completed",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "tune_best"
+  },
+  {
+   "id": "node.metric.best_cv_score_tuned",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "tune_best"
+  },
+  {
+   "id": "node.variable.tuned_model",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "tune_best"
+  },
+  {
+   "id": "node.variable.best_params",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "tune_best"
+  },
+  {
+   "id": "node.variable.tuning_result",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "tune_best"
+  },
+  {
+   "id": "node.variable.n_trials_completed",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "tune_best"
+  },
+  {
+   "id": "node.variable.best_cv_score_tuned",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "tune_best"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow terminated by user.",
+   "critical": true,
+   "node": "selection_audit"
+  },
+  {
+   "id": "node.metric.n_selection_issues",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "selection_audit"
+  },
+  {
+   "id": "node.variable.selection_audit",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "selection_audit"
+  },
+  {
+   "id": "node.variable.selection_issues",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "selection_audit"
+  },
+  {
+   "id": "node.variable.n_selection_issues",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "selection_audit"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow terminated by user.",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.metric.macro_f1",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.metric.roc_auc",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.metric.log_loss",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.variable.y_pred",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.variable.y_prob",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.variable.evaluation",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.variable.macro_f1",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.variable.roc_auc",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.variable.log_loss",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow terminated by user.",
+   "critical": true,
+   "node": "diagnostic_curves"
+  },
+  {
+   "id": "node.metric.average_precision",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "diagnostic_curves"
+  },
+  {
+   "id": "node.variable.curve_diagnostics",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "diagnostic_curves"
+  },
+  {
+   "id": "node.variable.average_precision",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "diagnostic_curves"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow terminated by user.",
+   "critical": true,
+   "node": "feature_importance"
+  },
+  {
+   "id": "node.metric.n_features_reported",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "feature_importance"
+  },
+  {
+   "id": "node.variable.importance_table",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "feature_importance"
+  },
+  {
+   "id": "node.variable.importance",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "feature_importance"
+  },
+  {
+   "id": "node.variable.n_features_reported",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "feature_importance"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow terminated by user.",
+   "critical": true,
+   "node": "performance_report"
+  },
+  {
+   "id": "node.variable.model_card_text",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "performance_report"
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:58+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

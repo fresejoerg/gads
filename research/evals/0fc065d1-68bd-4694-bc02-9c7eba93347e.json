@@ -1,0 +1,291 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "0fc065d1-68bd-4694-bc02-9c7eba93347e",
+ "name": "National Supported Work job-training program (LaLonde)",
+ "verdict": "fail",
+ "critical": {
+  "pass": 2,
+  "fail": 5,
+  "not_evaluable": 0
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 1,
+   "fail": 1,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 0,
+   "fail": 0,
+   "not_evaluable": 3
+  },
+  "contract": {
+   "pass": 1,
+   "fail": 4,
+   "not_evaluable": 0
+  },
+  "integrity": {
+   "pass": 1,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "benchmark": {
+   "pass": 0,
+   "fail": 2,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "jobs_lalonde_training_v1",
+  "verdict": "fail",
+  "passed": 0,
+  "total": 2
+ },
+ "run": {
+  "terminal_state": "abandoned",
+  "void_suspected": true,
+  "workflow_attempts": 1,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 5,
+  "created_at": "2026-08-21T14:57:09.926029",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "jobs_lalonde_training.md",
+  "recipe_id": null,
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": null,
+  "run_mode": null,
+  "rung": "D0"
+ },
+ "attribution": {
+  "exec_nodes": 1,
+  "attempted_nodes": 1,
+  "failed_nodes": 0,
+  "native_primary": 0,
+  "model_pass": 1,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 1.0
+ },
+ "usage": {
+  "calls": 4,
+  "prompt_tokens": 18901,
+  "completion_tokens": 1491,
+  "cost_usd": 0.014958,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "gemini-3.5-flash-lite",
+   "gemini-3.7-flash"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "task:load_jobs_lalonde_training_csv_and_inspect_covariates_treatm",
+   "task_id": "c148978f-078a-4593-9b24-725d4b54f356",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": "gemini-3.7-flash",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.00500475,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:estimate_propensity_scores_using_logistic_regression_modelin",
+   "task_id": "12e9fde6-cf31-4303-bd43-6a16b3565fc7",
+   "status": "failed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:estimate_the_average_treatment_effect_on_the_treated_att_of_",
+   "task_id": "108402a1-8dc1-4ed7-b526-c8fbe30e039e",
+   "status": "failed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:perform_causal_sensitivity_and_refutation_checks_e_g_placebo",
+   "task_id": "2885ae94-7d52-4bac-aa03-d206969ae496",
+   "status": "failed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:synthesize_the_causal_findings_into_a_structured_summary_tab",
+   "task_id": "fdb545ff-eee6-49b3-8dfe-835ae1913929",
+   "status": "failed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.5-flash-lite",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [],
+ "llm_judgments": {
+  "critique_attempts": 0,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": null
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "fail",
+   "detail": "stopped mid-run: no reporting, no halt/cancel record (suspected void run)",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 1 has 5 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (abandoned)",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (abandoned)",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (abandoned)",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:load_jobs_lalonde_training_csv_and_inspect_covariates_treatm"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:load_jobs_lalonde_training_csv_and_inspect_covariates_treatm"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Orphaned (heartbeat timeout) Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:estimate_propensity_scores_using_logistic_regression_modelin"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_on_the_treated_att_of_"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:perform_causal_sensitivity_and_refutation_checks_e_g_placebo"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:synthesize_the_causal_findings_into_a_structured_summary_tab"
+  },
+  {
+   "id": "benchmark.reproducibility.metrics.json exists",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "file missing",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.workflow_execution.py exists",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "file missing — cannot check methodology",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:58+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

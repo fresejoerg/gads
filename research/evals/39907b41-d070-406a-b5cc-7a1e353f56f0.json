@@ -1,0 +1,342 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "39907b41-d070-406a-b5cc-7a1e353f56f0",
+ "name": "Amazon Fashion Product Recommendation (Implicit CF)",
+ "verdict": "fail",
+ "critical": {
+  "pass": 4,
+  "fail": 3,
+  "not_evaluable": 5
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 1,
+   "fail": 1,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 0,
+   "fail": 0,
+   "not_evaluable": 3
+  },
+  "integrity": {
+   "pass": 3,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "contract": {
+   "pass": 3,
+   "fail": 2,
+   "not_evaluable": 5
+  }
+ },
+ "benchmark": null,
+ "run": {
+  "terminal_state": "cancelled",
+  "void_suspected": false,
+  "workflow_attempts": 2,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 5,
+  "created_at": "2026-08-03T19:08:27.356143",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "amazon_reviews_recommendation.md",
+  "recipe_id": null,
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": null,
+  "run_mode": null,
+  "rung": "D3"
+ },
+ "attribution": {
+  "exec_nodes": 4,
+  "attempted_nodes": 5,
+  "failed_nodes": 1,
+  "native_primary": 0,
+  "model_pass": 4,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.8
+ },
+ "usage": {
+  "calls": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": []
+ },
+ "nodes": [
+  {
+   "node": "task:first_load_the_interaction_dataset_from_the_workspace_into_d",
+   "task_id": "a0d398de-defb-4dd7-a974-9da95cbcac45",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "task:call_bundle_gads_temporal_loo_split_bundle_time_col_timestam",
+   "task_id": "1c592710-4db2-4e6c-b474-d6b173ac19bc",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "task:call_bundle_gads_fit_and_recommend_bundle_method_als_n_20_it",
+   "task_id": "94eb2ed5-1bde-4cec-b792-f6514d88d35a",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "task:call_metrics_gads_evaluate_topn_bundle_k_values_10_20_it_com",
+   "task_id": "d583317c-35b9-4a00-ad33-278528e42f68",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 2
+   }
+  },
+  {
+   "node": "task:characterize_the_recommendations_the_bundle_keys_are_exactly",
+   "task_id": "5ce6da58-ed56-4c61-a802-6c6d781a209c",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 5,
+   "completed": 4,
+   "failed": [
+    {
+     "node": "task:characterize_the_recommendations_the_bundle_keys_are_exactly",
+     "error": "unhashable type: 'list'"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 0,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": null
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "fail",
+   "detail": "[CANCELLED] User requested termination.",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 2 has 5 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (cancelled)",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (cancelled)",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (cancelled)",
+   "critical": false
+  },
+  {
+   "id": "run.metrics_consistent",
+   "dimension": "integrity",
+   "status": "not_evaluable",
+   "detail": "no captured metric appears in metrics.json",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:first_load_the_interaction_dataset_from_the_workspace_into_d"
+  },
+  {
+   "id": "node.variable.bundle",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:first_load_the_interaction_dataset_from_the_workspace_into_d",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:first_load_the_interaction_dataset_from_the_workspace_into_d"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:call_bundle_gads_temporal_loo_split_bundle_time_col_timestam"
+  },
+  {
+   "id": "node.variable.bundle",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:call_bundle_gads_temporal_loo_split_bundle_time_col_timestam",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:call_bundle_gads_temporal_loo_split_bundle_time_col_timestam"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:call_bundle_gads_fit_and_recommend_bundle_method_als_n_20_it"
+  },
+  {
+   "id": "node.variable.bundle",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:call_bundle_gads_fit_and_recommend_bundle_method_als_n_20_it",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:call_bundle_gads_fit_and_recommend_bundle_method_als_n_20_it"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "failed: User requested abort",
+   "critical": true,
+   "node": "task:call_metrics_gads_evaluate_topn_bundle_k_values_10_20_it_com"
+  },
+  {
+   "id": "node.metric.recall_at_10",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:call_metrics_gads_evaluate_topn_bundle_k_values_10_20_it_com"
+  },
+  {
+   "id": "node.metric.ndcg_at_10",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:call_metrics_gads_evaluate_topn_bundle_k_values_10_20_it_com"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow terminated by user.",
+   "critical": true,
+   "node": "task:characterize_the_recommendations_the_bundle_keys_are_exactly"
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:58+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

@@ -1,0 +1,418 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "d564eeb2-8cd7-4faa-8a93-79704c882d6f",
+ "name": "New Jersey minimum wage increase effect on fast-food employment",
+ "verdict": "fail",
+ "critical": {
+  "pass": 1,
+  "fail": 5,
+  "not_evaluable": 6
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 1,
+   "fail": 1,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 0,
+   "fail": 0,
+   "not_evaluable": 3
+  },
+  "contract": {
+   "pass": 0,
+   "fail": 4,
+   "not_evaluable": 18
+  },
+  "benchmark": {
+   "pass": 0,
+   "fail": 5,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "minwage_employment_v1",
+  "verdict": "fail",
+  "passed": 0,
+  "total": 5
+ },
+ "run": {
+  "terminal_state": "abandoned",
+  "void_suspected": true,
+  "workflow_attempts": 1,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 4,
+  "created_at": "2026-08-21T14:57:17.628720",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "minwage_employment.md",
+  "recipe_id": null,
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": null,
+  "run_mode": null,
+  "rung": "D0"
+ },
+ "attribution": {
+  "exec_nodes": 0,
+  "attempted_nodes": 0,
+  "failed_nodes": 0,
+  "native_primary": 0,
+  "model_pass": 0,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": null
+ },
+ "usage": {
+  "calls": 3,
+  "prompt_tokens": 16091,
+  "completion_tokens": 999,
+  "cost_usd": 0.010968,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "gemini-3.5-flash-lite",
+   "gemini-3.7-flash"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "task:load_minwage_employment_csv_perform_initial_profiling_and_da",
+   "task_id": "45bb0477-f380-4b05-b7e5-8e9a087d130e",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 6
+   }
+  },
+  {
+   "node": "task:perform_standard_2x2_difference_in_differences_did_calculati",
+   "task_id": "c432a9ee-cf5a-49ab-a220-e4693d5431ac",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 4
+   }
+  },
+  {
+   "node": "task:estimate_regression_based_difference_in_differences_models_u",
+   "task_id": "3dafff21-25f8-4d44-88eb-df8911c6cb17",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 4
+   }
+  },
+  {
+   "node": "task:conduct_robustness_checks_and_heterogeneity_analysis_1_evalu",
+   "task_id": "a0186763-8851-4468-911f-a70ddc122ebb",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 4
+   }
+  }
+ ],
+ "prior_attempts": [],
+ "llm_judgments": {
+  "critique_attempts": 0,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": null
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "fail",
+   "detail": "stopped mid-run: no reporting, no halt/cancel record (suspected void run)",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 1 has 4 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (abandoned)",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (abandoned)",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (abandoned)",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Orphaned (heartbeat timeout) Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:load_minwage_employment_csv_perform_initial_profiling_and_da"
+  },
+  {
+   "id": "node.column.location",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_minwage_employment_csv_perform_initial_profiling_and_da"
+  },
+  {
+   "id": "node.column.fullBefore",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_minwage_employment_csv_perform_initial_profiling_and_da"
+  },
+  {
+   "id": "node.column.fullAfter",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_minwage_employment_csv_perform_initial_profiling_and_da"
+  },
+  {
+   "id": "node.column.state_nj",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_minwage_employment_csv_perform_initial_profiling_and_da"
+  },
+  {
+   "id": "node.column.diff_full",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_minwage_employment_csv_perform_initial_profiling_and_da"
+  },
+  {
+   "id": "node.column.diff_fte",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_minwage_employment_csv_perform_initial_profiling_and_da"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:perform_standard_2x2_difference_in_differences_did_calculati"
+  },
+  {
+   "id": "node.metric.did_unadjusted_full",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:perform_standard_2x2_difference_in_differences_did_calculati"
+  },
+  {
+   "id": "node.metric.did_unadjusted_fte",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:perform_standard_2x2_difference_in_differences_did_calculati"
+  },
+  {
+   "id": "node.column.state",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:perform_standard_2x2_difference_in_differences_did_calculati"
+  },
+  {
+   "id": "node.column.diff_full",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:perform_standard_2x2_difference_in_differences_did_calculati"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:estimate_regression_based_difference_in_differences_models_u"
+  },
+  {
+   "id": "node.metric.did_coef_baseline",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:estimate_regression_based_difference_in_differences_models_u"
+  },
+  {
+   "id": "node.metric.did_pval_baseline",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:estimate_regression_based_difference_in_differences_models_u"
+  },
+  {
+   "id": "node.metric.did_coef_controlled",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:estimate_regression_based_difference_in_differences_models_u"
+  },
+  {
+   "id": "node.metric.did_pval_controlled",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:estimate_regression_based_difference_in_differences_models_u"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:conduct_robustness_checks_and_heterogeneity_analysis_1_evalu"
+  },
+  {
+   "id": "node.insight.employment_effect_conclusion",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:conduct_robustness_checks_and_heterogeneity_analysis_1_evalu"
+  },
+  {
+   "id": "node.insight.substitution_dynamics",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:conduct_robustness_checks_and_heterogeneity_analysis_1_evalu"
+  },
+  {
+   "id": "node.column.specification",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:conduct_robustness_checks_and_heterogeneity_analysis_1_evalu"
+  },
+  {
+   "id": "node.column.estimate",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:conduct_robustness_checks_and_heterogeneity_analysis_1_evalu"
+  },
+  {
+   "id": "benchmark.reproducibility.metrics.json exists",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "file missing",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact final_dashboard.html",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "MISSING",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact research_report.md",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "MISSING",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact workflow_execution.py",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "MISSING",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.workflow_execution.py exists",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "file missing — cannot check methodology",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:58+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

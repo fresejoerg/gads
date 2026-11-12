@@ -1,0 +1,493 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "5ee42217-4e38-4894-8cb3-c4d4072dce79",
+ "name": "AirPassengers monthly forecasting (univariate)",
+ "verdict": "fail",
+ "critical": {
+  "pass": 2,
+  "fail": 4,
+  "not_evaluable": 15
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 3,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "deliverables": {
+   "pass": 3,
+   "fail": 1,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 0,
+   "fail": 4,
+   "not_evaluable": 15
+  },
+  "benchmark": {
+   "pass": 7,
+   "fail": 8,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "air_passengers_v1",
+  "verdict": "fail",
+  "passed": 7,
+  "total": 15
+ },
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": "timeseries_forecast.autogluon.standard",
+  "plan": "recipe_compiled",
+  "exec_nodes": 4,
+  "created_at": "2026-10-02T12:18:15.291127",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "air_passengers_forecast.md",
+  "recipe_id": "timeseries_forecast.autogluon.standard",
+  "recipe_version": "1.3.0",
+  "engine_id": "prism-ml/bonsai-27b@base",
+  "routing_mode": "local",
+  "run_mode": "research",
+  "rung": "D3"
+ },
+ "attribution": {
+  "exec_nodes": 0,
+  "attempted_nodes": 1,
+  "failed_nodes": 1,
+  "native_primary": 0,
+  "model_pass": 0,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.0
+ },
+ "usage": {
+  "calls": 8,
+  "prompt_tokens": 32634,
+  "completion_tokens": 1291,
+  "cost_usd": 0.0,
+  "unpriced_calls": 8,
+  "cost_complete": false,
+  "models": [
+   "local_model"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "profile_time_series",
+   "task_id": "a28572cb-a123-4671-a15c-c5b528bc13a5",
+   "status": "failed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 7
+   }
+  },
+  {
+   "node": "prepare_timeseries_dataframe",
+   "task_id": "6ce6e26b-32c6-4594-a44b-6be19dd55b44",
+   "status": "failed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "train_forecast_model",
+   "task_id": "f429e2d9-a35a-4114-be1e-7bad911f8a5a",
+   "status": "failed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 7
+   }
+  },
+  {
+   "node": "generate_forecasts_and_visualize",
+   "task_id": "cd50be6a-8939-44a2-8b74-9fa0aa31fda7",
+   "status": "failed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 4,
+   "completed": 0,
+   "failed": [
+    {
+     "node": "profile_time_series",
+     "error": "name 'df' is not defined"
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 4,
+   "completed": 0,
+   "failed": [
+    {
+     "node": "profile_time_series",
+     "error": "name 'df' is not defined"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 4 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "all 4 recipe nodes planned",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.metrics.json",
+   "dimension": "deliverables",
+   "status": "fail",
+   "detail": "missing or unparseable",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "failed: name 'df' is not defined",
+   "critical": true,
+   "node": "profile_time_series"
+  },
+  {
+   "id": "node.metric.n_series",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "profile_time_series"
+  },
+  {
+   "id": "node.metric.naive_mae",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "profile_time_series"
+  },
+  {
+   "id": "node.variable.timestamp_col",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "profile_time_series"
+  },
+  {
+   "id": "node.variable.target_col",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "profile_time_series"
+  },
+  {
+   "id": "node.variable.item_id_col",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "profile_time_series"
+  },
+  {
+   "id": "node.variable.inferred_freq",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "profile_time_series"
+  },
+  {
+   "id": "node.variable.n_series",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "profile_time_series"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "prepare_timeseries_dataframe"
+  },
+  {
+   "id": "node.variable.ts_df",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "prepare_timeseries_dataframe"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.metric.best_model_mase",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.metric.seasonal_naive_mase",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.metric.prediction_length",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.variable.predictor_ts",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.variable.prediction_length",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.variable.best_model_mase",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.variable.seasonal_naive_mase",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "generate_forecasts_and_visualize"
+  },
+  {
+   "id": "benchmark.reproducibility.metrics.json exists",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "file missing",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact figure_1_forecast.json",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "MISSING",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact model_timeseries.joblib",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "MISSING",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact final_dashboard.html",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact research_report.md",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact workflow_execution.py",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /TimeSeriesPredictor\\(/",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "NOT FOUND",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /TimeSeriesDataFrame/",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "NOT FOUND",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /eval_metric\\s*=\\s*[\"']MASE[\"']/",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "NOT FOUND",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /prediction_length/",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "NOT FOUND",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /gads_forecast_scores\\(/",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "NOT FOUND",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code lacks /from statsmodels\\.tsa/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code lacks /import pmdarima/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code lacks /from prophet/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code lacks /prediction_length\\s*=\\s*(12|24|36)\\b/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:59+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

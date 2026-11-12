@@ -1,0 +1,553 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "a005cae1-7344-4b30-8c76-81b558b2217c",
+ "name": "AMLB Image Segmentation (multiclass classification)",
+ "verdict": "pass",
+ "critical": {
+  "pass": 20,
+  "fail": 0,
+  "not_evaluable": 0
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 3,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "deliverables": {
+   "pass": 4,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "integrity": {
+   "pass": 5,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 18,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "benchmark": {
+   "pass": 20,
+   "fail": 0,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "amlb_segment_v1",
+  "verdict": "pass",
+  "passed": 20,
+  "total": 20
+ },
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 1,
+  "recipe_id": "tabular_automl.autogluon.deterministic",
+  "plan": "recipe_compiled",
+  "exec_nodes": 4,
+  "created_at": "2026-09-30T19:58:28.509149",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "amlb_segment.md",
+  "recipe_id": "tabular_automl.autogluon.deterministic",
+  "recipe_version": "1.2.0",
+  "engine_id": null,
+  "routing_mode": "cloud",
+  "run_mode": "research",
+  "rung": "D4"
+ },
+ "attribution": {
+  "exec_nodes": 4,
+  "attempted_nodes": 4,
+  "failed_nodes": 0,
+  "native_primary": 0,
+  "model_pass": 4,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 1.0
+ },
+ "usage": {
+  "calls": 7,
+  "prompt_tokens": 41457,
+  "completion_tokens": 8238,
+  "cost_usd": 0.061985,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "gemini-3.7-flash"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "eda_and_target_profile",
+   "task_id": "a852cf89-3a97-4603-a3f9-3e695260947c",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": "gemini-3.7-flash",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.009429,
+   "checks": {
+    "pass": 7,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "train_automl_model",
+   "task_id": "25bfe1cd-2268-4e03-9a80-a05148607cbf",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": "gemini-3.7-flash",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.011604,
+   "checks": {
+    "pass": 8,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "feature_importance_and_insights",
+   "task_id": "8ee6e99d-5f23-4fa8-9fa0-10bf57d5e6be",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": "gemini-3.7-flash",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.014766,
+   "checks": {
+    "pass": 3,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "diagnostic_curves",
+   "task_id": "84c87f36-316c-4c16-b513-c3b3511463fa",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": "gemini-3.7-flash",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.00777675,
+   "checks": {
+    "pass": 4,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": true,
+  "dial_ledger_outcome": "pass"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 1 has 4 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "all 4 recipe nodes planned",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.metrics.json",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.metrics_consistent",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "2 captured metric(s) match metrics.json",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "eda_and_target_profile"
+  },
+  {
+   "id": "node.metric.naive_baseline",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.14285714285714285",
+   "critical": true,
+   "node": "eda_and_target_profile"
+  },
+  {
+   "id": "node.variable.target_col",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "eda_and_target_profile",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.problem_type",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "eda_and_target_profile",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.drop_cols",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (list)",
+   "critical": true,
+   "node": "eda_and_target_profile",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.naive_baseline",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "eda_and_target_profile",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "eda_and_target_profile"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "train_automl_model"
+  },
+  {
+   "id": "node.metric.test_score",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.9281148405938683",
+   "critical": true,
+   "node": "train_automl_model"
+  },
+  {
+   "id": "node.variable.predictor",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (TabularPredictor)",
+   "critical": true,
+   "node": "train_automl_model",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.df_train",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (DataFrame)",
+   "critical": true,
+   "node": "train_automl_model",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.df_test",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (DataFrame)",
+   "critical": true,
+   "node": "train_automl_model",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.test_score",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "train_automl_model",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.eval_metric",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "train_automl_model",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "train_automl_model"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "feature_importance_and_insights"
+  },
+  {
+   "id": "node.variable.feature_importance_df",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (DataFrame)",
+   "critical": true,
+   "node": "feature_importance_and_insights",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "feature_importance_and_insights"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "diagnostic_curves"
+  },
+  {
+   "id": "node.variable.curve_diagnostics",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (dict)",
+   "critical": true,
+   "node": "diagnostic_curves",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.average_precision",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "diagnostic_curves",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "diagnostic_curves"
+  },
+  {
+   "id": "benchmark.reproducibility.metric naive_baseline",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "got 0.14285714285714285, want exactly 0.14285714285714285",
+   "critical": false
+  },
+  {
+   "id": "benchmark.reproducibility.metric test_score",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "got 0.9281148405938683, want exactly 0.9281148405938683",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact metrics.json",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact figure_1_feature_importance.json",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact figure_2_model_performance.json",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact model.joblib",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact final_dashboard.html",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact research_report.md",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact workflow_execution.py",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /train_test_split\\([^)]*stratify=/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "found",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /train_test_split\\([^)]*random_state=42/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "found",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /TabularPredictor\\(/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "found",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /hyperparameters=\\{'GBM': \\{\\}, 'XGB': \\{\\}, 'RF': \\{\\}\\}/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "found",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /num_bag_folds=0/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "found",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /f1_macro/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "found",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /feature_importance/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "found",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code lacks /time_limit\\s*=/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code lacks /presets=/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code lacks /import pickle/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code lacks /from imblearn/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:59+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

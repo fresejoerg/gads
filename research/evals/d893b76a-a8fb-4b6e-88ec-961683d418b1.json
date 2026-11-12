@@ -1,0 +1,488 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "d893b76a-a8fb-4b6e-88ec-961683d418b1",
+ "name": "M4 Hourly demand forecasting (50 series)",
+ "verdict": "fail",
+ "critical": {
+  "pass": 18,
+  "fail": 1,
+  "not_evaluable": 0
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 1,
+   "not_evaluable": 0
+  },
+  "deliverables": {
+   "pass": 0,
+   "fail": 0,
+   "not_evaluable": 3
+  },
+  "integrity": {
+   "pass": 5,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 17,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "benchmark": {
+   "pass": 4,
+   "fail": 6,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "m4_hourly_forecast_v1",
+  "verdict": "fail",
+  "passed": 4,
+  "total": 10
+ },
+ "run": {
+  "terminal_state": "halted",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": "timeseries_forecast.autogluon.standard",
+  "plan": "recipe_compiled",
+  "exec_nodes": 4,
+  "created_at": "2026-09-04T15:11:28.040535",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "m4_hourly_forecast.md",
+  "recipe_id": "timeseries_forecast.autogluon.standard",
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": null,
+  "run_mode": null,
+  "rung": "D4"
+ },
+ "attribution": {
+  "exec_nodes": 4,
+  "attempted_nodes": 4,
+  "failed_nodes": 0,
+  "native_primary": 0,
+  "model_pass": 4,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 1.0
+ },
+ "usage": {
+  "calls": 15,
+  "prompt_tokens": 77838,
+  "completion_tokens": 18590,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "local_model"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "profile_time_series",
+   "task_id": "2c420f81-f9a6-43ca-bae6-59479b1075d3",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": true,
+   "generations": 3,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 9,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "prepare_timeseries_dataframe",
+   "task_id": "bc864425-75cd-47e6-8ac4-2eecfbb2290d",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 3,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "train_forecast_model",
+   "task_id": "20376749-6b0e-4ada-a6ae-0e6bc455fb4c",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 7,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "generate_forecasts_and_visualize",
+   "task_id": "ed2ef833-8393-44b6-8650-68c37c57a802",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "local_model",
+   "model_used": "local_model",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 6,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 4,
+   "completed": 0,
+   "failed": [
+    {
+     "node": "profile_time_series",
+     "error": "'item_id'"
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 4,
+   "completed": 1,
+   "failed": [
+    {
+     "node": "prepare_timeseries_dataframe",
+     "error": "\"None of [Index([                                                                                                                                                                                       "
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 0,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": null
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "fail",
+   "detail": "[HALTED] Fatal system error: <failed_attempts> <generation number=\"1\"> <exception> litellm.BadRequestError: OpenAIException - litellm.BadRequestError: OpenAIException - Error code: 400 - {'error': 'Engine protocol predict request returned …",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 4 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "all 4 recipe nodes planned",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (halted)",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (halted)",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (halted)",
+   "critical": false
+  },
+  {
+   "id": "run.metrics_consistent",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "4 captured metric(s) match metrics.json",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "profile_time_series"
+  },
+  {
+   "id": "node.metric.n_series",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 50.0",
+   "critical": true,
+   "node": "profile_time_series"
+  },
+  {
+   "id": "node.metric.naive_mae",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 19562.060448963268",
+   "critical": true,
+   "node": "profile_time_series"
+  },
+  {
+   "id": "node.variable.timestamp_col",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "profile_time_series",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.target_col",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "profile_time_series",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.item_id_col",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "profile_time_series",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.inferred_freq",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "profile_time_series",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_series",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "profile_time_series",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "profile_time_series"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "prepare_timeseries_dataframe"
+  },
+  {
+   "id": "node.variable.ts_df",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (TimeSeriesDataFrame)",
+   "critical": true,
+   "node": "prepare_timeseries_dataframe",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "prepare_timeseries_dataframe"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.metric.best_model_mase",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.9757443932230794",
+   "critical": true,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.metric.prediction_length",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 70.0",
+   "critical": true,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.variable.predictor_ts",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (TimeSeriesPredictor)",
+   "critical": true,
+   "node": "train_forecast_model",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.prediction_length",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "train_forecast_model",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.best_model_mase",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "train_forecast_model",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "generate_forecasts_and_visualize"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "generate_forecasts_and_visualize"
+  },
+  {
+   "id": "benchmark.reproducibility.metric n_series",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "got 50.0, want exactly 50",
+   "critical": false
+  },
+  {
+   "id": "benchmark.reproducibility.metric prediction_length",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "got 70.0, want exactly 70",
+   "critical": false
+  },
+  {
+   "id": "benchmark.reproducibility.metric best_model_mase",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "got 0.9757443932230794, want < 2.0187",
+   "critical": false
+  },
+  {
+   "id": "benchmark.reproducibility.metric seasonal_naive_mase",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "not in metrics.json",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact figure_1_forecast.json",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "MISSING",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact model_timeseries.joblib",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact final_dashboard.html",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "MISSING",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact research_report.md",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "MISSING",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact workflow_execution.py",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "MISSING",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.workflow_execution.py exists",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "file missing — cannot check methodology",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:59+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

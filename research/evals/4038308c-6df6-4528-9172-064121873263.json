@@ -1,0 +1,299 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "4038308c-6df6-4528-9172-064121873263",
+ "name": "Castle Doctrine self-defense law effect on homicide",
+ "verdict": "fail",
+ "critical": {
+  "pass": 1,
+  "fail": 6,
+  "not_evaluable": 0
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 1,
+   "fail": 1,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 0,
+   "fail": 0,
+   "not_evaluable": 3
+  },
+  "contract": {
+   "pass": 0,
+   "fail": 5,
+   "not_evaluable": 0
+  },
+  "benchmark": {
+   "pass": 0,
+   "fail": 5,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "castle_doctrine_homicide_v1",
+  "verdict": "fail",
+  "passed": 0,
+  "total": 5
+ },
+ "run": {
+  "terminal_state": "abandoned",
+  "void_suspected": true,
+  "workflow_attempts": 1,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 5,
+  "created_at": "2026-08-21T14:57:17.839782",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "castle_doctrine_homicide.md",
+  "recipe_id": null,
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": null,
+  "run_mode": null,
+  "rung": "D0"
+ },
+ "attribution": {
+  "exec_nodes": 0,
+  "attempted_nodes": 0,
+  "failed_nodes": 0,
+  "native_primary": 0,
+  "model_pass": 0,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": null
+ },
+ "usage": {
+  "calls": 3,
+  "prompt_tokens": 15976,
+  "completion_tokens": 773,
+  "cost_usd": 0.010033,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "gemini-3.5-flash-lite",
+   "gemini-3.7-flash"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "task:load_castle_doctrine_homicide_csv_inspect_the_panel_structur",
+   "task_id": "407d41d3-1b63-491e-86c7-66e0a803b547",
+   "status": "failed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.5-flash-lite",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:perform_exploratory_data_analysis_on_the_homicide_rate_traje",
+   "task_id": "0e68589a-f713-44f2-8275-56b5258953c2",
+   "status": "failed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:estimate_the_causal_effect_of_castle_doctrine_law_adoption_p",
+   "task_id": "90728b74-3f0a-4477-b205-5b0980d69908",
+   "status": "failed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.1-pro-preview",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:conduct_event_study_regression_and_placebo_robustness_checks",
+   "task_id": "a3cc9bbd-a480-4e37-99c4-9e6d8f19da17",
+   "status": "failed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:synthesize_the_causal_findings_from_the_panel_regressions_ev",
+   "task_id": "dae3895c-7637-4e3a-8c55-5cb3406a7b9f",
+   "status": "failed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.5-flash-lite",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [],
+ "llm_judgments": {
+  "critique_attempts": 0,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": null
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "fail",
+   "detail": "stopped mid-run: no reporting, no halt/cancel record (suspected void run)",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 1 has 5 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (abandoned)",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (abandoned)",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (abandoned)",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Orphaned (heartbeat timeout) Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:load_castle_doctrine_homicide_csv_inspect_the_panel_structur"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:perform_exploratory_data_analysis_on_the_homicide_rate_traje"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:estimate_the_causal_effect_of_castle_doctrine_law_adoption_p"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:conduct_event_study_regression_and_placebo_robustness_checks"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:synthesize_the_causal_findings_from_the_panel_regressions_ev"
+  },
+  {
+   "id": "benchmark.reproducibility.metrics.json exists",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "file missing",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact final_dashboard.html",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "MISSING",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact research_report.md",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "MISSING",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact workflow_execution.py",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "MISSING",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.workflow_execution.py exists",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "file missing — cannot check methodology",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:58+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

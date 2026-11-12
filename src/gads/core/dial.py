@@ -82,6 +82,67 @@ def drafted_plan_dial(spec_hints: Dict[str, Any]) -> Dict[str, Any]:
     return {"rung": "D1" if framed else "D0", "task_rungs": {}, "selection": "drafted"}
 
 
+def node_attribution(tasks: List[Any]) -> Dict[str, Any]:
+    """pass@model vs pass@model+fallback (approach_docs/019) for one run's tasks.
+
+    The single implementation shared by the dial ledger (server.py) and the run scorecard
+    (gads.eval). `tasks` are Task rows (or objects with .status/.result_json/
+    .postcondition_json/.description), in creation order, all attempts; only completed and
+    failed ones are considered.
+
+    How much of the run the assigned model did itself vs. what a fallback (native/cloud)
+    had to rescue. The two stay SEPARATE: a fallback-assisted pass must never read as a
+    model pass, or the delegation-dial measurement is contaminated. Deduped per recipe node
+    (last completed instance wins across attempts).
+
+    A node that EXHAUSTED its retries and never completed in any attempt counts as
+    attempted-not-passed. Counting completed tasks only made pass@model survivorship-biased:
+    a run that died at node 7 of 10 recorded 6/6 = 1.0 (4653ffae, 50bd2bf3, 22b8557a).
+    Downstream nodes that never ran carry no code and stay out of the denominator; the
+    model was never asked to do them.
+    """
+    by_node: Dict[str, str] = {}
+    failed_nodes: Dict[str, str] = {}
+    for t in tasks:
+        if t.status not in ("completed", "failed"):
+            continue
+        rj = t.result_json or {}
+        mu = str(rj.get("model_used", ""))
+        node = (t.postcondition_json or {}).get("recipe_node_id") or t.description
+        if t.status == "completed":
+            if rj.get("code") or mu.startswith(("native_fallback:", "cloud_fallback:")):
+                by_node[node] = mu
+        # A failed task with ANY execution record was attempted, including one whose
+        # generation never parsed and so stored empty code (50bd2bf3). Tasks the exhaustion
+        # cleanup marked as never-run carry no result_json at all.
+        elif rj and not mu.startswith("native_primary:"):
+            failed_nodes[node] = mu
+    n_failed = len([n for n in failed_nodes if n not in by_node])
+    n_exec = len(by_node)
+    n_native_fb = sum(1 for m in by_node.values() if m.startswith("native_fallback:"))
+    n_cloud_fb = sum(1 for m in by_node.values() if m.startswith("cloud_fallback:"))
+    # Production mode ran these natively BY POLICY: the model was never asked, so they are
+    # neither a model pass nor a rescue. Counted apart from both and excluded from the
+    # pass@model denominator; a node the model never attempted is no evidence either way.
+    n_native_primary = sum(1 for m in by_node.values() if m.startswith("native_primary:"))
+    n_fb = n_native_fb + n_cloud_fb
+    n_attempted = n_exec - n_native_primary + n_failed
+    n_model = n_exec - n_native_primary - n_fb
+    return {
+        "by_node": by_node,
+        "failed_by_node": {n: m for n, m in failed_nodes.items() if n not in by_node},
+        "exec_nodes": n_exec,
+        "attempted_nodes": n_attempted,
+        "failed_nodes": n_failed,
+        "native_primary": n_native_primary,
+        "model_pass": n_model,
+        "fallback_pass": n_fb,
+        "native_fallback": n_native_fb,
+        "cloud_fallback": n_cloud_fb,
+        "pass_at_model": round(n_model / n_attempted, 3) if n_attempted else None,
+    }
+
+
 ROUTING_LEDGER_PATH = "research/routing_ledger.jsonl"
 
 

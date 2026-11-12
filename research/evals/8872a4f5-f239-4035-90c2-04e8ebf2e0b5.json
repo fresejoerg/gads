@@ -1,0 +1,313 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "8872a4f5-f239-4035-90c2-04e8ebf2e0b5",
+ "name": "National Supported Work job-training program (LaLonde)",
+ "verdict": "fail",
+ "critical": {
+  "pass": 3,
+  "fail": 4,
+  "not_evaluable": 0
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 1,
+   "fail": 1,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 0,
+   "fail": 0,
+   "not_evaluable": 3
+  },
+  "contract": {
+   "pass": 2,
+   "fail": 3,
+   "not_evaluable": 0
+  },
+  "integrity": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "benchmark": {
+   "pass": 0,
+   "fail": 2,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "jobs_lalonde_training_v1",
+  "verdict": "fail",
+  "passed": 0,
+  "total": 2
+ },
+ "run": {
+  "terminal_state": "abandoned",
+  "void_suspected": true,
+  "workflow_attempts": 2,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 5,
+  "created_at": "2026-08-21T15:56:26.251859",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "jobs_lalonde_training.md",
+  "recipe_id": null,
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": null,
+  "run_mode": null,
+  "rung": "D0"
+ },
+ "attribution": {
+  "exec_nodes": 3,
+  "attempted_nodes": 4,
+  "failed_nodes": 1,
+  "native_primary": 0,
+  "model_pass": 3,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.75
+ },
+ "usage": {
+  "calls": 18,
+  "prompt_tokens": 94070,
+  "completion_tokens": 18954,
+  "cost_usd": 0.110724,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "gemini-3.5-flash-lite",
+   "gemini-3.7-flash",
+   "gpt-5.6-terra",
+   "kimi-k2.7-code"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "task:inspect_workflow_spec_md_and_load_jobs_lalonde_training_csv_",
+   "task_id": "bb52a3df-288d-4b76-bd7d-bd61449c4d17",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": "gemini-3.7-flash",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0045735,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:fit_propensity_score_models_logistic_regression_standard_gra",
+   "task_id": "c78a5106-0b08-409b-9bcc-8a26323666f1",
+   "status": "completed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": "gemini-3.7-flash",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 4,
+   "cost_usd": 0.02166352,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:estimate_the_average_treatment_effect_on_the_treated_att_of_",
+   "task_id": "d877b0e9-2550-4e65-9cfe-4c654d62f2fd",
+   "status": "failed",
+   "contract_source": "none",
+   "assigned_to": "claude-sonnet-5",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:conduct_causal_refutation_and_sensitivity_analysis_tests_ran",
+   "task_id": "3b2132f3-5e71-48b1-a8d8-06de84e5602f",
+   "status": "failed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "task:synthesize_the_att_estimation_results_confidence_intervals_a",
+   "task_id": "4b5b58f4-dbc9-4a40-b000-2a581d5cd1ed",
+   "status": "failed",
+   "contract_source": "none",
+   "assigned_to": "gemini-3.7-flash",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 5,
+   "completed": 1,
+   "failed": [
+    {
+     "node": "task:fit_propensity_score_models_using_logistic_regression_gradie",
+     "error": "line 31: `_HGBCOrig.fit = ...` monkey-patches an estimator method. This is banned: retries re-run your code in the SAME kernel, so the second run captures the already-patched function as the 'original"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 0,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": null
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "fail",
+   "detail": "stopped mid-run: no reporting, no halt/cancel record (suspected void run)",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 2 has 5 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (abandoned)",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (abandoned)",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "not_evaluable",
+   "detail": "run did not complete (abandoned)",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:inspect_workflow_spec_md_and_load_jobs_lalonde_training_csv_"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:inspect_workflow_spec_md_and_load_jobs_lalonde_training_csv_"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "task:fit_propensity_score_models_logistic_regression_standard_gra"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:fit_propensity_score_models_logistic_regression_standard_gra"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Orphaned (heartbeat timeout) Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:estimate_the_average_treatment_effect_on_the_treated_att_of_"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:conduct_causal_refutation_and_sensitivity_analysis_tests_ran"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Stale: never ran; left pending by a run that predated the leftover-task cleanup (server.py). Marked failed by manual cleanup 2026-09-26.",
+   "critical": true,
+   "node": "task:synthesize_the_att_estimation_results_confidence_intervals_a"
+  },
+  {
+   "id": "benchmark.reproducibility.metrics.json exists",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "file missing",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.workflow_execution.py exists",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "file missing — cannot check methodology",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:58+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

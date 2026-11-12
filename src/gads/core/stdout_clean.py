@@ -18,6 +18,16 @@ in one place is the point: it was already duplicated in the notebook exporter, a
 copy had silently drifted — it was missing `GADS_METRICS_JSON:`.
 """
 
+# Stdout phrases that mean the task code gave up on the real data and simulated or skipped
+# instead of failing. A task whose stdout contains one fails even if it did not raise
+# (server.py's hallucination guard). Shared with scripts/eval_tier2.py and the run
+# scorecard (gads.eval) so offline evaluation applies the same guard.
+HALLUCINATION_TOKENS = (
+    "no files provided", "no data available", "simulating data",
+    "mock data", "dummy data", "environment is empty",
+    "no file available to process",
+)
+
 # Every reserved stdout prefix GADS parses back into structured data. Add new sentinels
 # HERE and nowhere else; the parsers match on these same strings.
 SENTINEL_PREFIXES = (

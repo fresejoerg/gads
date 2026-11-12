@@ -1,0 +1,303 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "07d501d4-603b-4d26-a19d-91bd60b0a6f8",
+ "name": "Adult census — apply EDA transformations",
+ "verdict": "fail",
+ "critical": {
+  "pass": 3,
+  "fail": 1,
+  "not_evaluable": 9
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 4,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "integrity": {
+   "pass": 1,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "contract": {
+   "pass": 1,
+   "fail": 1,
+   "not_evaluable": 9
+  }
+ },
+ "benchmark": null,
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 2,
+  "created_at": "2026-08-15T22:18:02.530051",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "transform_adult_from_eda.md",
+  "recipe_id": null,
+  "recipe_version": "1.0.0",
+  "engine_id": null,
+  "routing_mode": "local",
+  "run_mode": null,
+  "rung": "D3"
+ },
+ "attribution": {
+  "exec_nodes": 1,
+  "attempted_nodes": 2,
+  "failed_nodes": 1,
+  "native_primary": 0,
+  "model_pass": 0,
+  "fallback_pass": 1,
+  "native_fallback": 1,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.0
+ },
+ "usage": {
+  "calls": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": []
+ },
+ "nodes": [
+  {
+   "node": "task:apply_a_transformation_manifest_produced_by_an_earlier_eda_r",
+   "task_id": "961a5839-0806-4bbc-87cd-7cb98704be0d",
+   "status": "completed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": "native_fallback:gads_apply_transformations",
+   "invocation": "native_fallback",
+   "resumed": true,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 2,
+    "fail": 0,
+    "not_evaluable": 8
+   }
+  },
+  {
+   "node": "task:verify_what_was_written_and_report_it_load_each_parquet_the_",
+   "task_id": "2709e56d-90ad-451e-ad8d-5a8b2f159107",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 1
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 2,
+   "completed": 1,
+   "failed": [
+    {
+     "node": "task:verify_what_was_written_and_report_it_load_each_parquet_the_",
+     "error": "Model emitted no ```python code block; its output was deliberation prose, not a program. The generation was cut off at the token budget."
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 2,
+   "completed": 1,
+   "failed": [
+    {
+     "node": "task:verify_what_was_written_and_report_it_load_each_parquet_the_",
+     "error": "generated text is not valid Python (unmatched ')' at line 12)"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 2 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.metrics.json",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.metrics_consistent",
+   "dimension": "integrity",
+   "status": "not_evaluable",
+   "detail": "no captured metric appears in metrics.json",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "resumed from a prior attempt",
+   "critical": true,
+   "node": "task:apply_a_transformation_manifest_produced_by_an_earlier_eda_r"
+  },
+  {
+   "id": "node.metric.n_rows_out",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "result has no metrics_captured (run predates metric capture)",
+   "critical": true,
+   "node": "task:apply_a_transformation_manifest_produced_by_an_earlier_eda_r"
+  },
+  {
+   "id": "node.metric.n_cols_out",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "result has no metrics_captured (run predates metric capture)",
+   "critical": true,
+   "node": "task:apply_a_transformation_manifest_produced_by_an_earlier_eda_r"
+  },
+  {
+   "id": "node.metric.n_columns_dropped",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "result has no metrics_captured (run predates metric capture)",
+   "critical": true,
+   "node": "task:apply_a_transformation_manifest_produced_by_an_earlier_eda_r"
+  },
+  {
+   "id": "node.variable.df",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:apply_a_transformation_manifest_produced_by_an_earlier_eda_r",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.result",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:apply_a_transformation_manifest_produced_by_an_earlier_eda_r",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_rows_out",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:apply_a_transformation_manifest_produced_by_an_earlier_eda_r",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_cols_out",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:apply_a_transformation_manifest_produced_by_an_earlier_eda_r",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_columns_dropped",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "in the snapshot, but the kernel was reset for this replanned drafted plan and the snapshot keeps earlier attempts' names: not attributable",
+   "critical": true,
+   "node": "task:apply_a_transformation_manifest_produced_by_an_earlier_eda_r",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "task:apply_a_transformation_manifest_produced_by_an_earlier_eda_r"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "failed: generated text is not valid Python (unexpected indent at line 2)",
+   "critical": true,
+   "node": "task:verify_what_was_written_and_report_it_load_each_parquet_the_"
+  },
+  {
+   "id": "node.variable.verification",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:verify_what_was_written_and_report_it_load_each_parquet_the_"
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:58+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

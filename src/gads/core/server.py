@@ -41,7 +41,7 @@ from gads.core.registry import (
 )
 from gads.core.knowledge import KnowledgeRegistry
 from gads.core.dial import (compiled_plan_dial, advisory_plan_dial, drafted_plan_dial,
-                            append_ledger, append_routing_ledger)
+                            append_ledger, append_routing_ledger, node_attribution)
 from gads.core.reporting import create_master_reports
 from gads.core.usage import snapshot as usage_snapshot
 from gads.core.report_sections import (build_sections as build_report_sections,
@@ -100,14 +100,9 @@ async def catch_exceptions_middleware(request, call_next):
 registry = KnowledgeRegistry("src/gads/knowledge/recipes")
 WORKSPACE_ROOT = "/home/joergf/projects/MyLocalStack/data/workspaces"
 
-# Stdout phrases that mean the task code gave up on the real data and simulated or skipped
-# instead of failing. A task whose stdout contains one fails even if it did not raise.
-# Shared with scripts/eval_tier2.py so offline evaluation applies the same guard.
-HALLUCINATION_TOKENS = (
-    "no files provided", "no data available", "simulating data",
-    "mock data", "dummy data", "environment is empty",
-    "no file available to process",
-)
+# Stdout phrases that mean the task code gave up on the real data (defined in
+# core/stdout_clean.py so offline evaluators can import it without the app).
+from gads.core.stdout_clean import HALLUCINATION_TOKENS  # noqa: E402
 # Source-dataset root, bind mounted READ-ONLY into the sandbox at the identical path.
 # Datasets under this root are symlinked into workspaces rather than copied (see
 # _mount_external_dataset); the read-only mount is what makes that safe.
@@ -3228,48 +3223,22 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                 ).all()
                 if t.assigned_to not in _advisory_agents
             ])
-            # pass@model vs pass@model+fallback (approach_docs/019): how much of the run the
-            # assigned model did itself vs. what a fallback (native/cloud) had to rescue.
-            # Keep the two SEPARATE — a fallback-assisted pass must never read as a model pass,
-            # or the delegation-dial measurement is contaminated. Deduped per recipe node
-            # (last completed instance wins across attempts).
-            #
-            # A node that EXHAUSTED its retries and never completed in any attempt counts as
-            # attempted-not-passed. Counting completed tasks only made pass@model survivorship-
-            # biased: a run that died at node 7 of 10 recorded 6/6 = 1.0 (4653ffae, 50bd2bf3,
-            # 22b8557a). Downstream nodes that never ran carry no code and stay out of the
-            # denominator — the model was never asked to do them.
-            _by_node: Dict[str, str] = {}
-            _failed_nodes: Dict[str, str] = {}
-            for t in session.exec(
+            # pass@model vs pass@model+fallback (approach_docs/019): one implementation,
+            # shared with the run scorecard (gads.eval). See dial.node_attribution.
+            _attr = node_attribution(session.exec(
                 select(Task).where(Task.project_id == project_id,
                                    Task.status.in_(["completed", "failed"]))
                 .order_by(Task.created_at)
-            ).all():
-                _rj = t.result_json or {}
-                _mu = str(_rj.get("model_used", ""))
-                _node = (t.postcondition_json or {}).get("recipe_node_id") or t.description
-                if t.status == "completed":
-                    if _rj.get("code") or _mu.startswith(("native_fallback:", "cloud_fallback:")):
-                        _by_node[_node] = _mu
-                # A failed task with ANY execution record was attempted — including one whose
-                # generation never parsed and so stored empty code (50bd2bf3). Tasks the
-                # exhaustion cleanup marked as never-run carry no result_json at all.
-                elif _rj and not _mu.startswith("native_primary:"):
-                    _failed_nodes[_node] = _mu
-            _n_failed = len([n for n in _failed_nodes if n not in _by_node])
-            _n_exec = len(_by_node)
-            _n_native_fb = sum(1 for m in _by_node.values() if m.startswith("native_fallback:"))
-            _n_cloud_fb = sum(1 for m in _by_node.values() if m.startswith("cloud_fallback:"))
-            # Production mode ran these natively BY POLICY — the model was never asked, so
-            # they are neither a model pass nor a rescue. Counted apart from both, and
-            # excluded from the pass@model denominator: a node the model never attempted
-            # cannot be evidence about the model either way.
-            _n_native_primary = sum(1 for m in _by_node.values() if m.startswith("native_primary:"))
-            _n_fb = _n_native_fb + _n_cloud_fb
-            _n_attempted = _n_exec - _n_native_primary + _n_failed
-            _n_model = _n_exec - _n_native_primary - _n_fb
-            _pass_at_model = round(_n_model / _n_attempted, 3) if _n_attempted else None
+            ).all())
+            _n_failed = _attr["failed_nodes"]
+            _n_exec = _attr["exec_nodes"]
+            _n_native_fb = _attr["native_fallback"]
+            _n_cloud_fb = _attr["cloud_fallback"]
+            _n_native_primary = _attr["native_primary"]
+            _n_fb = _attr["fallback_pass"]
+            _n_attempted = _attr["attempted_nodes"]
+            _n_model = _attr["model_pass"]
+            _pass_at_model = _attr["pass_at_model"]
             if _n_attempted or _n_exec:
                 print(f"  [Dial] run_mode={get_run_mode()} | pass@model="
                       f"{_n_model}/{_n_attempted} ({_pass_at_model}) | fallback-assisted: "
@@ -3322,6 +3291,18 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
         trace_context.reset(ctx_token)
         trace.end()
         tracing.flush()
+        # RUN SCORECARD (gads.eval): one code-only eval object per execution, written to
+        # research/evals/<project_id>.json on EVERY exit path (completed, halted, cancelled,
+        # fatal error), since the failed runs are the ones a scorecard matters most for.
+        # Off-thread (DB reads, file reads, a git call) and fail-open: score_and_write never
+        # raises, and a scoring problem must not surface as a workflow error.
+        try:
+            from gads.eval.scorecard import score_and_write
+            await asyncio.to_thread(score_and_write, project_id)
+        except Exception as _eval_exc:
+            # CancelledError (a BaseException) propagates: swallowing it here would turn a
+            # task cancellation into a normal return. The CLI backfill covers that run.
+            print(f"  [Eval] scorecard skipped: {type(_eval_exc).__name__}", flush=True)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, last_seq: int = 0):

@@ -1,0 +1,321 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "e75db087-9a75-4c67-b361-d8bd64e0e38d",
+ "name": "Amazon Fashion Product Recommendation (Implicit CF)",
+ "verdict": "fail",
+ "critical": {
+  "pass": 2,
+  "fail": 5,
+  "not_evaluable": 5
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 3,
+   "fail": 1,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 0,
+   "fail": 5,
+   "not_evaluable": 5
+  }
+ },
+ "benchmark": null,
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 5,
+  "created_at": "2026-08-01T19:15:34.914903",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "amazon_reviews_recommendation.md",
+  "recipe_id": null,
+  "recipe_version": "2.0.0",
+  "engine_id": null,
+  "routing_mode": "local",
+  "run_mode": null,
+  "rung": "D3"
+ },
+ "attribution": {
+  "exec_nodes": 0,
+  "attempted_nodes": 1,
+  "failed_nodes": 1,
+  "native_primary": 0,
+  "model_pass": 0,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.0
+ },
+ "usage": {
+  "calls": 0,
+  "prompt_tokens": 0,
+  "completion_tokens": 0,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": []
+ },
+ "nodes": [
+  {
+   "node": "task:identify_the_user_id_item_id_optional_rating_and_optional_ti",
+   "task_id": "f882745e-e393-49ee-9706-302cf03a01f2",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "task:call_bundle_gads_temporal_loo_split_bundle_time_col_timestam",
+   "task_id": "1987a301-3462-496d-9580-18eafd5fee0b",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "task:call_bundle_gads_fit_and_recommend_bundle_method_als_n_20_it",
+   "task_id": "e8fc7ff5-8f19-4c48-9cf9-a2f590b702dd",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 1
+   }
+  },
+  {
+   "node": "task:call_metrics_gads_evaluate_topn_bundle_k_values_10_20_it_com",
+   "task_id": "425cad97-ae9b-4bac-a13d-5c6d7786a8d7",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 2
+   }
+  },
+  {
+   "node": "task:using_bundle_recommendations_and_the_index_maps_in_bundle_in",
+   "task_id": "4aac26f2-f47b-46c2-ad63-8f079fdf5601",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 5,
+   "completed": 0,
+   "failed": [
+    {
+     "node": "task:identify_the_user_id_item_id_optional_rating_and_optional_ti",
+     "error": "[gads_build_interaction_matrix] empty 5-core — no user and item survive with >= 5 interactions each. The usual cause is that the frame was RANDOMLY down-sampled upstream (df.sample(...)), which destro"
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 5,
+   "completed": 0,
+   "failed": [
+    {
+     "node": "task:identify_the_user_id_item_id_optional_rating_and_optional_ti",
+     "error": "[gads_build_interaction_matrix] empty 5-core — no user and item survive with >= 5 interactions each. The usual cause is that the frame was RANDOMLY down-sampled upstream (df.sample(...)), which destro"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 5 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.metrics.json",
+   "dimension": "deliverables",
+   "status": "fail",
+   "detail": "missing or unparseable",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "failed: [gads_build_interaction_matrix] empty 5-core — no user and item survive with >= 5 interactions each. The usual cause is that the frame was RANDOMLY down-sampled upstream (df.sample(...)), which destroys the co-occurrence structure of a lon…",
+   "critical": true,
+   "node": "task:identify_the_user_id_item_id_optional_rating_and_optional_ti"
+  },
+  {
+   "id": "node.variable.bundle",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:identify_the_user_id_item_id_optional_rating_and_optional_ti"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:call_bundle_gads_temporal_loo_split_bundle_time_col_timestam"
+  },
+  {
+   "id": "node.variable.bundle",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:call_bundle_gads_temporal_loo_split_bundle_time_col_timestam"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:call_bundle_gads_fit_and_recommend_bundle_method_als_n_20_it"
+  },
+  {
+   "id": "node.variable.bundle",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:call_bundle_gads_fit_and_recommend_bundle_method_als_n_20_it"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:call_metrics_gads_evaluate_topn_bundle_k_values_10_20_it_com"
+  },
+  {
+   "id": "node.metric.recall_at_10",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:call_metrics_gads_evaluate_topn_bundle_k_values_10_20_it_com"
+  },
+  {
+   "id": "node.metric.ndcg_at_10",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:call_metrics_gads_evaluate_topn_bundle_k_values_10_20_it_com"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:using_bundle_recommendations_and_the_index_maps_in_bundle_in"
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:58+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

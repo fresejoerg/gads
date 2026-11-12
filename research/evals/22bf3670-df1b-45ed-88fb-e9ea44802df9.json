@@ -1,0 +1,432 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "22bf3670-df1b-45ed-88fb-e9ea44802df9",
+ "name": "New Jersey minimum wage increase effect on fast-food employment",
+ "verdict": "fail",
+ "critical": {
+  "pass": 2,
+  "fail": 4,
+  "not_evaluable": 1
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 2,
+   "fail": 0,
+   "not_evaluable": 1
+  },
+  "deliverables": {
+   "pass": 3,
+   "fail": 1,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 0,
+   "fail": 4,
+   "not_evaluable": 17
+  },
+  "benchmark": {
+   "pass": 3,
+   "fail": 1,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "minwage_employment_v1",
+  "verdict": "fail",
+  "passed": 3,
+  "total": 4
+ },
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 3,
+  "recipe_id": null,
+  "plan": "planner_drafted",
+  "exec_nodes": 4,
+  "created_at": "2026-08-22T01:50:27.722621",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "minwage_employment.md",
+  "recipe_id": null,
+  "recipe_version": null,
+  "engine_id": null,
+  "routing_mode": "local",
+  "run_mode": "research",
+  "rung": "D0"
+ },
+ "attribution": {
+  "exec_nodes": 2,
+  "attempted_nodes": 5,
+  "failed_nodes": 3,
+  "native_primary": 0,
+  "model_pass": 2,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 0.4
+ },
+ "usage": {
+  "calls": 18,
+  "prompt_tokens": 57279,
+  "completion_tokens": 3847,
+  "cost_usd": 0.0,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "local_model"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "task:load_the_dataset_and_sample_it_to_10_rows_for_sandbox_execut",
+   "task_id": "45c8b866-1a62-47d2-a8e0-d53f60305201",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 3
+   }
+  },
+  {
+   "node": "task:calculate_the_change_in_part_time_employment_delta_part_as_p",
+   "task_id": "5aeea494-0aed-4065-84d6-422bda3323b9",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 6
+   }
+  },
+  {
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e",
+   "task_id": "e86396d6-717c-4096-9fca-608ea83d2014",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 7
+   }
+  },
+  {
+   "node": "task:visualize_the_causal_effect_estimation_results_including_the",
+   "task_id": "1cc18b46-c27a-4144-ba13-6503d7765bd4",
+   "status": "failed",
+   "contract_source": "planner_drafted",
+   "assigned_to": "local_model",
+   "model_used": null,
+   "invocation": "none",
+   "resumed": false,
+   "generations": null,
+   "cost_usd": null,
+   "checks": {
+    "pass": 0,
+    "fail": 1,
+    "not_evaluable": 1
+   }
+  }
+ ],
+ "prior_attempts": [
+  {
+   "attempt": 1,
+   "exec_nodes": 6,
+   "completed": 2,
+   "failed": [
+    {
+     "node": "task:calculate_the_change_in_full_time_employment_delta_full_as_f",
+     "error": "generated text is not valid Python (closing parenthesis ')' does not match opening parenthesis '[' at line 2)"
+    }
+   ]
+  },
+  {
+   "attempt": 2,
+   "exec_nodes": 3,
+   "completed": 0,
+   "failed": [
+    {
+     "node": "task:load_the_dataset_and_sample_it_to_10_rows_for_sandbox_execut",
+     "error": "generated text is not valid Python (closing parenthesis ')' does not match opening parenthesis '[' at line 6)"
+    }
+   ]
+  }
+ ],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": false,
+  "dial_ledger_outcome": "fail"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 3 has 4 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "not_evaluable",
+   "detail": "plan was not compiled from a recipe",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.metrics.json",
+   "dimension": "deliverables",
+   "status": "fail",
+   "detail": "missing or unparseable",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "failed: generated text is not valid Python (closing parenthesis ')' does not match opening parenthesis '[' at line 6)",
+   "critical": true,
+   "node": "task:load_the_dataset_and_sample_it_to_10_rows_for_sandbox_execut"
+  },
+  {
+   "id": "node.column.fullBefore",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_the_dataset_and_sample_it_to_10_rows_for_sandbox_execut"
+  },
+  {
+   "id": "node.column.fullAfter",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_the_dataset_and_sample_it_to_10_rows_for_sandbox_execut"
+  },
+  {
+   "id": "node.column.delta_full",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:load_the_dataset_and_sample_it_to_10_rows_for_sandbox_execut"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:calculate_the_change_in_part_time_employment_delta_part_as_p"
+  },
+  {
+   "id": "node.column.fullBefore",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:calculate_the_change_in_part_time_employment_delta_part_as_p"
+  },
+  {
+   "id": "node.column.fullAfter",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:calculate_the_change_in_part_time_employment_delta_part_as_p"
+  },
+  {
+   "id": "node.column.partBefore",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:calculate_the_change_in_part_time_employment_delta_part_as_p"
+  },
+  {
+   "id": "node.column.partAfter",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:calculate_the_change_in_part_time_employment_delta_part_as_p"
+  },
+  {
+   "id": "node.column.delta_full",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:calculate_the_change_in_part_time_employment_delta_part_as_p"
+  },
+  {
+   "id": "node.column.delta_part",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:calculate_the_change_in_part_time_employment_delta_part_as_p"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e"
+  },
+  {
+   "id": "node.metric.ate_delta_full",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": true,
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e"
+  },
+  {
+   "id": "node.column.fullBefore",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e"
+  },
+  {
+   "id": "node.column.fullAfter",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e"
+  },
+  {
+   "id": "node.column.partBefore",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e"
+  },
+  {
+   "id": "node.column.partAfter",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e"
+  },
+  {
+   "id": "node.column.delta_full",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e"
+  },
+  {
+   "id": "node.column.delta_part",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:perform_causal_effect_estimation_using_dowhy_s_gads_causal_e"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "fail",
+   "detail": "never ran: Workflow exhausted max planning attempts; task never ran.",
+   "critical": true,
+   "node": "task:visualize_the_causal_effect_estimation_results_including_the"
+  },
+  {
+   "id": "node.insight.causal_effect_visualization",
+   "dimension": "contract",
+   "status": "not_evaluable",
+   "detail": "node did not complete (failed)",
+   "critical": false,
+   "node": "task:visualize_the_causal_effect_estimation_results_including_the"
+  },
+  {
+   "id": "benchmark.reproducibility.metrics.json exists",
+   "dimension": "benchmark",
+   "status": "fail",
+   "detail": "file missing",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact final_dashboard.html",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact research_report.md",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact workflow_execution.py",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-11T23:14:59+00:00",
+  "commit": "cd14b1e-dirty"
+ }
+}

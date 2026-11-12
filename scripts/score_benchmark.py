@@ -4,7 +4,8 @@
 Quantifies run quality on the two research metrics (research/JOURNAL.md):
 reproducibility (metric values vs. canonical), completeness (artifact manifest)
 and methodological appropriateness (code-level pattern checks). Stdlib only;
-reads the workspace directory — no DB or backend required.
+reads the workspace directory — no DB or backend required. The checks live in
+gads.eval.benchmark, shared with the per-run scorecard (scripts/eval_run.py).
 
 Usage:
     python scripts/score_benchmark.py \
@@ -16,74 +17,13 @@ Exit code 0 iff every check passes.
 """
 import argparse
 import json
-import re
 import sys
 from pathlib import Path
 
-
-def check_metrics(expected: dict, workspace: Path):
-    results = []
-    mfile = workspace / "metrics.json"
-    observed = {}
-    if mfile.exists():
-        try:
-            observed = json.loads(mfile.read_text())
-        except Exception as e:
-            results.append(("metrics.json parse", False, str(e)))
-            return results
-    else:
-        results.append(("metrics.json exists", False, "file missing"))
-        return results
-
-    for name, spec in expected.get("metrics", {}).items():
-        if name not in observed:
-            results.append((f"metric {name}", False, "not in metrics.json"))
-            continue
-        got, want = observed[name], spec["value"]
-        comparator = spec.get("comparator")
-        if comparator:
-            # Threshold checks (e.g. "must beat the seasonal-naive MASE"): `value` is the bound.
-            ops = {"lt": (float.__lt__, "<"), "le": (float.__le__, "<="),
-                   "gt": (float.__gt__, ">"), "ge": (float.__ge__, ">=")}
-            if comparator not in ops:
-                results.append((f"metric {name}", False, f"unknown comparator {comparator!r}"))
-                continue
-            op, sym = ops[comparator]
-            ok = op(float(got), float(want))
-            detail = f"got {got}, want {sym} {want}"
-        elif spec.get("exact"):
-            ok = got == want
-            detail = f"got {got!r}, want exactly {want!r}"
-        else:
-            tol = spec.get("tol") or 0.0
-            ok = abs(float(got) - float(want)) <= tol
-            detail = f"got {got}, want {want} ± {tol}"
-        results.append((f"metric {name}", ok, detail))
-    return results
-
-
-def check_artifacts(expected: dict, workspace: Path):
-    results = []
-    for f in expected.get("artifacts", {}).get("required", []):
-        results.append((f"artifact {f}", (workspace / f).exists(), "present" if (workspace / f).exists() else "MISSING"))
-    return results
-
-
-def check_methodology(expected: dict, workspace: Path):
-    results = []
-    meth = expected.get("methodology", {})
-    code_file = workspace / "workflow_execution.py"
-    if not code_file.exists():
-        results.append(("workflow_execution.py exists", False, "file missing — cannot check methodology"))
-        return results
-    code = code_file.read_text(errors="replace")
-    for pat in meth.get("required_patterns", []):
-        ok = re.search(pat, code) is not None
-        results.append((f"code has /{pat}/", ok, "found" if ok else "NOT FOUND"))
-    for pat in meth.get("forbidden_patterns", []):
-        m = re.search(pat, code)
-        results.append((f"code lacks /{pat}/", m is None, "clean" if m is None else f"VIOLATION: {m.group(0)[:60]!r}"))
-    return results
+# The checks live in gads.eval.benchmark (shared with the per-run scorecard); this script is
+# the CLI wrapper and keeps its historical output and results.jsonl format unchanged.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+from gads.eval.benchmark import score_sections  # noqa: E402
 
 
 def main():
@@ -106,10 +46,7 @@ def main():
     workspace = Path(args.workspace)
     expected = json.loads((bench / "expected.json").read_text())
 
-    sections = {"reproducibility": check_metrics(expected, workspace)}
-    if not args.metrics_only:
-        sections["completeness"] = check_artifacts(expected, workspace)
-        sections["methodology"] = check_methodology(expected, workspace)
+    sections = score_sections(expected, workspace, metrics_only=args.metrics_only)
 
     total = passed = 0
     print(f"\n═══ {expected['benchmark_id']} · workspace {workspace.name[:8]}"
