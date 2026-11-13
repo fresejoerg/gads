@@ -11,7 +11,7 @@ import yaml
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException, Body, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException, Body, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -4034,6 +4034,112 @@ async def register_external_file(project_id: uuid.UUID, req: ExternalPathRequest
         hub.create_outbox_event("STATE_UPDATED", {"files": current_files, "state": project.last_state_json or {}})
         session.commit()
         return ProjectResponse(project=ProjectRead.from_orm(project), files=[f["name"] for f in current_files])
+
+# ——— Dataset upload + workspace listing (HOSTED-2b, approach_docs/032 §5) ———————————————
+UPLOAD_EXTENSIONS = (".csv", ".parquet", ".xlsx", ".json", ".txt")
+# Files GADS itself writes into or reads from a workspace: an upload must not shadow them.
+RESERVED_WORKSPACE_NAMES = frozenset({
+    "metrics.json", "user_notes.txt", "workflow_spec.md", "final_dashboard.html",
+    "research_report.md", "manifest.json",
+})
+_UPLOAD_NAME = re.compile(r"^[\w .()\-]+$")
+_UPLOAD_CHUNK = 1024 * 1024
+
+
+def _upload_max_bytes() -> int:
+    try:
+        mb = float(os.getenv("GADS_UPLOAD_MAX_MB") or 100)
+    except ValueError:
+        mb = 100.0
+    return int(mb * 1024 * 1024)
+
+
+def _safe_upload_name(raw: Optional[str]) -> str:
+    """Basename only, conservative charset, allow-listed extension, not a GADS file. Raises 400."""
+    name = os.path.basename((raw or "").replace("\\", "/")).strip()
+    if not name or name.startswith(".") or not _UPLOAD_NAME.match(name):
+        raise HTTPException(status_code=400, detail="Invalid file name")
+    if not name.lower().endswith(UPLOAD_EXTENSIONS):
+        raise HTTPException(status_code=400, detail=f"File type not allowed; allowed: {', '.join(UPLOAD_EXTENSIONS)}")
+    if name.lower() in RESERVED_WORKSPACE_NAMES or name.lower().startswith("gads_"):
+        raise HTTPException(status_code=400, detail=f"'{name}' is reserved by GADS")
+    return name
+
+
+@app.post("/projects/{project_id}/datasets")
+async def upload_dataset(project_id: uuid.UUID, background_tasks: BackgroundTasks,
+                         file: UploadFile = File(...)):
+    """Upload one dataset into the project workspace, then profile it (DataAnalyzer).
+
+    Owner route. Streams to a temp file in the workspace and enforces the size cap while
+    reading (GADS_UPLOAD_MAX_MB, default 100 = Cloudflare's free-plan body limit), then renames
+    into place. Never writes through a symlink: an existing link of that name is refused (it is
+    usually a mounted, read-only dataset).
+    """
+    name = _safe_upload_name(file.filename)
+    workspace_dir = f"{WORKSPACE_ROOT}/{project_id}"
+    with Session(engine) as session:
+        project = session.get(Project, project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+    os.makedirs(workspace_dir, exist_ok=True)
+    if os.path.islink(workspace_dir):
+        raise HTTPException(status_code=403, detail="Denied")
+    target = os.path.join(workspace_dir, name)
+    if os.path.islink(target) or os.path.isdir(target):
+        raise HTTPException(status_code=409, detail=f"'{name}' exists as a link or directory; not overwriting")
+
+    import tempfile
+    limit, total = _upload_max_bytes(), 0
+    fd, tmp = tempfile.mkstemp(prefix=".upload_", dir=workspace_dir)
+    try:
+        with os.fdopen(fd, "wb") as out:
+            while True:
+                chunk = await file.read(_UPLOAD_CHUNK)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > limit:
+                    raise HTTPException(status_code=413, detail=f"File exceeds {limit // (1024 * 1024)} MB")
+                out.write(chunk)
+        if os.path.islink(target):  # re-check right before the rename
+            raise HTTPException(status_code=409, detail=f"'{name}' exists as a link; not overwriting")
+        os.replace(tmp, target)
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+    if name.lower().endswith((".csv", ".parquet")):
+        background_tasks.add_task(_background_probe_and_update, project_id, name)
+    with Session(engine) as session:
+        project = session.get(Project, project_id)
+        hub = ExecutionHub(session)
+        hub.create_outbox_event("STATE_UPDATED", {"project_id": str(project_id),
+                                                  "files": _get_recursive_files(workspace_dir),
+                                                  "state": project.last_state_json or {}})
+        session.commit()
+    return {"project_id": str(project_id), "filename": name, "size_bytes": total}
+
+
+@app.get("/projects/{project_id}/files")
+async def list_workspace_files(project_id: uuid.UUID):
+    """Top-level workspace entries (what the UI lists; same as listing the directory)."""
+    workspace_dir = f"{WORKSPACE_ROOT}/{project_id}"
+    if not os.path.isdir(workspace_dir):
+        return {"files": []}
+    out = []
+    for name in sorted(os.listdir(workspace_dir)):
+        if name.startswith(".upload_"):
+            continue
+        full = os.path.join(workspace_dir, name)
+        is_dir = os.path.isdir(full)
+        try:
+            size_mb = 0.0 if is_dir else os.path.getsize(full) / (1024 * 1024)
+        except OSError:
+            size_mb = 0.0
+        out.append({"name": name, "is_dir": is_dir, "size_mb": size_mb})
+    return {"files": out}
+
 
 @app.get("/projects/{project_id}/files/{file_path:path}")
 async def download_file(project_id: uuid.UUID, file_path: str, download: bool = False,

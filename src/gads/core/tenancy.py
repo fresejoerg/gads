@@ -260,6 +260,8 @@ ROUTE_POLICY: Dict[tuple, str] = {
     ("POST", "/projects/{project_id}/unpin"): OWNER,
     ("POST", "/projects/{project_id}/cancel"): OWNER,
     ("GET", "/projects/{project_id}/files/{file_path:path}"): OWNER,
+    ("GET", "/projects/{project_id}/files"): OWNER,
+    ("POST", "/projects/{project_id}/datasets"): OWNER,
     ("POST", "/projects/{project_id}/register-external"): ADMIN,  # links host paths
     ("GET", "/tasks/{task_id}/stream"): OWNER,
     ("WS", "/ws"): READ,                       # handler filters events per caller

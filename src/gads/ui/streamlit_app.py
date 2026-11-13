@@ -13,7 +13,6 @@ from typing import List, Dict, Any, Optional
 from gads.core import config  # stdlib + dotenv only; no DB import
 
 BACKEND_URL = os.getenv("GADS_BACKEND_URL", "http://127.0.0.1:8001")
-WORKSPACE_ROOT = config.WORKSPACE_ROOT  # GADS_WORKSPACE_ROOT (core/config.py)
 
 st.set_page_config(
     page_title="GADS Workspace",
@@ -149,6 +148,25 @@ def api_post_long(path, json_data=None, timeout=900.0):
     except Exception as e:
         print(f"  [API] POST(long) {path} failed: {e}")
         return None
+
+def api_upload(path, filename, data: bytes, timeout=300.0):
+    """Multipart upload (POST /projects/{id}/datasets). Returns (json, error_detail)."""
+    try:
+        with httpx.Client(timeout=timeout) as client:
+            resp = client.post(f"{BACKEND_URL}{path}", files={"file": (filename, data)})
+            if resp.status_code >= 400:
+                try:
+                    return None, resp.json().get("detail", resp.text)
+                except Exception:
+                    return None, resp.text
+            return resp.json(), None
+    except Exception as e:
+        return None, str(e)
+
+def workspace_files(project_id):
+    """Top-level workspace entries via the API (the UI never reads the workspace directly)."""
+    res = api_get(f"/projects/{project_id}/files") if project_id else None
+    return [f["name"] for f in (res or {}).get("files", [])]
 
 def api_delete(path):
     try:
@@ -742,11 +760,7 @@ def render_orchestrator_panel():
                 st.warning("Objective required.")
             else:
                 # Check for files in current workspace (if project exists)
-                has_files = False
-                if st.session_state.current_project_id:
-                    ws_path = f"{WORKSPACE_ROOT}/{st.session_state.current_project_id}"
-                    if os.path.exists(ws_path) and len(os.listdir(ws_path)) > 0:
-                        has_files = True
+                has_files = bool(workspace_files(st.session_state.current_project_id))
                 
                 def trigger_launch():
                     payload = {
@@ -966,29 +980,45 @@ def render_orchestrator_panel():
 
     render_active_workflow()
 
+def _ensure_project() -> bool:
+    """Auto-create a draft project if none is loaded (datasets need a workspace to land in)."""
+    if not st.session_state.current_project_id:
+        payload = {
+            "name": f"Draft {datetime.now().strftime('%m-%d %H:%M')}",
+            "objective": ""
+        }
+        res = api_post("/projects", payload)
+        if res and "project" in res:
+            st.session_state.current_project_id = res["project"]["id"]
+        else:
+            detail = res.get("detail", "Unknown error") if isinstance(res, dict) else "Connection failed"
+            st.error(f"Failed to create project session. Backend returned: {detail}")
+    return bool(st.session_state.current_project_id)
+
+
 def render_grounding_panel():
     st.markdown("### GROUNDING")
     
     st.markdown("#### DATASETS")
     host_datasets_root = config.DATASETS_ROOT
-    if os.path.exists(host_datasets_root):
+    if config.DEPLOYMENT == "hosted":
+        # Hosted: the browser uploads; the server's dataset folder is not browsable (032 §5).
+        up = st.file_uploader("Upload a dataset", type=["csv", "parquet", "xlsx", "json", "txt"],
+                              label_visibility="collapsed", key="dataset_upload")
+        if up is not None and st.button("UPLOAD", key="btn_upload", use_container_width=True):
+            if _ensure_project():
+                res, err = api_upload(f"/projects/{st.session_state.current_project_id}/datasets",
+                                      up.name, up.getvalue())
+                if err:
+                    st.error(f"Upload failed: {err}")
+                else:
+                    st.toast(f"Uploaded {res['filename']}")
+                    st.rerun()
+    elif os.path.exists(host_datasets_root):
         files = sorted([f for f in os.listdir(host_datasets_root) if os.path.isfile(os.path.join(host_datasets_root, f))])
         selected = st.selectbox("Mount", options=["--- Select to Mount ---"] + files, label_visibility="collapsed")
         if st.button("MOUNT", key="btn_mount", help="Link the selected external dataset into the current project workspace.", use_container_width=True) and selected != "--- Select to Mount ---":
-            # AUTO-CREATE PROJECT IF NONE LOADED
-            if not st.session_state.current_project_id:
-                payload = {
-                    "name": f"Draft {datetime.now().strftime('%m-%d %H:%M')}", 
-                    "objective": ""
-                }
-                res = api_post("/projects", payload)
-                if res and "project" in res:
-                    st.session_state.current_project_id = res["project"]["id"]
-                else:
-                    detail = res.get("detail", "Unknown error") if isinstance(res, dict) else "Connection failed"
-                    st.error(f"Failed to create project session. Backend returned: {detail}")
-            
-            if st.session_state.current_project_id:
+            if _ensure_project():
                 api_post(f"/projects/{st.session_state.current_project_id}/register-external", {"path": os.path.join(host_datasets_root, selected)})
                 st.toast(f"Mounted {selected}")
                 st.rerun() # Refresh to show in workspace
@@ -1085,9 +1115,8 @@ def render_grounding_panel():
         if not details: return
 
         st.markdown("#### WORKSPACE")
-        ws_path = f"{WORKSPACE_ROOT}/{st.session_state.current_project_id}"
-        if os.path.exists(ws_path):
-            files = sorted(os.listdir(ws_path))
+        files = workspace_files(st.session_state.current_project_id)
+        if files:
             for f in files:
                 url = f"{BACKEND_URL}/projects/{st.session_state.current_project_id}/files/{f}"
                 st.markdown(f"- [`{f}`]({url})")

@@ -201,6 +201,33 @@ check(r.status_code == 403, "register-external of another workspace -> 403")
 r = client.post(f"/projects/{pa}/register-external", headers=H(ADMIN), json={"path": str(DS_ROOT / 'd.csv')})
 check(r.status_code == 200, f"register-external inside datasets root -> 200 ({r.status_code})")
 
+print("7b. dataset upload + workspace listing")
+def up(email, pid, name, data=b"a,b\n1,2\n"):
+    return client.post(f"/projects/{pid}/datasets", headers=H(email), files={"file": (name, data)})
+r = up(A, pa, "sales.csv")
+check(r.status_code == 200 and (wa_dir / "sales.csv").read_bytes() == b"a,b\n1,2\n", f"upload lands in own workspace ({r.status_code})")
+check(up(A, pb, "x.csv").status_code == 404, "upload into someone else's project -> 404")
+for bad, want in [("../escape.csv", 200), ("evil.sh", 400), (".hidden.csv", 400), ("metrics.json", 400),
+                  ("gads_state.csv", 400), ("we$ird.csv", 400)]:
+    r = up(A, pa, bad)
+    if want == 200:
+        check(r.status_code == 200 and r.json()["filename"] == "escape.csv" and not (WS_ROOT / "escape.csv").exists(),
+              "path in the name is reduced to the basename")
+    else:
+        check(r.status_code == want, f"'{bad}' refused ({r.status_code})")
+check(up(A, pa, "evil.txt").status_code == 409, "an existing symlink is not written through")
+check((wb_dir / "secret.txt").read_text() == "bob", "...and bob's file is untouched")
+check(up(A, pa, "d.csv").status_code == 409, "a mounted (symlinked) dataset is not overwritten")
+os.environ["GADS_UPLOAD_MAX_MB"] = "0.001"
+r = up(A, pa, "big.csv", b"x" * 5000)
+check(r.status_code == 413 and not (wa_dir / "big.csv").exists(), "size cap enforced, nothing left behind")
+os.environ.pop("GADS_UPLOAD_MAX_MB")
+check(not [p for p in wa_dir.iterdir() if p.name.startswith(".upload_")], "no temp files left")
+lst = client.get(f"/projects/{pa}/files", headers=H(A))
+names = [f["name"] for f in lst.json()["files"]]
+check(lst.status_code == 200 and names == sorted(os.listdir(wa_dir)), "listing = the directory's top level")
+check(client.get(f"/projects/{pb}/files", headers=H(A)).status_code == 404, "listing someone else's workspace -> 404")
+
 print("8. per-user settings")
 r = client.put("/me/settings", headers=H(A), json={"routing_mode": "local"})
 check(r.status_code == 400, "tester cannot choose local routing")

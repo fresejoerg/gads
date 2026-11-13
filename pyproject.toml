@@ -38,4 +38,5 @@ dependencies = [
     "fastembed>=0.8.0",
     "opentelemetry-sdk>=1.41",
     "opentelemetry-exporter-otlp-proto-http>=1.41",
+    "python-multipart>=0.0.28",
 ]

@@ -92,8 +92,10 @@ if line:
     check(got["handover.ws_default"] is None, "handover workspace_root resolved at call time")
 # Streamlit can't be imported headless; check it reads the same config names.
 ui = (SRC / "gads/ui/streamlit_app.py").read_text(encoding="utf-8")
-check(all(s in ui for s in ("config.WORKSPACE_ROOT", "config.header_image()", "config.DATASETS_ROOT")),
-      "streamlit_app reads workspace/header/datasets from config")
+check(all(s in ui for s in ("config.header_image()", "config.DATASETS_ROOT")),
+      "streamlit_app reads header/datasets from config")
+check("WORKSPACE_ROOT" not in ui and "/files\")" in ui,
+      "streamlit_app never reads the workspace directly (lists it via GET /projects/{id}/files)")
 
 print("2b. defaults unchanged when nothing is set")
 r = run_py("from gads.core import config; print('JSON:'+__import__('json').dumps([config.WORKSPACE_ROOT, config.DATASETS_ROOT, config.SANDBOX_URL, config.DEPLOYMENT]))", {})
