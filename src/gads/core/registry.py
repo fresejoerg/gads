@@ -306,7 +306,9 @@ def resolve_stage_model(stage: str, tier_default: str) -> str:
 # 5.1 (-> fable-5.2), claude-sonnet-5 (-> sonnet-5.5), claude-haiku-4.5 (-> haiku-5.5),
 # gemini-3.1-pro-preview (-> gemini-4-argon), gemini-3.7-flash (-> 3.8-flash), gpt-5.6-sol and
 # gpt-5.6-luna (-> the gpt-6 family), kimi-k3 (-> k3.1-pro); 2026-11-11: gpt-5.6-terra (->
-# gpt-6.1-terra). Kept: kimi-k2.7-code (+ highspeed), a code-specialised line distinct from k3.x.
+# gpt-6.1-terra); 2026-11-13: gemini-3.8-flash (-> gemini-4-hydrogen, Google's current Flash-class
+# model; 3.8-flash stays the gateway's and the ladder's history). Kept: kimi-k2.7-code (+ highspeed),
+# a code-specialised line distinct from k3.x.
 # Historical runs and benchmark records name the removed models; that is the record, not a bug.
 # Hardcoded rules for mapping model names to Tiers. Latest generation per provider,
 # placed by capability; Gemini/Local are kept at index 0 so they are the primary
@@ -329,7 +331,8 @@ def resolve_stage_model(stage: str, tier_default: str) -> str:
 #               Gemini 4 Carbon added to T1 behind Argon: Stable since 2026-11-10, paid tier only
 #               (the earlier "restricted tier" note was wrong). Same per-token price as Argon
 #               ($2/$10 per 1M, $4/$20 from 2026-12-01) but "strongest reasoning" with more tokens
-#               per turn, so Argon stays at index 0.
+#               per turn, so Argon stays at index 0. (2026-11-13) Gemini 4 Hydrogen replaces
+#               3.8-flash at the head of T2 (see the note above TIER_MAPPING).
 #   Kimi      — (2026-11-10) k3.1-pro (API 2026-10-23) replaces k3 at T1; its -highspeed variant is the
 #               same model at a higher price and is not served. k2.7-code / k2.7-code-highspeed
 #               stay at T2/T3 (k2.x/2.6 sunset). Placement of the new models is reasoned, not
@@ -358,11 +361,18 @@ def resolve_stage_model(stage: str, tier_default: str) -> str:
 # pins `max_completion_tokens` + drops `max_tokens` for each; GADS sends no temperature to
 # cloud models. No capability benchmark has been run on any of them — reasoned, not measured.
 #
-# gemini-3.8-flash (added 2026-09-04) takes T2 alongside the 3.7-flash it succeeds: Google's
+# gemini-4-hydrogen (added 2026-11-13) heads T2 and REPLACES gemini-3.8-flash there: Google's models
+# page positions it for "speed and efficiency for everyday coding and agentic workflows" and now
+# calls 3.8 Flash its "previous-generation Flash model", so Hydrogen is the current Flash-class
+# model (Stable; $1.50/$7.50 per 1M, the same as 3.8 Flash's post-2027 price and well below Argon /
+# Carbon's $4/$20 from 2026-12-01). Structured outputs + thinking supported; thinking counts
+# against max_tokens (a 200-token cap was used up by reasoning in the gateway check, so very
+# small caps return no content; GADS sends 8192). Placement reasoned, not measured.
+# gemini-3.8-flash (added 2026-09-04) took T2 alongside the 3.7-flash it succeeded: Google's
 # model endpoint reports identical limits for both (1,048,576 in / 65,536 out).
 TIER_MAPPING = {
     "T1": ["gemini-4-argon", "gemini-4-carbon", "gpt-6-astra", "claude-opus-5.5", "claude-fable-5.2", "kimi-k3.1-pro"],
-    "T2": ["gemini-3.8-flash", "claude-sonnet-5.5", "kimi-k2.7-code", "gpt-6.1-sol"],
+    "T2": ["gemini-4-hydrogen", "claude-sonnet-5.5", "kimi-k2.7-code", "gpt-6.1-sol"],
     "T3": ["gemini-3.5-flash-lite", "claude-haiku-5.5", "kimi-k2.7-code-highspeed", "gpt-6-luna",
            "gpt-6.1-terra"],
     "T4": ["local_model"]
