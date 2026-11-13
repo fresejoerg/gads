@@ -70,6 +70,26 @@ ACTIVE_WORKFLOWS: set[uuid.UUID] = set()
 # In-process only, like ACTIVE_WORKFLOWS — a backend restart clears it (and the kernels too).
 PINNED_SESSIONS: set[uuid.UUID] = set()
 
+def run_credentials_for(project_id: uuid.UUID):
+    """The owner's BYOK credentials snapshot (None for the admin = gateway keys), HOSTED-2a."""
+    from gads.core import credentials
+    return credentials.run_credentials_for_owner(tenancy.owner_of_project(project_id))
+
+
+def require_model_keys(owner: Caller) -> None:
+    """Model work on a tester-owned project needs at least one of the OWNER's provider keys.
+
+    A run always uses its project owner's settings and keys, whoever launches it (HOSTED-2a):
+    an admin resuming or following up a tester's project spends the tester's key, never the
+    gateway's. So this checks the owner, not the caller.
+    """
+    if owner.is_admin:
+        return
+    from gads.core import credentials
+    if not credentials.list_keys(owner.id):
+        raise HTTPException(status_code=400, detail="Add a model key first (PUT /me/keys/{provider})")
+
+
 def run_settings_for(project_id: uuid.UUID) -> Dict[str, Any]:
     """The frozen settings snapshot a run of this project uses: owner's settings over the
     global /config layer (registry.effective_settings), resolved once at launch (HOSTED-1)."""
@@ -80,7 +100,16 @@ def run_settings_for(project_id: uuid.UUID) -> Dict[str, Any]:
 async def run_agent_workflow_wrapper(project_id: uuid.UUID, objective: str, instruction_id: Optional[uuid.UUID] = None):
     """Wrapper to manage the ACTIVE_WORKFLOWS lock; runs under the owner's settings snapshot."""
     try:
-        with run_settings_scope(run_settings_for(project_id)):
+        from gads.core.credentials import credentials_scope
+        try:
+            settings, creds = run_settings_for(project_id), run_credentials_for(project_id)
+        except Exception as e:
+            # Proxy down, GADS_SECRET_KEY missing, ...: fail the launch visibly instead of a
+            # 200 followed by nothing.
+            with Session(engine) as session:
+                _mark_workflow_failed(session, project_id, f"Could not resolve run credentials: {e}")
+            return
+        with run_settings_scope(settings), credentials_scope(creds):
             await run_agent_workflow(project_id, objective, instruction_id)
     finally:
         if project_id in ACTIVE_WORKFLOWS:
@@ -658,6 +687,7 @@ async def create_followup(project_id: uuid.UUID, req: FollowUpRequest,
     objective = (req.objective or "").strip()
     if not objective:
         raise HTTPException(status_code=400, detail="objective is required")
+    require_model_keys(tenancy.owner_of_project(project_id))
 
     workspace_dir = f"{WORKSPACE_ROOT}/{project_id}"
     with Session(engine) as session:
@@ -686,8 +716,21 @@ async def create_followup(project_id: uuid.UUID, req: FollowUpRequest,
         session.commit()
         session.refresh(instruction)
 
+        tier_default = "local_model"
+        if not caller.is_admin:
+            # A tester's follow-up runs on THEIR keys: default to the Coder tier of their
+            # key-filtered hierarchy, never local_model (which they cannot use).
+            from gads.core.credentials import credentials_scope
+            try:
+                with run_settings_scope(run_settings_for(project_id)), \
+                        credentials_scope(run_credentials_for(project_id)):
+                    _h = await get_model_hierarchy()
+            except RuntimeError as e:  # e.g. pinned to a model the owner holds no key for
+                raise HTTPException(status_code=400, detail=str(e))
+            tier_default = next((_h[t]["models"][0] for t in ("T2", "T3", "T1")
+                                 if _h.get(t, {}).get("models")), tier_default)
         with run_settings_scope(run_settings_for(project_id)):
-            model = resolve_stage_model("Coder", "local_model")
+            model = resolve_stage_model("Coder", tier_default)
         task = Task(project_id=project_id, instruction_id=instruction.id,
                     description=objective, assigned_to=model,
                     status="pending", heartbeat=datetime.now())
@@ -3684,6 +3727,16 @@ async def list_projects(caller: Caller = Depends(current_user)):
 @app.post("/projects", response_model=ProjectResponse)
 async def create_project(req: ProjectCreateRequest, background_tasks: BackgroundTasks,
                          caller: Caller = Depends(current_user)):
+    if req.objective.strip():  # before anything is created
+        _owner = caller
+        if req.existing_project_id:
+            try:
+                _eid = uuid.UUID(req.existing_project_id)
+                if tenancy.owns_project(caller, _eid):
+                    _owner = tenancy.owner_of_project(_eid)
+            except ValueError:
+                pass
+        require_model_keys(_owner)
     with Session(engine) as session:
         if req.existing_project_id:
             try:
@@ -4237,6 +4290,41 @@ class SettingsUpdate(BaseModel):
 @app.get("/me")
 def get_me(caller: Caller = Depends(current_user)):
     return {"id": str(caller.id), "email": caller.email, "role": caller.role}
+
+
+class ProviderKeyBody(BaseModel):
+    api_key: str
+
+
+@app.get("/me/keys")
+def get_my_keys(caller: Caller = Depends(current_user)):
+    """Your stored provider keys: provider + last 4 characters only (write-only API)."""
+    from gads.core import credentials
+    return {"keys": credentials.list_keys(caller.id), "providers": list(credentials.BYOK_PROVIDERS)}
+
+
+@app.put("/me/keys/{provider}")
+async def put_my_key(provider: str, body: ProviderKeyBody, caller: Caller = Depends(current_user)):
+    """Validate a provider key with one tiny call, then store it encrypted. Never echoed back."""
+    from gads.core import credentials
+    provider = provider.strip().lower()
+    if provider not in credentials.BYOK_PROVIDERS:
+        raise HTTPException(status_code=400, detail=f"provider must be one of {credentials.BYOK_PROVIDERS}")
+    if not config.secret_key():
+        raise HTTPException(status_code=503, detail="Key storage is disabled (GADS_SECRET_KEY unset)")
+    try:
+        await credentials.validate_key(provider, body.api_key)
+        return credentials.store_key(caller.id, provider, body.api_key)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.delete("/me/keys/{provider}")
+def delete_my_key(provider: str, caller: Caller = Depends(current_user)):
+    from gads.core import credentials
+    if not credentials.delete_key(caller.id, provider.strip().lower()):
+        raise HTTPException(status_code=404, detail="No key stored for that provider")
+    return {"deleted": provider}
 
 
 @app.get("/me/settings")

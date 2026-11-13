@@ -255,7 +255,9 @@ async def run_followup_wrapper(project_id: uuid.UUID, instruction_id: uuid.UUID,
     from gads.core.registry import run_settings_scope
     try:
         # The owner's frozen settings snapshot, like a full workflow (HOSTED-1).
-        with run_settings_scope(srv.run_settings_for(project_id)):
+        from gads.core.credentials import credentials_scope
+        with run_settings_scope(srv.run_settings_for(project_id)), \
+                credentials_scope(srv.run_credentials_for(project_id)):
             await run_followup(project_id, instruction_id, task_id, objective, rehydrate, use_recipe)
     except Exception as e:
         import traceback

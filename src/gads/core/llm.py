@@ -129,6 +129,15 @@ def _prepare_llm_kwargs(model: str, messages: list, kwargs: dict):
     if "max_tokens" not in kwargs:
         kwargs["max_tokens"] = 8192
 
+    # BYOK (HOSTED-2a): in a tester's run, the provider key for THIS model goes in the request
+    # body, where the proxy uses it instead of its own. kwargs["api_key"] above stays the
+    # proxy's virtual key. Raises (fail closed) if the run holds no key for this model.
+    from gads.core import credentials
+    _provider_key = credentials.provider_key_for(model)
+    if _provider_key is not None:
+        kwargs.setdefault("extra_body", {})
+        kwargs["extra_body"]["api_key"] = _provider_key
+
     # Inject observability metadata from global context
     ctx = trace_context.get()
     meta = None

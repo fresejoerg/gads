@@ -2,6 +2,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 import uuid
 from sqlmodel import SQLModel, Field, JSON, Column, Relationship
+from sqlalchemy import UniqueConstraint
 
 class User(SQLModel, table=True):
     """A login (approach_docs/032 §4). Table `gads_user`: `user` is reserved in Postgres."""
@@ -12,6 +13,21 @@ class User(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.now)
     # Run-shaping overrides over the global /config layer (registry.RUN_SETTING_KEYS).
     settings_json: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+
+
+class ProviderKey(SQLModel, table=True):
+    """A user's own LLM provider key (BYOK, HOSTED-2a), Fernet-encrypted with GADS_SECRET_KEY.
+
+    The raw key is never returned by the API; only `last4` is shown. One row per (user, provider).
+    """
+    __tablename__ = "gads_provider_key"
+    __table_args__ = (UniqueConstraint("user_id", "provider", name="uq_provider_key_user_provider"),)
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(foreign_key="gads_user.id", index=True)
+    provider: str  # anthropic | gemini | openai
+    ciphertext: str
+    last4: str
+    created_at: datetime = Field(default_factory=datetime.now)
 
 
 class Project(SQLModel, table=True):

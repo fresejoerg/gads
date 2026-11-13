@@ -91,6 +91,11 @@ def admin_email() -> str:
     return (os.getenv("GADS_ADMIN_EMAIL") or "admin@localhost").strip().lower()
 
 
+def secret_key() -> str:
+    """Fernet key that encrypts stored provider keys (core/credentials.py). Empty = storing refused."""
+    return (os.getenv("GADS_SECRET_KEY") or "").strip()
+
+
 # Import-time snapshots, for the modules that used constants.
 DEPLOYMENT = deployment()
 WORKSPACE_ROOT = workspace_root()

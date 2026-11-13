@@ -416,6 +416,10 @@ async def get_model_hierarchy(force_cloud: bool = False) -> Dict[str, Any]:
             )
             resp.raise_for_status()
             available_models = [m["id"] for m in resp.json()["data"]]
+            # BYOK run (HOSTED-2a): only models this run holds a provider key for. Outside
+            # such a run (the admin) the list is unchanged.
+            from gads.core import credentials
+            available_models = credentials.filter_models(available_models)
 
             if get_routing_mode() == "cloud_pinned":
                 pinned = get_pinned_model()

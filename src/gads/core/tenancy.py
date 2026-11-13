@@ -206,6 +206,9 @@ ROUTE_POLICY: Dict[tuple, str] = {
     ("GET", "/me"): SELF,
     ("GET", "/me/settings"): SELF,
     ("PUT", "/me/settings"): SELF,
+    ("GET", "/me/keys"): SELF,
+    ("PUT", "/me/keys/{provider}"): SELF,
+    ("DELETE", "/me/keys/{provider}"): SELF,
     # Shared knowledge: read for everyone, writes admin (032 §9).
     ("GET", "/recipes"): READ,
     ("GET", "/recipes/{filename}"): READ,
