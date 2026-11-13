@@ -1487,6 +1487,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         output={"task_type": intent.task_type, "data_modality": intent.data_modality,
                                 "recipe_id": pinned.id})
 
+        _tried_router_model: set = set()  # models that already failed here (no ping-pong)
         while intent is None:
             with Session(engine) as session:
                 route_task = Task(
@@ -1613,7 +1614,9 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     span.end(output={"error": str(e)})
                     if rid_str in LIVE_STREAMS: del LIVE_STREAMS[rid_str]
                     
-                    next_model = get_next_model_dynamic(router_model, hierarchy)
+                    _tried_router_model.add(router_model)
+                    next_model = get_next_model_dynamic(router_model, hierarchy, exclude=_tried_router_model)
+
                     if next_model and next_model != router_model:
                         route_task.status = "failed"
                         route_task.error = f"Service unavailable, retrying with {next_model}: {str(e)}"
@@ -1974,6 +1977,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                     flush=True
                 )
 
+            _tried_planner_model: set = set()  # models that already failed here (no ping-pong)
             while planner_res is None:
                 # Create a Task for the Planner to show in the UI
                 with Session(engine) as session:
@@ -2042,7 +2046,9 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         span.end(output={"error": str(e)})
                         if pid_str in LIVE_STREAMS: del LIVE_STREAMS[pid_str]
 
-                        next_model = get_next_model_dynamic(planner_model, hierarchy)
+                        _tried_planner_model.add(planner_model)
+                        next_model = get_next_model_dynamic(planner_model, hierarchy, exclude=_tried_planner_model)
+
                         if next_model and next_model != planner_model:
                             plan_task.status = "failed"
                             plan_task.error = f"Service unavailable, retrying with {next_model}: {str(e)}"
@@ -2083,6 +2089,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
             plan_critique_fallback = ["local_model"] if get_local_only() else ["gemini-3.8-flash"]
             plan_critique_model = resolve_stage_model("PlanCritique", hierarchy.get("T2", {}).get("models", plan_critique_fallback)[0])
 
+            _tried_plan_critique_model: set = set()  # models that already failed here (no ping-pong)
             while plan_critique is None:
                 with Session(engine) as session:
                     pc_task = Task(
@@ -2131,7 +2138,9 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
                         print(f"  [PlanCritique] Call failed: {e}. Attempting escalation...", flush=True)
                         span.end(output={"error": str(e)})
                         
-                        next_model = get_next_model_dynamic(plan_critique_model, hierarchy)
+                        _tried_plan_critique_model.add(plan_critique_model)
+                        next_model = get_next_model_dynamic(plan_critique_model, hierarchy, exclude=_tried_plan_critique_model)
+
                         if next_model and next_model != plan_critique_model:
                             pc_task.status = "failed"
                             pc_task.error = f"Service unavailable, retrying with {next_model}: {str(e)}"
@@ -2983,6 +2992,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
             critique_fallback = ["local_model"] if get_local_only() else ["gemini-3.8-flash"]
             critique_model = resolve_stage_model("Critique", hierarchy.get("T2", {}).get("models", hierarchy.get("T3", {}).get("models", critique_fallback))[0])
 
+            _tried_synthesizer_model: set = set()  # models that already failed here (no ping-pong)
             while True:
                 with Session(engine) as session:
                     synth_task = Task(
@@ -3070,7 +3080,9 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                         session.commit()
                         break 
                     except Exception as e:
-                        next_model = get_next_model_dynamic(synthesizer_model, hierarchy)
+                        _tried_synthesizer_model.add(synthesizer_model)
+                        next_model = get_next_model_dynamic(synthesizer_model, hierarchy, exclude=_tried_synthesizer_model)
+
                         if next_model:
                             synth_task.status = "failed"
                             session.add(synth_task)
@@ -3109,6 +3121,7 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
 
             # 6. CRITIQUE
             print(f"  [Workflow] Quality Assurance Critique (Attempt {workflow_attempt})...", flush=True)
+            _tried_critique_model: set = set()  # models that already failed here (no ping-pong)
             while True:
                 with Session(engine) as session:
                     critique_task = Task(
@@ -3145,7 +3158,9 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                         session.commit()
                         break 
                     except Exception as e:
-                        next_model = get_next_model_dynamic(critique_model, hierarchy)
+                        _tried_critique_model.add(critique_model)
+                        next_model = get_next_model_dynamic(critique_model, hierarchy, exclude=_tried_critique_model)
+
                         if next_model:
                             critique_task.status = "failed"
                             session.add(critique_task)

@@ -464,7 +464,8 @@ async def get_model_hierarchy(force_cloud: bool = False) -> Dict[str, Any]:
         print(f"Registry Error: {e}")
         raise
 
-def get_next_model_dynamic(current_model: str, hierarchy: Dict[str, Any], aggressive: bool = False) -> Optional[str]:
+def get_next_model_dynamic(current_model: str, hierarchy: Dict[str, Any], aggressive: bool = False,
+                           exclude: Optional[set] = None) -> Optional[str]:
     """
     Escalation Logic:
     1. If LOCAL ONLY MODE is active: No escalation is permitted.
@@ -472,7 +473,14 @@ def get_next_model_dynamic(current_model: str, hierarchy: Dict[str, Any], aggres
        (This also covers hybrid mode's local execution tasks.)
     3. If CLOUD PINNED mode: No escalation ladder by design — retry-or-fail on the pinned model.
     4. If cloud/hybrid-cloud: Try other models in same tier, then move to better tiers (T3 -> T2 -> T1).
+
+    `exclude`: models already tried by this caller. They are never returned, so a stage that
+    keeps failing ends after each model was tried once (None when nothing untried is left).
+    Without it, two models in one tier bounced between each other forever on a persistent
+    error (seen 2026-11-13: an invalid BYOK key, 111 Router calls between gemini-4-argon and
+    gemini-4-carbon). Callers in a retry loop must pass their tried set.
     """
+    exclude = set(exclude or ()) | {current_model}
     # HARD MANDATE: No escalation in local mode, FROM local model, or in pinned mode
     if get_local_only() or current_model == "local_model" or get_routing_mode() == "cloud_pinned":
         return None
@@ -489,12 +497,12 @@ def get_next_model_dynamic(current_model: str, hierarchy: Dict[str, Any], aggres
             break
             
     if not current_tier:
-        # Fallback to T3 if current model is unknown
-        return hierarchy.get("T3", {}).get("models", [None])[0]
+        # Fallback to the first untried T3 model if current model is unknown
+        return next((m for m in hierarchy.get("T3", {}).get("models", []) if m not in exclude), None)
 
     # 1. Non-aggressive: Try to find a fallback model in the SAME tier
     if not aggressive:
-        other_models_in_tier = [m for m in current_tier_models if m != current_model]
+        other_models_in_tier = [m for m in current_tier_models if m not in exclude]
         if other_models_in_tier:
             return random.choice(other_models_in_tier)
 
@@ -504,14 +512,12 @@ def get_next_model_dynamic(current_model: str, hierarchy: Dict[str, Any], aggres
         if current_tier in TIER_ORDER:
             tier_idx = TIER_ORDER.index(current_tier)
             if tier_idx + 1 < len(TIER_ORDER):
-                next_tier = TIER_ORDER[tier_idx + 1]
-                # Skip tiers that aren't in the actual hierarchy
-                while next_tier not in hierarchy and tier_idx + 1 < len(TIER_ORDER):
-                    tier_idx += 1
-                    next_tier = TIER_ORDER[tier_idx + 1]
-                    
-                if next_tier in hierarchy:
-                    return hierarchy[next_tier]["models"][0]
+                # First untried model of the next tier up; skip tiers that are missing or
+                # fully tried.
+                for next_tier in TIER_ORDER[tier_idx + 1:]:
+                    for m in hierarchy.get(next_tier, {}).get("models", []):
+                        if m not in exclude:
+                            return m
     except (ValueError, IndexError):
         pass
         
