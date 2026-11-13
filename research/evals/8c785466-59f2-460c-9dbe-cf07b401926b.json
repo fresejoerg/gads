@@ -1,0 +1,554 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "8c785466-59f2-460c-9dbe-cf07b401926b",
+ "name": "AirPassengers monthly forecasting (univariate)",
+ "verdict": "pass",
+ "critical": {
+  "pass": 22,
+  "fail": 0,
+  "not_evaluable": 0
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 3,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "deliverables": {
+   "pass": 4,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "integrity": {
+   "pass": 5,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 20,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "benchmark": {
+   "pass": 18,
+   "fail": 0,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": {
+  "benchmark_id": "air_passengers_v1",
+  "verdict": "pass",
+  "passed": 18,
+  "total": 18
+ },
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 1,
+  "recipe_id": "timeseries_forecast.autogluon.standard",
+  "plan": "recipe_compiled",
+  "exec_nodes": 4,
+  "created_at": "2026-11-13T10:36:41.341342",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "air_passengers_forecast.md",
+  "recipe_id": "timeseries_forecast.autogluon.standard",
+  "recipe_version": "1.4.0",
+  "engine_id": null,
+  "routing_mode": "cloud",
+  "run_mode": "research",
+  "rung": "D3"
+ },
+ "attribution": {
+  "exec_nodes": 4,
+  "attempted_nodes": 4,
+  "failed_nodes": 0,
+  "native_primary": 0,
+  "model_pass": 4,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 1.0
+ },
+ "usage": {
+  "calls": 7,
+  "prompt_tokens": 29338,
+  "completion_tokens": 11357,
+  "cost_usd": 0.129185,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "gemini-4-hydrogen"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "profile_time_series",
+   "task_id": "04d4d0d4-839e-4c7e-ab50-b8c907780162",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-4-hydrogen",
+   "model_used": "gemini-4-hydrogen",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0126675,
+   "checks": {
+    "pass": 9,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "prepare_timeseries_dataframe",
+   "task_id": "6c8245c4-1e56-4d50-a813-d8a57117c99f",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-4-hydrogen",
+   "model_used": "gemini-4-hydrogen",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.019806,
+   "checks": {
+    "pass": 3,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "train_forecast_model",
+   "task_id": "81959885-c342-4617-900e-724e9abd0b9a",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-4-hydrogen",
+   "model_used": "gemini-4-hydrogen",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0213855,
+   "checks": {
+    "pass": 9,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "generate_forecasts_and_visualize",
+   "task_id": "f0ff8cae-510e-4558-b9e0-ea3e01976a7b",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-4-hydrogen",
+   "model_used": "gemini-4-hydrogen",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0255,
+   "checks": {
+    "pass": 3,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": true,
+  "dial_ledger_outcome": "pass"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 1 has 4 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "all 4 recipe nodes planned",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.metrics.json",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.metrics_consistent",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "5 captured metric(s) match metrics.json",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "profile_time_series"
+  },
+  {
+   "id": "node.metric.n_series",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 1.0",
+   "critical": true,
+   "node": "profile_time_series"
+  },
+  {
+   "id": "node.metric.naive_mae",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 100.4429012345679",
+   "critical": true,
+   "node": "profile_time_series"
+  },
+  {
+   "id": "node.variable.timestamp_col",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "profile_time_series",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.target_col",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "profile_time_series",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.item_id_col",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "profile_time_series",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.inferred_freq",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "profile_time_series",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_series",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "profile_time_series",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "profile_time_series"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "prepare_timeseries_dataframe"
+  },
+  {
+   "id": "node.variable.ts_df",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (TimeSeriesDataFrame)",
+   "critical": true,
+   "node": "prepare_timeseries_dataframe",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "prepare_timeseries_dataframe"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.metric.best_model_mase",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.35171604619403884",
+   "critical": true,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.metric.seasonal_naive_mase",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 1.9413857223704423",
+   "critical": true,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.metric.prediction_length",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 14.0",
+   "critical": true,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.variable.predictor_ts",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (TimeSeriesPredictor)",
+   "critical": true,
+   "node": "train_forecast_model",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.prediction_length",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "train_forecast_model",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.best_model_mase",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "train_forecast_model",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.seasonal_naive_mase",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "train_forecast_model",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "train_forecast_model"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "generate_forecasts_and_visualize"
+  },
+  {
+   "id": "node.variable.forecasts",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (TimeSeriesDataFrame)",
+   "critical": true,
+   "node": "generate_forecasts_and_visualize",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "generate_forecasts_and_visualize"
+  },
+  {
+   "id": "benchmark.reproducibility.metric n_series",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "got 1.0, want exactly 1",
+   "critical": false
+  },
+  {
+   "id": "benchmark.reproducibility.metric prediction_length",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "got 14.0, want exactly 14",
+   "critical": false
+  },
+  {
+   "id": "benchmark.reproducibility.metric best_model_mase",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "got 0.35171604619403884, want < 1.9414",
+   "critical": false
+  },
+  {
+   "id": "benchmark.reproducibility.metric seasonal_naive_mase",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "got 1.9413857223704423, want 1.9414 ± 0.001",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact figure_1_forecast.json",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact model_timeseries.joblib",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact final_dashboard.html",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact research_report.md",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.completeness.artifact workflow_execution.py",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /TimeSeriesPredictor\\(/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "found",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /TimeSeriesDataFrame/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "found",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /eval_metric\\s*=\\s*[\"']MASE[\"']/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "found",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /prediction_length/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "found",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code has /gads_forecast_scores\\(/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "found",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code lacks /from statsmodels\\.tsa/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code lacks /import pmdarima/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code lacks /from prophet/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false
+  },
+  {
+   "id": "benchmark.methodology.code lacks /prediction_length\\s*=\\s*(12|24|36)\\b/",
+   "dimension": "benchmark",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false
+  }
+ ],
+ "scored": {
+  "at": "2026-11-13T18:37:51+00:00",
+  "commit": "3a54512-dirty"
+ }
+}
