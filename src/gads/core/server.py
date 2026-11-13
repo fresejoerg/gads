@@ -3337,6 +3337,8 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
                 "routing_mode": get_routing_mode(),
                 "pinned_model": get_pinned_model(),
                 "run_mode": get_run_mode(),
+                # Where task code ran (023: the ledger must tell local and remote runs apart).
+                "sandbox_backend": config.sandbox_backend(),
                 # A fine-tuned checkpoint is a DISTINCT engine, never a
                 # continuation of the baseline (approach_docs/031 §5).
                 "engine_id": engine_id,

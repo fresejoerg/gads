@@ -52,6 +52,11 @@ def sandbox_url() -> str:
     return (os.getenv("GADS_SANDBOX_URL") or _LOCAL_SANDBOX_URL).rstrip("/")
 
 
+def sandbox_token() -> str:
+    """Bearer token for the sandbox service (empty = the local stack's unauthenticated sandbox)."""
+    return (os.getenv("GADS_SANDBOX_TOKEN") or "").strip()
+
+
 def sandbox_backend() -> str:
     return (os.getenv("GADS_SANDBOX_BACKEND") or "local_docker").strip().lower()
 

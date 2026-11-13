@@ -214,6 +214,10 @@ def evaluate(rec: RunRecord, include_benchmark: bool = True) -> Dict[str, Any]:
             "routing_mode": (dial or {}).get("routing_mode"),
             "run_mode": (dial or {}).get("run_mode"),
             "rung": ((rec.last_state.get("dial") or {}).get("rung")) or (dial or {}).get("rung"),
+            # Only when the run recorded it (dial ledger rows since HOSTED-3a), so re-scoring
+            # older runs does not rewrite their cards.
+            **({"sandbox_backend": (dial or {}).get("sandbox_backend")}
+               if (dial or {}).get("sandbox_backend") else {}),
         },
         "attribution": attribution,       # pass@model; same function as the dial ledger
         "usage": _usage(rec.tasks),

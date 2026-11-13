@@ -18,6 +18,7 @@ class ExecutionResult(BaseModel):
     execution_time_ms: int
     kernel_state: Dict[str, Any] = {} # New field for state introspection
     semantic_insights: List[Dict[str, Any]] = [] # Insights emitted via gads_emit_insight
+    sync_stats: Dict[str, Any] = {}  # workspace sync of this call (isolated backends only)
 
 class CodeValidator:
     """Proactively scans code for security and syntax issues."""
@@ -93,8 +94,19 @@ class LocalDockerBackend:
         self.base_url = (base_url or config.sandbox_url()).rstrip("/")
         self.client = httpx.AsyncClient(timeout=720.0) # Must exceed sandbox's 300s execution limit + buffer
 
+    def endpoint(self, key: Optional[str] = None) -> tuple:
+        """(base_url, headers) for the sandbox that serves workspace/session `key`.
+
+        One URL + one token here. The seam for per-project remote sandboxes (Modal): a backend
+        that runs one sandbox per project overrides this to look up that project's URL and
+        token, and every call below goes through it.
+        """
+        token = config.sandbox_token()
+        return self.base_url, ({"Authorization": f"Bearer {token}"} if token else {})
+
     async def health(self) -> None:
-        response = await self.client.get(f"{self.base_url}/health")
+        url, headers = self.endpoint()
+        response = await self.client.get(f"{url}/health", headers=headers)
         response.raise_for_status()
 
     def list_workspace_files(self, project_id: uuid.UUID, subdir_cap: int = 40) -> List[str]:
@@ -133,9 +145,11 @@ class LocalDockerBackend:
     async def poll_logs(self, session_id: str, offset_out: int = 0, offset_err: int = 0) -> Optional[Dict[str, Any]]:
         """Polls the sandbox for incremental stdout and stderr."""
         try:
+            url, headers = self.endpoint(session_id)
             response = await self.client.get(
-                f"{self.base_url}/sessions/{session_id}/logs",
+                f"{url}/sessions/{session_id}/logs",
                 params={"offset_out": offset_out, "offset_err": offset_err},
+                headers=headers,
                 timeout=5.0
             )
             if response.status_code == 200:
@@ -147,7 +161,8 @@ class LocalDockerBackend:
     async def reset_session(self, session_id: str):
         """Forcefully kills the kernel and resets the session in the sandbox container."""
         try:
-            await self.client.post(f"{self.base_url}/sessions/{session_id}/reset")
+            url, headers = self.endpoint(session_id)
+            await self.client.post(f"{url}/sessions/{session_id}/reset", headers=headers)
         except Exception:
             pass
 
@@ -167,8 +182,10 @@ class LocalDockerBackend:
 
         # 2. Remote Execution (Session ID is just the project ID for simple isolation)
         try:
+            url, headers = self.endpoint(workspace_id or session_id)
             response = await self.client.post(
-                f"{self.base_url}/execute",
+                f"{url}/execute",
+                headers=headers,
                 json={
                     "code": code, 
                     "session_id": session_id,
@@ -194,14 +211,19 @@ class LocalDockerBackend:
 # Backward-compatible name: scripts and older code construct SandboxClient() directly.
 SandboxClient = LocalDockerBackend
 
-_BACKENDS = {"local_docker": LocalDockerBackend}
+def _isolated_http():
+    from gads.tools.sandbox_sync import IsolatedHttpBackend
+    return IsolatedHttpBackend
+
+
+_BACKENDS = {"local_docker": lambda: LocalDockerBackend, "isolated_http": _isolated_http}
 
 
 def make_sandbox(base_url: Optional[str] = None) -> SandboxBackend:
     """A FRESH backend instance (each owns its own HTTP client), chosen by GADS_SANDBOX_BACKEND."""
     name = config.sandbox_backend()
     try:
-        cls = _BACKENDS[name]
+        cls = _BACKENDS[name]()
     except KeyError:
         raise ValueError(f"GADS_SANDBOX_BACKEND={name!r} is not one of {sorted(_BACKENDS)}") from None
     return cls(base_url=base_url)
