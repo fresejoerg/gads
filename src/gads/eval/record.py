@@ -26,6 +26,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from gads.core import config
+
 # Pipeline stages: tasks assigned to these are orchestration, not execution nodes.
 STAGE_AGENTS = frozenset({
     "System", "DataAnalyzer", "SpecDrafter", "Router", "DataSampler", "Planner",
@@ -35,8 +37,7 @@ STAGE_AGENTS = frozenset({
 # Description of the task run_agent_workflow creates first, before anything else.
 INIT_TASK_PREFIX = "System is grounding session state"
 
-WORKSPACE_ROOT = Path(os.getenv(
-    "GADS_WORKSPACE_ROOT", "/home/joergf/projects/MyLocalStack/data/workspaces"))
+WORKSPACE_ROOT = Path(config.WORKSPACE_ROOT)
 
 
 @dataclass(frozen=True)

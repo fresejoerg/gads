@@ -1,9 +1,11 @@
 import ast
 import httpx
 import os
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Protocol, runtime_checkable
 from pydantic import BaseModel
 import uuid
+
+from gads.core import config
 
 class ExecutionResult(BaseModel):
     stdout: str
@@ -57,12 +59,43 @@ class CodeValidator:
 
         return None
 
-class SandboxClient:
-    """Client for interacting with the MyLocalStack Sandbox with Project Isolation."""
-    
-    def __init__(self, base_url: str = "http://localhost:8000"):
-        self.base_url = base_url
+@runtime_checkable
+class SandboxBackend(Protocol):
+    """Where task code runs: one IPython kernel per session_id, one workspace per project.
+
+    The seam for remote execution (approach_docs/023 phase 0, 032 phase 0). LocalDockerBackend
+    (the MyLocalStack container) is the only implementation today; a remote one (Modal, Docker
+    Cloud Sandboxes) implements the same methods. Callers use only these methods, never the
+    transport underneath.
+    """
+
+    async def execute(self, code: str, project_id: uuid.UUID, session_id: str = "default",
+                      workspace_id: Optional[str] = None) -> "ExecutionResult": ...
+
+    async def poll_logs(self, session_id: str, offset_out: int = 0,
+                        offset_err: int = 0) -> Optional[Dict[str, Any]]: ...
+
+    async def reset_session(self, session_id: str) -> None: ...
+
+    async def health(self) -> None:
+        """Raises if the backend is unreachable or unhealthy."""
+        ...
+
+    def list_workspace_files(self, project_id: uuid.UUID, subdir_cap: int = 40) -> List[str]: ...
+
+    async def close(self) -> None: ...
+
+
+class LocalDockerBackend:
+    """The MyLocalStack sandbox container, reached over HTTP, with project isolation."""
+
+    def __init__(self, base_url: Optional[str] = None):
+        self.base_url = (base_url or config.sandbox_url()).rstrip("/")
         self.client = httpx.AsyncClient(timeout=720.0) # Must exceed sandbox's 300s execution limit + buffer
+
+    async def health(self) -> None:
+        response = await self.client.get(f"{self.base_url}/health")
+        response.raise_for_status()
 
     def list_workspace_files(self, project_id: uuid.UUID, subdir_cap: int = 40) -> List[str]:
         """Lists files available in the project's host workspace directory.
@@ -78,7 +111,7 @@ class SandboxClient:
         listed by their contents rather than by name — a bare directory name tells the model
         nothing it can act on.
         """
-        host_path = f"/home/joergf/projects/MyLocalStack/data/workspaces/{project_id}"
+        host_path = config.workspace_dir(project_id)
         if not os.path.exists(host_path):
             return []
         out: List[str] = []
@@ -156,3 +189,19 @@ class SandboxClient:
 
     async def close(self):
         await self.client.aclose()
+
+
+# Backward-compatible name: scripts and older code construct SandboxClient() directly.
+SandboxClient = LocalDockerBackend
+
+_BACKENDS = {"local_docker": LocalDockerBackend}
+
+
+def make_sandbox(base_url: Optional[str] = None) -> SandboxBackend:
+    """A FRESH backend instance (each owns its own HTTP client), chosen by GADS_SANDBOX_BACKEND."""
+    name = config.sandbox_backend()
+    try:
+        cls = _BACKENDS[name]
+    except KeyError:
+        raise ValueError(f"GADS_SANDBOX_BACKEND={name!r} is not one of {sorted(_BACKENDS)}") from None
+    return cls(base_url=base_url)

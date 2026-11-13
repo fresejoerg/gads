@@ -12,7 +12,9 @@ citing others' work, e.g. CEDAR) are fine and are not expansions of the acronym.
 GADS is a Python 3.13 project managed by `uv`. It depends on an **external** companion stack `MyLocalStack` providing:
 - LiteLLM proxy on `http://localhost:4000/v1` (model gateway)
 - IPython-kernel sandbox on `http://localhost:8000`
-- Shared workspace dir at `/home/joergf/projects/MyLocalStack/data/workspaces/<project_id>/` (hardcoded — see `server.WORKSPACE_ROOT`, `sandbox.list_workspace_files`, `handover.create_bundle`)
+- Shared workspace dir at `/home/joergf/projects/MyLocalStack/data/workspaces/<project_id>/` (the default of `GADS_WORKSPACE_ROOT`)
+
+**Deployment seams** (`core/config.py`, approach_docs/032 phase 0): every machine-specific path and URL is an env var whose default is the local stack's value — `GADS_DEPLOYMENT` (`local`|`hosted`, validated, nothing branches on it yet), `GADS_WORKSPACE_ROOT`, `GADS_DATASETS_ROOT`, `GADS_SANDBOX_URL`, `GADS_SANDBOX_BACKEND`, `GADS_HEADER_IMAGE`. `/home/joergf` may appear in `src/` **only** in `config.py`; don't add a new literal path elsewhere. The sandbox sits behind the `SandboxBackend` protocol (`tools/sandbox.py`: `execute`/`poll_logs`/`reset_session`/`health`/`list_workspace_files`/`close`); get one with `make_sandbox()` (fresh instance per call), never by reaching into its HTTP client. `LocalDockerBackend` (alias `SandboxClient`) is the only implementation. Tracing is off when `GADS_OTEL_ENDPOINT` is unset or empty (spans and ids still exist, nothing is exported); `.env` sets it. Note the workspace and dataset roots are also bind-mounted at identical paths in MyLocalStack's compose, so changing the env var alone does not move them for the sandbox. Regression: `scripts/test_config_seams.py` (no LLM, no DB).
 
 Persistence is **PostgreSQL** (not SQLite — `gads.db` is a vestigial empty file). `GADS_DATABASE_URL` is required at import time; the database module raises if it's missing.
 

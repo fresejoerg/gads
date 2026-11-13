@@ -143,7 +143,7 @@ def node_attribution(tasks: List[Any]) -> Dict[str, Any]:
     }
 
 
-ROUTING_LEDGER_PATH = "research/routing_ledger.jsonl"
+ROUTING_LEDGER_PATH = os.getenv("GADS_ROUTING_LEDGER", "research/routing_ledger.jsonl")
 
 
 def append_routing_ledger(record: Dict[str, Any], path: Optional[str] = None) -> None:

@@ -3,20 +3,21 @@ import uuid
 import zipfile
 import json
 from typing import List, Dict, Any, Optional
-from gads.tools.sandbox import SandboxClient
+from gads.core import config
+from gads.tools.sandbox import make_sandbox
 
 class HandoverManager:
     """Handles the creation of reproducible project bundles for bypassed tasks."""
 
-    def __init__(self, sandbox_url: str = "http://localhost:8000"):
-        self.sandbox = SandboxClient(base_url=sandbox_url)
+    def __init__(self, sandbox_url: Optional[str] = None):
+        self.sandbox = make_sandbox(base_url=sandbox_url)
 
     async def create_bundle(
         self, 
         project_id: uuid.UUID, 
         heavy_code: str, 
         estimated_runtime: float,
-        workspace_root: str = "/home/joergf/projects/MyLocalStack/data/workspaces"
+        workspace_root: Optional[str] = None
     ) -> str:
         """
         1. Exports in-memory state to files.
@@ -24,7 +25,7 @@ class HandoverManager:
         3. Creates a ZIP archive.
         Returns the filename of the generated ZIP.
         """
-        project_dir = os.path.join(workspace_root, str(project_id))
+        project_dir = os.path.join(workspace_root or config.workspace_root(), str(project_id))
         bundle_name = f"handover_{project_id.hex[:8]}.zip"
         bundle_path = os.path.join(project_dir, bundle_name)
         

@@ -29,7 +29,8 @@ from gads.agents.workers.synthesizer import SynthesizerAgent, SynthesizerInput
 from gads.agents.workers.critique import CritiqueAgent, CritiqueInput
 from gads.agents.workers.completeness_verifier import CompletenessVerifierAgent, CompletenessVerifierInput
 from gads.core.executor import ExecutionManager
-from gads.tools.sandbox import SandboxClient
+from gads.tools.sandbox import make_sandbox
+from gads.core import config
 from gads.core.registry import (
     get_model_hierarchy, get_local_only, set_local_only, get_random_routing,
     set_random_routing, get_next_model_dynamic, get_routing_mode, set_routing_mode,
@@ -98,7 +99,7 @@ async def catch_exceptions_middleware(request, call_next):
         raise e
 
 registry = KnowledgeRegistry("src/gads/knowledge/recipes")
-WORKSPACE_ROOT = "/home/joergf/projects/MyLocalStack/data/workspaces"
+WORKSPACE_ROOT = config.WORKSPACE_ROOT  # GADS_WORKSPACE_ROOT (core/config.py)
 
 # Stdout phrases that mean the task code gave up on the real data (defined in
 # core/stdout_clean.py so offline evaluators can import it without the app).
@@ -106,7 +107,7 @@ from gads.core.stdout_clean import HALLUCINATION_TOKENS  # noqa: E402
 # Source-dataset root, bind mounted READ-ONLY into the sandbox at the identical path.
 # Datasets under this root are symlinked into workspaces rather than copied (see
 # _mount_external_dataset); the read-only mount is what makes that safe.
-DATASETS_ROOT = os.getenv("GADS_DATASETS_ROOT", "/home/joergf/datasets")
+DATASETS_ROOT = config.DATASETS_ROOT  # GADS_DATASETS_ROOT (core/config.py)
 
 LIVE_STREAMS: Dict[str, Dict[str, str]] = {}
 
@@ -568,7 +569,7 @@ async def get_project_kernel(project_id: uuid.UUID):
         raise HTTPException(status_code=404, detail="Project not found")
     from gads.core.kernel_state import (snapshot_kernel, replayable_tasks,
                                         replay_code_from_workspace, meaningful_variables)
-    variables = meaningful_variables(await snapshot_kernel(SandboxClient(), project_id))
+    variables = meaningful_variables(await snapshot_kernel(make_sandbox(), project_id))
     n_db = len(replayable_tasks(project_id))
     return {
         "project_id": str(project_id),
@@ -610,7 +611,7 @@ async def rehydrate_project(project_id: uuid.UUID, req: Optional[RehydrateReques
     # Pin BEFORE replaying so a concurrent run's sweep cannot wipe the work in progress.
     PINNED_SESSIONS.add(project_id)
     result = await ensure_kernel_state(
-        SandboxClient(), project_id,
+        make_sandbox(), project_id,
         required_vars=req.required_vars, force=req.force, timeout=req.timeout,
         workspace_dir=workspace_dir,
     )
@@ -755,7 +756,7 @@ async def finish_project(project_id: uuid.UUID):
     PINNED_SESSIONS.discard(project_id)
     released = False
     try:
-        await SandboxClient().reset_session(str(project_id))
+        await make_sandbox().reset_session(str(project_id))
         released = True
     except Exception as e:
         print(f"  [Finish] Warning: could not reset session: {e}", flush=True)
@@ -792,7 +793,7 @@ async def cancel_project(project_id: uuid.UUID):
         session.commit()
 
         # IMMEDIATELY reset sandbox to stop any running local models
-        await SandboxClient().reset_session(str(project_id))
+        await make_sandbox().reset_session(str(project_id))
 
         hub = ExecutionHub(session)
         hub.create_outbox_event("WORKFLOW_CANCELLED", {"project_id": str(project_id)})
@@ -1144,7 +1145,7 @@ async def run_agent_workflow(project_id: uuid.UUID, objective: str, instruction_
 
         # Check sandbox health instead of full execute to avoid heavy state introspection hangs
         try:
-            await asyncio.wait_for(executor.sandbox.client.get(f"{executor.sandbox.base_url}/health"), timeout=5.0)
+            await asyncio.wait_for(executor.sandbox.health(), timeout=5.0)
             print(f"  [Workflow] Sandbox is healthy. Proceeding.", flush=True)
         except Exception as e:
             print(f"  [Workflow] Grounding health check failed: {e}. Proceeding anyway.", flush=True)
@@ -3427,7 +3428,7 @@ async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundT
     if not target.exists():
         raise HTTPException(status_code=404, detail="Spec file not found")
     
-    datasets_root = Path(os.getenv("GADS_DATASETS_ROOT", "/home/joergf/datasets")).resolve()
+    datasets_root = Path(config.datasets_root()).resolve()
 
     try:
         content = target.read_text(encoding='utf-8')

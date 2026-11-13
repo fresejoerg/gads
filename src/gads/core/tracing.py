@@ -25,6 +25,7 @@ from contextvars import ContextVar
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
+from gads.core import config
 from opentelemetry import trace as otel_trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
@@ -35,7 +36,12 @@ from opentelemetry.sdk.trace.id_generator import RandomIdGenerator
 # Imported (via llm.py) before server.py's own load_dotenv() runs.
 load_dotenv()
 
-OTEL_ENDPOINT = os.getenv("GADS_OTEL_ENDPOINT", "http://localhost:5000/v1/traces")
+# Unset or empty = tracing OFF: spans and ids are still created (Span.id, the traceparent sent
+# to the proxy), they just are not exported. Local .env sets it to MLflow's OTLP endpoint
+# (http://localhost:5000/v1/traces); a hosted deployment without MLflow leaves it unset
+# instead of logging export errors against localhost.
+OTEL_ENDPOINT = config.otel_endpoint()
+ENABLED = bool(OTEL_ENDPOINT)
 MLFLOW_EXPERIMENT_ID = os.getenv("GADS_MLFLOW_EXPERIMENT_ID", "")
 
 # Span outputs are model dumps (plans, code, stdout); cap them so one Coder task cannot
@@ -62,8 +68,11 @@ def _build_provider() -> TracerProvider:
         resource=Resource.create({"service.name": "gads-backend"}),
         id_generator=_ProjectTraceIdGenerator(),
     )
-    headers = {"x-mlflow-experiment-id": MLFLOW_EXPERIMENT_ID} if MLFLOW_EXPERIMENT_ID else {}
-    provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=OTEL_ENDPOINT, headers=headers)))
+    # Off = a real provider with no span processor, NOT OTel's no-op provider: that one
+    # yields all-zero span/trace ids, which would break Span.id and the traceparent header.
+    if ENABLED:
+        headers = {"x-mlflow-experiment-id": MLFLOW_EXPERIMENT_ID} if MLFLOW_EXPERIMENT_ID else {}
+        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=OTEL_ENDPOINT, headers=headers)))
     return provider
 
 

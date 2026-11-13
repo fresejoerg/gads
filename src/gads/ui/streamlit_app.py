@@ -10,8 +10,10 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 # --- CONFIGURATION ---
+from gads.core import config  # stdlib + dotenv only; no DB import
+
 BACKEND_URL = os.getenv("GADS_BACKEND_URL", "http://127.0.0.1:8001")
-WORKSPACE_ROOT = "/home/joergf/projects/MyLocalStack/data/workspaces"
+WORKSPACE_ROOT = config.WORKSPACE_ROOT  # GADS_WORKSPACE_ROOT (core/config.py)
 
 st.set_page_config(
     page_title="GADS Workspace",
@@ -157,7 +159,7 @@ def api_delete(path):
         return None
 
 def render_banner():
-    img_path = "/home/joergf/Generated Image May 05, 2026 - 10_53PM.png"
+    img_path = config.header_image()
     if os.path.exists(img_path):
         try:
             with open(img_path, "rb") as f:
@@ -968,7 +970,7 @@ def render_grounding_panel():
     st.markdown("### GROUNDING")
     
     st.markdown("#### DATASETS")
-    host_datasets_root = "/home/joergf/datasets"
+    host_datasets_root = config.DATASETS_ROOT
     if os.path.exists(host_datasets_root):
         files = sorted([f for f in os.listdir(host_datasets_root) if os.path.isfile(os.path.join(host_datasets_root, f))])
         selected = st.selectbox("Mount", options=["--- Select to Mount ---"] + files, label_visibility="collapsed")

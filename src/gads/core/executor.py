@@ -7,7 +7,7 @@ import re
 import json
 from typing import Optional, List, Tuple, Dict, Any
 from gads.agents.workers.coder import CodeGeneratorAgent, CoderInput
-from gads.tools.sandbox import SandboxClient, ExecutionResult
+from gads.tools.sandbox import make_sandbox, ExecutionResult
 from gads.core.models import Artifact, Task
 from gads.core.database import engine
 from gads.core.bus import bus
@@ -864,9 +864,9 @@ def _truncate_error_msg(msg, limit=1200):
 class ExecutionManager:
     """Manages the Code-Execution-Feedback loop."""
 
-    def __init__(self, sandbox_url: str = "http://localhost:8000"):
+    def __init__(self, sandbox_url: Optional[str] = None):
         self.coder = CodeGeneratorAgent()
-        self.sandbox = SandboxClient(base_url=sandbox_url)
+        self.sandbox = make_sandbox(base_url=sandbox_url)
         self.handover = HandoverManager(sandbox_url=sandbox_url)
         self.authoritative_state: Dict[str, Any] = {}
         self.file_schemas: Dict[str, Any] = {}  # populated by server after schema probe
