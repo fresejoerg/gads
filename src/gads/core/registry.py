@@ -1,5 +1,7 @@
 import httpx
 import os
+from contextlib import contextmanager
+from contextvars import ContextVar
 from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
 
@@ -60,7 +62,7 @@ def set_local_fallback(mode: str):
     print(f"  [Registry] Local fallback set to '{_LOCAL_FALLBACK}'", flush=True)
 
 def get_local_fallback() -> str:
-    return _LOCAL_FALLBACK
+    return _setting("local_fallback")
 
 
 # ——— RUN MODE: what a run is FOR ———————————————————————————————————————————————
@@ -97,7 +99,7 @@ def set_run_mode(mode: str):
 
 
 def get_run_mode() -> str:
-    return _RUN_MODE
+    return _setting("run_mode")
 
 # ——— RECIPE CONFIDENCE THRESHOLD: deterministic-compile vs advisory-context gate ————————
 # The Router always emits a `confidence` score (0.0-1.0) alongside any matched recipe.
@@ -126,7 +128,7 @@ def set_recipe_confidence_threshold(value: float):
 
 
 def get_recipe_confidence_threshold() -> float:
-    return _RECIPE_CONFIDENCE_THRESHOLD
+    return _setting("recipe_confidence_threshold")
 
 # Stages that stay on cloud tiers in hybrid mode. Everything not listed here
 # (Coder execution tasks, CompletenessVerifier, any future stage) goes local.
@@ -148,10 +150,10 @@ def set_routing_mode(mode: str, pinned_model: Optional[str] = None):
           + (f" (pinned: {_PINNED_MODEL})" if _ROUTING_MODE == "cloud_pinned" else ""), flush=True)
 
 def get_routing_mode() -> str:
-    return _ROUTING_MODE
+    return _setting("routing_mode")
 
 def get_pinned_model() -> Optional[str]:
-    return _PINNED_MODEL
+    return _setting("pinned_model")
 
 def set_local_only(enabled: bool):
     """Legacy alias for old clients/UI: maps onto routing modes."""
@@ -159,14 +161,126 @@ def set_local_only(enabled: bool):
 
 def get_local_only() -> bool:
     """Legacy alias: true only in fully-local mode."""
-    return _ROUTING_MODE == "local"
+    return get_routing_mode() == "local"
 
 def set_random_routing(enabled: bool):
     global _RANDOM_ROUTING
     _RANDOM_ROUTING = enabled
 
 def get_random_routing() -> bool:
-    return _RANDOM_ROUTING
+    return _setting("random_routing")
+
+
+# ——— PER-RUN SETTINGS (approach_docs/032 §4, HOSTED-1) ——————————————————————————————
+# The module globals above are the GLOBAL layer (admin `POST /config`, .env). A workflow runs
+# with a frozen snapshot: the owner's settings over the global layer, resolved once at launch
+# and carried in this ContextVar (asyncio tasks and to_thread copy it). Every getter reads the
+# snapshot first, so two users' concurrent runs cannot change each other's routing, and a
+# `POST /config` no longer reaches a run that is already going.
+RUN_SETTING_KEYS = ("routing_mode", "pinned_model", "random_routing", "run_mode",
+                    "local_fallback", "recipe_confidence_threshold")
+# Routing modes a non-admin may choose: local_model is the admin's GPU (032 §8).
+TESTER_ROUTING_MODES = ("cloud", "cloud_pinned")
+
+_run_settings: ContextVar[Optional[Dict[str, Any]]] = ContextVar("gads_run_settings", default=None)
+
+
+def global_settings() -> Dict[str, Any]:
+    """The global layer as a dict (what a run with no user overrides gets)."""
+    return {"routing_mode": _ROUTING_MODE, "pinned_model": _PINNED_MODEL,
+            "random_routing": _RANDOM_ROUTING, "run_mode": _RUN_MODE,
+            "local_fallback": _LOCAL_FALLBACK,
+            "recipe_confidence_threshold": _RECIPE_CONFIDENCE_THRESHOLD}
+
+
+def _setting(key: str):
+    snap = _run_settings.get()
+    if snap is not None and key in snap:
+        return snap[key]
+    return global_settings()[key]
+
+
+def validate_settings(values: Dict[str, Any], role: str = "admin", require_pin: bool = True) -> Dict[str, Any]:
+    """Normalize + validate a partial settings dict (same rules as the setters). Raises ValueError.
+
+    Unknown keys and None values are dropped. A tester may not choose local routing or a
+    cloud local_fallback (both need local_model).
+    """
+    out: Dict[str, Any] = {}
+    for key, val in (values or {}).items():
+        if key not in RUN_SETTING_KEYS or val is None:
+            continue
+        if key == "routing_mode":
+            val = str(val).strip().lower()
+            if val not in VALID_ROUTING_MODES:
+                raise ValueError(f"Unknown routing mode '{val}'. Valid: {VALID_ROUTING_MODES}")
+            if role != "admin" and val not in TESTER_ROUTING_MODES:
+                raise ValueError(f"routing_mode '{val}' needs local_model, which is admin-only. "
+                                 f"Valid: {TESTER_ROUTING_MODES}")
+        elif key == "pinned_model":
+            val = str(val).strip() or None
+            if val == "local_model" and role != "admin":
+                raise ValueError("pinned_model 'local_model' is admin-only")
+        elif key == "random_routing":
+            val = bool(val)
+        elif key == "run_mode":
+            val = str(val).strip().lower()
+            if val not in VALID_RUN_MODES:
+                raise ValueError(f"Unknown run_mode '{val}'. Valid: {VALID_RUN_MODES}")
+        elif key == "local_fallback":
+            val = str(val).strip().lower()
+            if val not in VALID_LOCAL_FALLBACKS:
+                raise ValueError(f"Unknown local_fallback '{val}'. Valid: {VALID_LOCAL_FALLBACKS}")
+        elif key == "recipe_confidence_threshold":
+            val = float(val)
+            if not (0.0 <= val <= 1.0):
+                raise ValueError(f"recipe_confidence_threshold must be in [0.0, 1.0], got {val}")
+        out[key] = val
+    if require_pin and out.get("routing_mode") == "cloud_pinned":
+        pm = out.get("pinned_model")
+        if not pm or pm == "local_model":
+            raise ValueError("cloud_pinned mode requires a cloud pinned_model")
+    return out
+
+
+def effective_settings(user_settings: Optional[Dict[str, Any]] = None, role: str = "admin") -> Dict[str, Any]:
+    """Global layer with the user's (validated) overrides on top: a run's frozen snapshot.
+
+    Stored settings that no longer validate (e.g. a role change) are ignored, not fatal: the
+    run falls back to the global value for that key and says so.
+    """
+    snap = global_settings()
+    try:
+        snap.update(validate_settings(user_settings or {}, role=role))
+    except ValueError:
+        # Keep every key that is valid on its own; the pairing (cloud_pinned needs a pin) is
+        # re-checked on the merged snapshot below.
+        for key, val in (user_settings or {}).items():
+            try:
+                snap.update(validate_settings({key: val}, role=role, require_pin=False))
+            except ValueError as e:
+                print(f"  [Registry] Ignoring stored user setting {key}={val!r}: {e}", flush=True)
+    if role != "admin" and snap["routing_mode"] not in TESTER_ROUTING_MODES:
+        # The global default may be local (the admin's machine); a tester never inherits it.
+        snap["routing_mode"] = "cloud"
+    if snap["routing_mode"] == "cloud_pinned" and not snap.get("pinned_model"):
+        snap["routing_mode"] = "cloud"
+    return snap
+
+
+@contextmanager
+def run_settings_scope(settings: Dict[str, Any]):
+    """Run the enclosed code (and every task/thread it spawns) with this settings snapshot."""
+    token = _run_settings.set(dict(settings))
+    try:
+        yield
+    finally:
+        _run_settings.reset(token)
+
+
+def current_run_settings() -> Optional[Dict[str, Any]]:
+    snap = _run_settings.get()
+    return dict(snap) if snap is not None else None
 
 def resolve_stage_model(stage: str, tier_default: str) -> str:
     """Central mode-aware model choice for a workflow stage.
@@ -176,11 +290,13 @@ def resolve_stage_model(stage: str, tier_default: str) -> str:
     assignment must route through here so a mode change covers the whole
     pipeline.
     """
-    if _ROUTING_MODE == "local":
+    mode = get_routing_mode()
+    if mode == "local":
         return "local_model"
-    if _ROUTING_MODE == "cloud_pinned" and _PINNED_MODEL:
-        return _PINNED_MODEL
-    if _ROUTING_MODE == "hybrid" and stage not in HYBRID_CLOUD_STAGES:
+    pinned = get_pinned_model()
+    if mode == "cloud_pinned" and pinned:
+        return pinned
+    if mode == "hybrid" and stage not in HYBRID_CLOUD_STAGES:
         return "local_model"
     return tier_default
 

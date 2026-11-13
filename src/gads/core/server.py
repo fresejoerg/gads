@@ -11,7 +11,7 @@ import yaml
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException, Body
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -31,6 +31,8 @@ from gads.agents.workers.completeness_verifier import CompletenessVerifierAgent,
 from gads.core.executor import ExecutionManager
 from gads.tools.sandbox import make_sandbox
 from gads.core import config
+from gads.core import tenancy
+from gads.core.tenancy import Caller, current_user
 from gads.core.registry import (
     get_model_hierarchy, get_local_only, set_local_only, get_random_routing,
     set_random_routing, get_next_model_dynamic, get_routing_mode, set_routing_mode,
@@ -38,6 +40,7 @@ from gads.core.registry import (
     get_local_fallback, set_local_fallback, VALID_LOCAL_FALLBACKS,
     get_run_mode, set_run_mode, VALID_RUN_MODES,
     get_recipe_confidence_threshold, set_recipe_confidence_threshold,
+    effective_settings, run_settings_scope, validate_settings, RUN_SETTING_KEYS,
     get_engine_id,
 )
 from gads.core.knowledge import KnowledgeRegistry
@@ -67,15 +70,29 @@ ACTIVE_WORKFLOWS: set[uuid.UUID] = set()
 # In-process only, like ACTIVE_WORKFLOWS — a backend restart clears it (and the kernels too).
 PINNED_SESSIONS: set[uuid.UUID] = set()
 
+def run_settings_for(project_id: uuid.UUID) -> Dict[str, Any]:
+    """The frozen settings snapshot a run of this project uses: owner's settings over the
+    global /config layer (registry.effective_settings), resolved once at launch (HOSTED-1)."""
+    owner = tenancy.owner_of_project(project_id)
+    return effective_settings(owner.settings, role=owner.role)
+
+
 async def run_agent_workflow_wrapper(project_id: uuid.UUID, objective: str, instruction_id: Optional[uuid.UUID] = None):
-    """Wrapper to manage the ACTIVE_WORKFLOWS lock."""
+    """Wrapper to manage the ACTIVE_WORKFLOWS lock; runs under the owner's settings snapshot."""
     try:
-        await run_agent_workflow(project_id, objective, instruction_id)
+        with run_settings_scope(run_settings_for(project_id)):
+            await run_agent_workflow(project_id, objective, instruction_id)
     finally:
         if project_id in ACTIVE_WORKFLOWS:
             ACTIVE_WORKFLOWS.remove(project_id)
 
-app = FastAPI(title="GADS Core API")
+# Refuse to start with an identity mode that cannot be trusted on this deployment
+# (GADS_DEPLOYMENT=hosted + single_user/dev_header). Raises at import, i.e. at boot.
+config.auth_mode()
+
+# Every route passes the tenancy policy (core/tenancy.py, default deny): identity per GADS_AUTH,
+# then public / read / admin / owner / self per tenancy.ROUTE_POLICY.
+app = FastAPI(title="GADS Core API", dependencies=[Depends(tenancy.enforce_route_policy)])
 
 # The Knowledge Studio SPA is served from its own origin (Vite dev server on :5173,
 # or a static bundle). Allow local origins so it can call the Knowledge API directly.
@@ -398,11 +415,15 @@ def taxonomy_recipes():
     return tx.recipe_coverage(registry)
 
 @app.get("/taxonomy/runs")
-def taxonomy_runs(limit: int = 100):
+def taxonomy_runs(limit: int = 100, caller: Caller = Depends(current_user)):
     """Per-run taxonomy classification (every launched project that has been routed),
-    newest first — the classification for any run, ad-hoc included (018)."""
+    newest first — the classification for any run, ad-hoc included (018). Own runs only
+    for a non-admin."""
     with Session(engine) as session:
-        projects = session.exec(select(Project).order_by(Project.created_at.desc()).limit(limit)).all()
+        q = select(Project).order_by(Project.created_at.desc())
+        if not caller.is_admin:
+            q = q.where(Project.owner_id == caller.id)
+        projects = session.exec(q.limit(limit)).all()
         out = []
         for p in projects:
             tax = (p.last_state_json or {}).get("taxonomy")
@@ -623,7 +644,8 @@ async def rehydrate_project(project_id: uuid.UUID, req: Optional[RehydrateReques
 
 @app.post("/projects/{project_id}/followup")
 async def create_followup(project_id: uuid.UUID, req: FollowUpRequest,
-                          background_tasks: BackgroundTasks):
+                          background_tasks: BackgroundTasks,
+                          caller: Caller = Depends(current_user)):
     """Run ONE user-directed instruction against a completed project's live kernel.
 
     The short lane (approach_docs/020): instruction → one task → rehydrate → Coder → execute
@@ -655,7 +677,7 @@ async def create_followup(project_id: uuid.UUID, req: FollowUpRequest,
         # instruction/task off — recreate a minimal shell rather than refusing the request.
         if not project:
             project = Project(id=project_id, name=f"Recovered {str(project_id)[:8]}",
-                              objective="(recovered from workspace)")
+                              objective="(recovered from workspace)", owner_id=caller.id)
             session.add(project)
             session.commit()
 
@@ -664,7 +686,8 @@ async def create_followup(project_id: uuid.UUID, req: FollowUpRequest,
         session.commit()
         session.refresh(instruction)
 
-        model = resolve_stage_model("Coder", "local_model")
+        with run_settings_scope(run_settings_for(project_id)):
+            model = resolve_stage_model("Coder", "local_model")
         task = Task(project_id=project_id, instruction_id=instruction.id,
                     description=objective, assigned_to=model,
                     status="pending", heartbeat=datetime.now())
@@ -3307,7 +3330,10 @@ print("GADS_STATE_SNAPSHOT:" + json.dumps(_summary))
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, last_seq: int = 0):
-    await bus.connect(websocket)
+    # The route policy resolved the caller; bus delivers (broadcast AND replay) only the
+    # events of projects this caller owns (all of them for the admin).
+    caller = current_user(websocket)
+    await bus.connect(websocket, caller)
     if last_seq > 0: await bus.replay_events(websocket, last_seq)
     try:
         while True: await websocket.receive_text()
@@ -3420,7 +3446,8 @@ class SpecLaunchRequest(BaseModel):
     disable_recipes: bool = False
 
 @app.post("/projects/from-spec", response_model=ProjectResponse)
-async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundTasks):
+async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundTasks,
+                           caller: Caller = Depends(current_user)):
     specs_dir = Path("specs").resolve()
     target = (specs_dir / req.filename).resolve()
     if not target.is_relative_to(specs_dir) or target.suffix != ".md":
@@ -3508,7 +3535,7 @@ async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundT
     # Transactional Execution
     with Session(engine) as session:
         project_name = meta.name or f"Project {datetime.now().strftime('%m-%d %H:%M')} (from spec)"
-        project = Project(name=project_name, objective=objective, last_state_json={"fast_mode": req.fast_mode, "disable_recipes": meta.disable_recipes or req.disable_recipes, "spec_filename": req.filename})
+        project = Project(name=project_name, objective=objective, owner_id=caller.id, last_state_json={"fast_mode": req.fast_mode, "disable_recipes": meta.disable_recipes or req.disable_recipes, "spec_filename": req.filename})
         session.add(project)
         session.flush() # Get ID without fully committing yet
         
@@ -3607,9 +3634,12 @@ async def get_project_details(project_id: uuid.UUID):
         }
 
 @app.get("/projects", response_model=List[ProjectRead])
-async def list_projects():
+async def list_projects(caller: Caller = Depends(current_user)):
     with Session(engine) as session:
-        projects = session.exec(select(Project).order_by(Project.created_at.desc())).all()
+        q = select(Project).order_by(Project.created_at.desc())
+        if not caller.is_admin:
+            q = q.where(Project.owner_id == caller.id)
+        projects = session.exec(q).all()
         results = []
         for p in projects:
             p_data = ProjectRead.from_orm(p)
@@ -3637,11 +3667,17 @@ async def list_projects():
             results.append(p_data)
         return results
 @app.post("/projects", response_model=ProjectResponse)
-async def create_project(req: ProjectCreateRequest, background_tasks: BackgroundTasks):
+async def create_project(req: ProjectCreateRequest, background_tasks: BackgroundTasks,
+                         caller: Caller = Depends(current_user)):
     with Session(engine) as session:
         if req.existing_project_id:
-            project = session.get(Project, uuid.UUID(req.existing_project_id))
-            if not project: raise HTTPException(status_code=404, detail="Project not found")
+            try:
+                existing_id = uuid.UUID(req.existing_project_id)
+            except ValueError:
+                raise HTTPException(status_code=404, detail="Project not found")
+            project = session.get(Project, existing_id)
+            if not project or not tenancy.owns_project(caller, existing_id, session):
+                raise HTTPException(status_code=404, detail="Project not found")
 
             # Reset cancelled status if resuming
             if project.narrative and "[CANCELLED]" in project.narrative:
@@ -3660,7 +3696,7 @@ async def create_project(req: ProjectCreateRequest, background_tasks: Background
             session.commit()
             session.refresh(project)
         else:
-            project = Project(name=req.name, objective=req.objective, last_state_json={"fast_mode": req.fast_mode, "disable_recipes": req.disable_recipes})
+            project = Project(name=req.name, objective=req.objective, owner_id=caller.id, last_state_json={"fast_mode": req.fast_mode, "disable_recipes": req.disable_recipes})
             session.add(project)
             session.commit()
             session.refresh(project)
@@ -3972,6 +4008,11 @@ async def _background_probe_and_update(project_id: uuid.UUID, filename: str):
 
 @app.post("/projects/{project_id}/register-external", response_model=ProjectResponse)
 async def register_external_file(project_id: uuid.UUID, req: ExternalPathRequest, background_tasks: BackgroundTasks):
+    # Admin-only route (tenancy.ROUTE_POLICY), and even then only datasets under
+    # GADS_DATASETS_ROOT: it used to link ANY host path (e.g. .env, another workspace) into a
+    # workspace (032 §4). The Streamlit MOUNT picker only ever offers files from that root.
+    if not _inside(Path(req.path), [Path(DATASETS_ROOT)]):
+        raise HTTPException(status_code=403, detail="Only files under GADS_DATASETS_ROOT can be registered")
     with Session(engine) as session:
         project = session.get(Project, project_id)
         if not project: raise HTTPException(status_code=404, detail="Project not found")
@@ -3995,12 +4036,49 @@ async def register_external_file(project_id: uuid.UUID, req: ExternalPathRequest
         return ProjectResponse(project=ProjectRead.from_orm(project), files=[f["name"] for f in current_files])
 
 @app.get("/projects/{project_id}/files/{file_path:path}")
-async def download_file(project_id: uuid.UUID, file_path: str, download: bool = False):
+async def download_file(project_id: uuid.UUID, file_path: str, download: bool = False,
+                        caller: Caller = Depends(current_user)):
     workspace_dir = f"{WORKSPACE_ROOT}/{project_id}"
     full_path = os.path.join(workspace_dir, file_path)
-    if not os.path.abspath(full_path).startswith(os.path.abspath(workspace_dir)): raise HTTPException(status_code=403, detail="Denied")
+    # Two checks (032 §4). The old string-prefix test neither resolved symlinks (task code can
+    # create them) nor respected path boundaries (<pid>-evil/ passed it).
+    #  1. The requested path, normalized but NOT resolved, stays inside the workspace.
+    #  2. What it actually points at is inside an allowed root: this workspace, the read-only
+    #     datasets root (datasets are symlinked in), or another workspace the caller owns
+    #     (artifacts_from mounts an upstream run by relative symlink).
+    if not _inside(Path(os.path.normpath(full_path)), [Path(workspace_dir)], resolve=False):
+        raise HTTPException(status_code=403, detail="Denied")
     if not os.path.exists(full_path): raise HTTPException(status_code=404, detail="Not found")
+    if not _download_target_allowed(caller, Path(full_path), Path(workspace_dir)):
+        raise HTTPException(status_code=403, detail="Denied")
     return FileResponse(full_path, filename=os.path.basename(full_path)) if download else FileResponse(full_path)
+
+def _inside(path: Path, roots: List[Path], resolve: bool = True) -> bool:
+    """Path-boundary containment (not string prefix). `resolve` follows symlinks first."""
+    try:
+        p = path.resolve() if resolve else Path(os.path.abspath(path))
+    except (OSError, RuntimeError):
+        return False
+    for root in roots:
+        try:
+            r = root.resolve() if resolve else Path(os.path.abspath(root))
+        except (OSError, RuntimeError):
+            continue
+        if p == r or p.is_relative_to(r):
+            return True
+    return False
+
+
+def _download_target_allowed(caller: Caller, path: Path, workspace_dir: Path) -> bool:
+    if _inside(path, [workspace_dir, Path(DATASETS_ROOT)]):
+        return True
+    # An upstream run's workspace, mounted by relative symlink: allowed if the caller owns it.
+    try:
+        rel = path.resolve().relative_to(Path(WORKSPACE_ROOT).resolve())
+    except (ValueError, OSError):
+        return False
+    return bool(rel.parts) and tenancy.owns_project(caller, rel.parts[0])
+
 
 def _mark_workflow_failed(session: Session, project_id: uuid.UUID, reason: str):
     """Idempotently halts a workflow and cancels all pending tasks."""
@@ -4023,3 +4101,45 @@ def _mark_workflow_failed(session: Session, project_id: uuid.UUID, reason: str):
 
 @app.get("/health")
 def health(): return {"status": "ok"}
+
+
+class SettingsUpdate(BaseModel):
+    """Partial run-settings overrides (registry.RUN_SETTING_KEYS). A key set to null is cleared."""
+    routing_mode: Optional[str] = None
+    pinned_model: Optional[str] = None
+    random_routing: Optional[bool] = None
+    run_mode: Optional[str] = None
+    local_fallback: Optional[str] = None
+    recipe_confidence_threshold: Optional[float] = None
+
+
+@app.get("/me")
+def get_me(caller: Caller = Depends(current_user)):
+    return {"id": str(caller.id), "email": caller.email, "role": caller.role}
+
+
+@app.get("/me/settings")
+def get_my_settings(caller: Caller = Depends(current_user)):
+    """The caller's overrides and what a run launched now would use (overrides over /config)."""
+    return {"overrides": caller.settings,
+            "effective": effective_settings(caller.settings, role=caller.role)}
+
+
+@app.put("/me/settings")
+def put_my_settings(req: SettingsUpdate, caller: Caller = Depends(current_user)):
+    """Replace-per-key: fields present in the body are set (null clears that override)."""
+    sent = req.model_dump(exclude_unset=True)
+    merged = {**caller.settings, **sent}
+    merged = {k: v for k, v in merged.items() if v is not None}
+    try:
+        clean = validate_settings(merged, role=caller.role)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    from gads.core.models import User
+    with Session(engine) as session:
+        u = session.get(User, caller.id)
+        u.settings_json = clean
+        session.add(u)
+        session.commit()
+    tenancy._ADMIN_CACHE.clear()
+    return {"overrides": clean, "effective": effective_settings(clean, role=caller.role)}

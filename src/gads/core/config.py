@@ -65,6 +65,32 @@ def otel_endpoint() -> str:
     return (os.getenv("GADS_OTEL_ENDPOINT") or "").strip()
 
 
+AUTH_MODES = ("single_user", "dev_header")
+# Modes that do NOT verify who is calling. Never acceptable on a hosted deployment; Cloudflare
+# Access JWT verification (032 §3) arrives as its own mode in phase 4.
+_UNVERIFIED_AUTH_MODES = ("single_user", "dev_header")
+
+
+def auth_mode() -> str:
+    """How the backend learns who is calling (core/tenancy.py).
+
+    single_user — every request is the admin (the local research setup; nothing changes).
+    dev_header  — trusts an `X-GADS-User: <email>` header. For local multi-user tests only.
+    """
+    value = (os.getenv("GADS_AUTH") or "single_user").strip().lower()
+    if value not in AUTH_MODES:
+        raise ValueError(f"GADS_AUTH must be one of {AUTH_MODES}, got {value!r}")
+    if deployment() == "hosted" and value in _UNVERIFIED_AUTH_MODES:
+        raise ValueError(f"GADS_AUTH={value!r} does not verify identity and is refused when "
+                         "GADS_DEPLOYMENT=hosted")
+    return value
+
+
+def admin_email() -> str:
+    """The admin's login. A generic placeholder by default: the local single user."""
+    return (os.getenv("GADS_ADMIN_EMAIL") or "admin@localhost").strip().lower()
+
+
 # Import-time snapshots, for the modules that used constants.
 DEPLOYMENT = deployment()
 WORKSPACE_ROOT = workspace_root()

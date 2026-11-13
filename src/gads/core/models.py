@@ -3,9 +3,23 @@ from datetime import datetime
 import uuid
 from sqlmodel import SQLModel, Field, JSON, Column, Relationship
 
+class User(SQLModel, table=True):
+    """A login (approach_docs/032 §4). Table `gads_user`: `user` is reserved in Postgres."""
+    __tablename__ = "gads_user"
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    email: str = Field(index=True, unique=True)
+    role: str = "tester"  # admin | tester
+    created_at: datetime = Field(default_factory=datetime.now)
+    # Run-shaping overrides over the global /config layer (registry.RUN_SETTING_KEYS).
+    settings_json: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+
+
 class Project(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str = Field(index=True)
+    # Owner (HOSTED-1). Nullable: rows from before tenancy are backfilled to the admin in
+    # init_db, and a NULL owner means admin-only.
+    owner_id: Optional[uuid.UUID] = Field(default=None, foreign_key="gads_user.id", index=True)
     objective: str
     narrative: Optional[str] = None
     takeaways: Optional[List[str]] = Field(default=None, sa_column=Column(JSON))

@@ -252,8 +252,11 @@ async def run_followup_wrapper(project_id: uuid.UUID, instruction_id: uuid.UUID,
     """Background entrypoint: guarantees the task never sticks in 'running' and releases
     the duplicate-launch guard."""
     from gads.core import server as srv
+    from gads.core.registry import run_settings_scope
     try:
-        await run_followup(project_id, instruction_id, task_id, objective, rehydrate, use_recipe)
+        # The owner's frozen settings snapshot, like a full workflow (HOSTED-1).
+        with run_settings_scope(srv.run_settings_for(project_id)):
+            await run_followup(project_id, instruction_id, task_id, objective, rehydrate, use_recipe)
     except Exception as e:
         import traceback
         traceback.print_exc()
