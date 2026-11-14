@@ -1027,4 +1027,22 @@ in the held-out split.
 
 ---
 
+## 2026-11-13 · Sandbox image rebuilt from a pinned lock: CPU torch, 16.8 GB → 7.45 GB
+
+The sandbox image is now built from `MyLocalStack/sandbox/requirements.lock` (the `pip freeze` of
+the last good image, installed with `--no-deps`), on a digest-pinned base. Building it surfaced a
+fact about every earlier run: the old image ran **torch 2.9.1+cu128** with 15 CUDA wheels, not
+the CPU build its Dockerfile asked for (a later dependency had replaced it). The new image runs
+torch 2.9.1+cpu. AirPassengers `9b24a6a6` on the new image has no per-check difference from
+`8c785466` (PASS, 50/50, benchmark 18/18, pass@model 1.0) and identical metrics.json values to 4
+dp. **That run trained no torch model** (DirectTabular, ETS, Naive, RecursiveTabular,
+SeasonalNaive, Theta, ensemble), so it says nothing about the CUDA → CPU torch swap; that is
+untested at recipe level (a DeepAR smoke fit and the embedding model work). Python package
+versions are otherwise unchanged; the base OS layer and apt packages (Chromium among them) were
+rebuilt on 2026-11-13. Runs from here on use this image (production switched 2026-11-13); earlier
+runs used the CUDA build. On a torch-backed recipe (DeepAR/Chronos, sentence embeddings), a
+digit-level difference against an older run may be the image, not the model.
+
+---
+
 *Add entries above this line. Keep the evidence discipline: UUID or it didn't happen.*

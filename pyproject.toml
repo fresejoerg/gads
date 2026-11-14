@@ -40,4 +40,5 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-http>=1.41",
     "python-multipart>=0.0.28",
     "cryptography>=48.0.0",
+    "modal>=1.6.4",
 ]
