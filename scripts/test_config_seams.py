@@ -133,8 +133,11 @@ print("OK" if (a is not b and a.client is not b.client and isinstance(a, Sandbox
                and type(a) is LocalDockerBackend) else "BAD")
 """, {})
 check(r.stdout.strip() == "OK", f"fresh LocalDockerBackend per call, satisfies protocol {r.stderr[-300:]}")
-r = run_py("from gads.tools.sandbox import make_sandbox; make_sandbox()", {"GADS_SANDBOX_BACKEND": "modal"})
+r = run_py("from gads.tools.sandbox import make_sandbox; make_sandbox()", {"GADS_SANDBOX_BACKEND": "docker_cloud"})
 check(r.returncode != 0 and "GADS_SANDBOX_BACKEND" in r.stderr, "unknown backend rejected")
+r = run_py("from gads.tools.sandbox import make_sandbox; print(type(make_sandbox()).__name__)",
+           {"GADS_SANDBOX_BACKEND": "modal"})
+check(r.stdout.strip() == "ModalBackend", f"modal backend resolves (no Modal call at construction) {r.stderr[-300:]}")
 r = run_py("import gads.core.config", {"GADS_DEPLOYMENT": "cloud"})
 check(r.returncode != 0 and "GADS_DEPLOYMENT" in r.stderr, "invalid GADS_DEPLOYMENT rejected")
 r = run_py("from gads.core import config; print(config.DEPLOYMENT)", {"GADS_DEPLOYMENT": "Hosted"})

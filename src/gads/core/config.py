@@ -61,6 +61,40 @@ def sandbox_backend() -> str:
     return (os.getenv("GADS_SANDBOX_BACKEND") or "local_docker").strip().lower()
 
 
+def _num(name: str, default: float) -> float:
+    raw = (os.getenv(name) or "").strip()
+    return float(raw) if raw else default
+
+
+def modal_image_id() -> str:
+    """Modal image id of the sandbox image (printed by scripts/modal_sandbox_image.py). Required
+    for GADS_SANDBOX_BACKEND=modal: the backend never builds images itself."""
+    return (os.getenv("GADS_MODAL_IMAGE_ID") or "").strip()
+
+
+def modal_app() -> str:
+    return (os.getenv("GADS_MODAL_APP") or "gads-sandbox").strip()
+
+
+def modal_cpu() -> float:
+    return _num("GADS_MODAL_CPU", 2.0)
+
+
+def modal_memory_mb() -> int:
+    """Hard memory limit per sandbox. 3072 = the local container's cap (parity)."""
+    return int(_num("GADS_MODAL_MEMORY_MB", 3072))
+
+
+def modal_idle_s() -> int:
+    """Modal stops a sandbox after this long with no request in flight (its kernel state is lost)."""
+    return int(_num("GADS_MODAL_IDLE_S", 1800))
+
+
+def modal_max_lifetime_s() -> int:
+    """Hard cap on one sandbox's life: the bound on what an orphan can cost."""
+    return int(_num("GADS_MODAL_MAX_LIFETIME_S", 6 * 3600))
+
+
 def header_image() -> str:
     return os.getenv("GADS_HEADER_IMAGE") or _LOCAL_HEADER_IMAGE
 

@@ -216,7 +216,13 @@ def _isolated_http():
     return IsolatedHttpBackend
 
 
-_BACKENDS = {"local_docker": lambda: LocalDockerBackend, "isolated_http": _isolated_http}
+def _modal():
+    from gads.tools.sandbox_modal import ModalBackend
+    return ModalBackend
+
+
+_BACKENDS = {"local_docker": lambda: LocalDockerBackend, "isolated_http": _isolated_http,
+             "modal": _modal}
 
 
 def make_sandbox(base_url: Optional[str] = None) -> SandboxBackend:
