@@ -228,6 +228,24 @@ names = [f["name"] for f in lst.json()["files"]]
 check(lst.status_code == 200 and names == sorted(os.listdir(wa_dir)), "listing = the directory's top level")
 check(client.get(f"/projects/{pb}/files", headers=H(A)).status_code == 404, "listing someone else's workspace -> 404")
 
+print("7c. remote sandbox push: upstream links only from the owner's own projects")
+from gads.tools import sandbox_sync  # noqa: E402
+pa2 = make_project(A, "alice-proj-2")
+p_admin = make_project(ADMIN, "admin-proj")
+ok_a = sandbox_sync.upstream_check(pa)
+check(ok_a(pa2) and ok_a(pa), "alice's project may receive her own upstream workspace")
+check(not ok_a(pb), "alice's project may NOT receive bob's workspace")
+check(not ok_a(p_admin) and not ok_a(str(uuid.uuid4())), "...nor the admin's, nor an unknown one")
+check(sandbox_sync.upstream_check(p_admin)(pb), "an admin-owned project may (the admin owns everything)")
+for wid in (pa2, pb):
+    (WS_ROOT / wid).mkdir(exist_ok=True); (WS_ROOT / wid / "model.json").write_text("{}")
+(wa_up := WS_ROOT / pa / "upstream").mkdir(exist_ok=True)
+for wid in (pa2, pb):
+    os.symlink(f"../../{wid}/model.json", wa_up / f"{wid[:8]}.json")
+pushed = {rel for rel, _, _ in sandbox_sync._local_files(str(WS_ROOT / pa), ok_a)}
+check(f"upstream/{pa2[:8]}.json" in pushed and f"upstream/{pb[:8]}.json" not in pushed,
+      f"push includes alice's upstream link, skips bob's ({sorted(x for x in pushed if x.startswith('upstream'))})")
+
 print("8. per-user settings")
 r = client.put("/me/settings", headers=H(A), json={"routing_mode": "local"})
 check(r.status_code == 400, "tester cannot choose local routing")

@@ -3576,6 +3576,10 @@ async def launch_from_spec(req: SpecLaunchRequest, background_tasks: BackgroundT
                                 detail=f"artifacts_from is not a UUID: {meta.artifacts_from}")
         with Session(engine) as _s:
             _up = _s.get(Project, upstream_id)
+            # Another user's project reads as "not found" (no existence leak). from-spec is
+            # admin-only today; this keeps artifacts_from safe if a tester route ever reaches it.
+            if _up is not None and not tenancy.owns_project(caller, upstream_id, session=_s):
+                _up = None
             if not _up:
                 raise HTTPException(status_code=400,
                                     detail=f"artifacts_from project not found: {upstream_id}")

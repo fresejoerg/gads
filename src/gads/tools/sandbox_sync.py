@@ -17,9 +17,8 @@ Safety rules (each one has a test in scripts/test_sandbox_sync.py):
   * PUSH follows a link only into an allowed root and sends the CONTENT: this workspace; the
     datasets root (pushed READ-ONLY, so a task that overwrites a dataset fails remotely exactly
     as it does against the local read-only mount, instead of later nodes silently computing on
-    altered data); another workspace ONLY from `upstream/` (artifacts_from mounts). The backend
-    does not check here that the caller owns that upstream workspace: a remote backend for
-    multi-user hosting must, like download_file does.
+    altered data); another workspace ONLY from `upstream/` (artifacts_from mounts), and only if the
+    project's owner owns that workspace (`upstream_check`, the rule download_file applies).
   * TRANSFERS ARE ATOMIC. Both sides write a temp file and rename it; the record of what was
     synced is updated only after a transfer completed, so a call cancelled by its caller's
     timeout leaves no partial file and the next call finishes the job.
@@ -70,7 +69,32 @@ def _inside(path: str, root: str) -> bool:
     return p == r or p.startswith(r + os.sep)
 
 
-def _local_files(local: str) -> Iterator[Tuple[str, str, bool]]:
+def _workspace_of(path: str, workspaces: str) -> str:
+    """The workspace (project id) a path under the workspaces root resolves into."""
+    return os.path.relpath(os.path.realpath(path), os.path.realpath(workspaces)).split(os.sep)[0]
+
+
+def upstream_check(project_key: str):
+    """Predicate: may this project's sandbox receive files from upstream workspace `w`?
+
+    Only if the project's OWNER owns `w` (the admin owns everything). The remote sandbox gets a
+    copy, so this is the one place a cross-tenant link would turn into a cross-tenant read;
+    download_file applies the same rule. Looked up once per workspace per push.
+    """
+    from gads.core import tenancy  # lazy: needs the DB, and only remote backends get here
+    owner = tenancy.owner_of_project(uuid.UUID(project_key))
+    cache: Dict[str, bool] = {}
+
+    def ok(w: str) -> bool:
+        if w == project_key:
+            return True
+        if w not in cache:
+            cache[w] = tenancy.owns_project(owner, w)
+        return cache[w]
+    return ok
+
+
+def _local_files(local: str, upstream_ok=lambda w: False) -> Iterator[Tuple[str, str, bool]]:
     """(relative path, real path to read, readonly) for every file to push.
 
     Regular files, plus symlinked files whose target is inside an allowed root (pushed as
@@ -92,7 +116,10 @@ def _local_files(local: str) -> Iterator[Tuple[str, str, bool]]:
                 elif _inside(full, datasets):
                     yield rel, os.path.realpath(full), True
                 elif rel.split(os.sep)[0] == "upstream" and _inside(full, workspaces):
-                    yield rel, os.path.realpath(full), False
+                    if upstream_ok(_workspace_of(full, workspaces)):
+                        yield rel, os.path.realpath(full), False
+                    else:
+                        print(f"    [Sync] not pushing link {rel}: upstream workspace has another owner", flush=True)
                 else:
                     print(f"    [Sync] not pushing link {rel}: target outside the allowed roots", flush=True)
             elif os.path.isfile(full):
@@ -136,7 +163,7 @@ class IsolatedHttpBackend(LocalDockerBackend):
         st = self._state_for(key, listing["instance_id"])
         remote = {f["path"] for f in listing["files"]}
         url, headers = self.endpoint(key)
-        for rel, src, readonly in _local_files(local):
+        for rel, src, readonly in _local_files(local, upstream_check(key)):
             sig = _sig(src)
             if st["pushed"].get(rel) == sig and rel in remote:
                 continue
