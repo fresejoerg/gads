@@ -22,10 +22,12 @@ import modal
 
 APP_NAME = "gads-sandbox"
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "src"))
 # Modal runs every exec as root regardless of the Dockerfile's USER; drop privileges explicitly.
-SERVICE_USER = ("setpriv", "--reuid=1000", "--regid=1000", "--init-groups", "--")
-SERVICE_CMD = (*SERVICE_USER, "sh", "-c",
-               "cd /app && HOME=/home/sandboxuser exec uvicorn app:app --host 0.0.0.0 --port 8000")
+# One definition, shared with the backend that starts the service the same way.
+from gads.tools.sandbox_modal import SERVICE_CMD  # noqa: E402
+
+SERVICE_USER = SERVICE_CMD[:SERVICE_CMD.index("--") + 1]
 
 
 def sandbox_image(context: Path) -> modal.Image:

@@ -264,18 +264,24 @@ async def _drop_if_dead(pid: str) -> bool:
     entry = _SANDBOXES.get(pid)
     if entry is None:
         return True
-    alive = await entry["sb"].poll.aio() is None
-    if alive:
-        try:
-            async with httpx.AsyncClient(timeout=10.0, limits=httpx.Limits(max_keepalive_connections=0)) as c:
-                alive = (await c.get(f"{entry['url']}/health")).status_code == 200
-        except httpx.HTTPError:
-            alive = False
-    if alive:
-        return False
+    rc = await entry["sb"].poll.aio()
+    if rc is None:
+        # poll() lags a death by seconds, so probe the service; three misses before killing a
+        # sandbox Modal still reports as running (a slow tunnel must not cost the kernel).
+        async with httpx.AsyncClient(timeout=10.0, limits=httpx.Limits(max_keepalive_connections=0)) as c:
+            for i in range(3):
+                try:
+                    if (await c.get(f"{entry['url']}/health")).status_code == 200:
+                        return False
+                except httpx.HTTPError:
+                    pass
+                await asyncio.sleep(2.0)
+                rc = await entry["sb"].poll.aio()
+                if rc is not None:
+                    break
     _SANDBOXES.pop(pid, None)
-    print(f"    [Modal] !!! sandbox {entry['sb'].object_id} for {pid[:8]} is GONE. Its KERNEL STATE IS LOST.",
-          flush=True)
+    print(f"    [Modal] !!! sandbox {entry['sb'].object_id} for {pid[:8]} is GONE (rc={rc}; 137 = killed: OOM or terminate). "
+          "Its KERNEL STATE IS LOST.", flush=True)
     try:
         await entry["sb"].terminate.aio()
     except Exception:  # noqa: BLE001

@@ -168,6 +168,27 @@ print('hits', hits, os.environ.get('SANDBOX_TOKEN'), os.getuid())
         r = await run(probe, pid)
         check("hits [] None 1000" in r.stdout, f"no readable process environ/cmdline holds the token ({r.stdout.strip()[:120]})")
 
+        print("6b. live logs and session reset reach the live sandbox")
+        poller = make_sandbox()
+        job = asyncio.ensure_future(run("import time\nfor i in range(6):\n    print('tick', i, flush=True); time.sleep(1)", pid))
+        seen = ""
+        for _ in range(20):
+            await asyncio.sleep(1)
+            logs = await poller.poll_logs(pid)
+            seen = (logs or {}).get("stdout", "") or seen
+            if "tick 2" in seen and not job.done():
+                break
+        await job
+        check("tick 2" in seen and not seen.endswith("tick 5\n"),
+              f"poll_logs streamed stdout while the cell was still running ({seen.strip()[-40:]!r})")
+        await run("y = 7", pid)
+        await poller.reset_session(pid)
+        await poller.close()
+        r = await run("print('y gone', 'y' not in dir())", pid)
+        check("y gone True" in r.stdout and await running_for(pid) == ids,
+              f"reset_session cleared the kernel, same sandbox ({r.stdout.strip()} {r.error})")
+        r = await run("x = 41", pid)  # restore the variable step 7 checks
+
         print("7. a backend restart reattaches")
         sm.reset_registry()
         r = await run("print('x still', x)", pid)
