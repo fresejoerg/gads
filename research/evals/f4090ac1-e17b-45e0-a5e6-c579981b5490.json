@@ -1,0 +1,906 @@
+{
+ "schema": "gads.run_eval",
+ "rubric_version": "1.0.0",
+ "project_id": "f4090ac1-e17b-45e0-a5e6-c579981b5490",
+ "name": "Adult census — reasoned model selection",
+ "verdict": "pass",
+ "critical": {
+  "pass": 61,
+  "fail": 0,
+  "not_evaluable": 0
+ },
+ "dimensions": {
+  "execution": {
+   "pass": 3,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "deliverables": {
+   "pass": 4,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "integrity": {
+   "pass": 11,
+   "fail": 0,
+   "not_evaluable": 0
+  },
+  "contract": {
+   "pass": 59,
+   "fail": 0,
+   "not_evaluable": 0
+  }
+ },
+ "benchmark": null,
+ "run": {
+  "terminal_state": "completed",
+  "void_suspected": false,
+  "workflow_attempts": 1,
+  "recipe_id": "tabular_supervised.selection.classification",
+  "plan": "recipe_compiled",
+  "exec_nodes": 10,
+  "created_at": "2026-11-13T17:21:05.897207",
+  "excluded_followup_tasks": 0,
+  "executions_on_project": 1
+ },
+ "fingerprint": {
+  "spec": "adult_model_selection.md",
+  "recipe_id": "tabular_supervised.selection.classification",
+  "recipe_version": "1.5.1",
+  "engine_id": null,
+  "routing_mode": "cloud",
+  "run_mode": "research",
+  "rung": "D3",
+  "sandbox_backend": "modal"
+ },
+ "attribution": {
+  "exec_nodes": 10,
+  "attempted_nodes": 10,
+  "failed_nodes": 0,
+  "native_primary": 0,
+  "model_pass": 10,
+  "fallback_pass": 0,
+  "native_fallback": 0,
+  "cloud_fallback": 0,
+  "pass_at_model": 1.0
+ },
+ "usage": {
+  "calls": 18,
+  "prompt_tokens": 170780,
+  "completion_tokens": 42539,
+  "cost_usd": 0.493575,
+  "unpriced_calls": 0,
+  "cost_complete": true,
+  "models": [
+   "gemini-3.5-flash-lite",
+   "gemini-4-hydrogen"
+  ]
+ },
+ "nodes": [
+  {
+   "node": "load_prepared_data",
+   "task_id": "f6838143-30d3-49b3-afab-4de1bb883f06",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-3.5-flash-lite",
+   "model_used": "gemini-3.5-flash-lite",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0065288,
+   "checks": {
+    "pass": 10,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "characterize_task",
+   "task_id": "2a3da3f2-acc1-466a-952a-2b4a195fb191",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-3.5-flash-lite",
+   "model_used": "gemini-3.5-flash-lite",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0073027,
+   "checks": {
+    "pass": 7,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "shortlist_candidates",
+   "task_id": "330c0b54-97d9-4396-b36d-77cac443f9e6",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-4-hydrogen",
+   "model_used": "gemini-4-hydrogen",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0262215,
+   "checks": {
+    "pass": 6,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "bakeoff",
+   "task_id": "6c5a74cc-a6fb-4681-b16e-00221a9b2188",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-4-hydrogen",
+   "model_used": "gemini-4-hydrogen",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0471345,
+   "checks": {
+    "pass": 6,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "tune_best",
+   "task_id": "d02f9dae-dc18-49dd-9ddd-c17a1978c545",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-4-hydrogen",
+   "model_used": "gemini-4-hydrogen",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0411225,
+   "checks": {
+    "pass": 9,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "selection_audit",
+   "task_id": "910b65d1-8ef3-48ec-9bb9-0c6f00d5ee8c",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-4-hydrogen",
+   "model_used": "gemini-4-hydrogen",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.044181,
+   "checks": {
+    "pass": 6,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "holdout_evaluation",
+   "task_id": "6300613e-3dbb-498f-b1c3-349175a575f9",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-4-hydrogen",
+   "model_used": "gemini-4-hydrogen",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0358905,
+   "checks": {
+    "pass": 11,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "diagnostic_curves",
+   "task_id": "d11ea90c-9ea8-4ee7-80dd-ef4abc656ad6",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-3.5-flash-lite",
+   "model_used": "gemini-3.5-flash-lite",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.0054723,
+   "checks": {
+    "pass": 5,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "feature_importance",
+   "task_id": "e23bfaad-6086-4a7d-baa2-888a66bbf108",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-4-hydrogen",
+   "model_used": "gemini-4-hydrogen",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 1,
+   "cost_usd": 0.0450315,
+   "checks": {
+    "pass": 6,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  },
+  {
+   "node": "performance_report",
+   "task_id": "cfa76de8-6c73-457b-b212-24c0210654c9",
+   "status": "completed",
+   "contract_source": "recipe",
+   "assigned_to": "gemini-4-hydrogen",
+   "model_used": "gemini-4-hydrogen",
+   "invocation": "model",
+   "resumed": false,
+   "generations": 2,
+   "cost_usd": 0.1205085,
+   "checks": {
+    "pass": 3,
+    "fail": 0,
+    "not_evaluable": 0
+   }
+  }
+ ],
+ "prior_attempts": [],
+ "llm_judgments": {
+  "critique_attempts": 1,
+  "completeness_verifier_ran": true,
+  "dial_ledger_outcome": "pass"
+ },
+ "checks": [
+  {
+   "id": "run.completed",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "reached final reporting",
+   "critical": true
+  },
+  {
+   "id": "run.has_plan",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "final attempt 1 has 10 execution node(s)",
+   "critical": true
+  },
+  {
+   "id": "run.recipe_nodes_planned",
+   "dimension": "execution",
+   "status": "pass",
+   "detail": "all 10 recipe nodes planned",
+   "critical": false
+  },
+  {
+   "id": "run.file.final_dashboard.html",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.research_report.md",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.workflow_execution.py",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.file.metrics.json",
+   "dimension": "deliverables",
+   "status": "pass",
+   "detail": "present",
+   "critical": false
+  },
+  {
+   "id": "run.metrics_consistent",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "14 captured metric(s) match metrics.json",
+   "critical": false
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "load_prepared_data"
+  },
+  {
+   "id": "node.metric.n_train_rows",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 16000.0",
+   "critical": true,
+   "node": "load_prepared_data"
+  },
+  {
+   "id": "node.metric.n_features",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 14.0",
+   "critical": true,
+   "node": "load_prepared_data"
+  },
+  {
+   "id": "node.variable.X_train",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (DataFrame)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.y_train",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (Series)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.X_test",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (DataFrame)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.y_test",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (Series)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_train_rows",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_features",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "load_prepared_data",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "load_prepared_data"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "characterize_task"
+  },
+  {
+   "id": "node.metric.n_classes",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 2.0",
+   "critical": true,
+   "node": "characterize_task"
+  },
+  {
+   "id": "node.metric.minority_class_rate",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.237875",
+   "critical": true,
+   "node": "characterize_task"
+  },
+  {
+   "id": "node.variable.dataset_facts",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (dict)",
+   "critical": true,
+   "node": "characterize_task",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_classes",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "characterize_task",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.minority_class_rate",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "characterize_task",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "characterize_task"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "shortlist_candidates"
+  },
+  {
+   "id": "node.metric.n_candidates",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 4.0",
+   "critical": true,
+   "node": "shortlist_candidates"
+  },
+  {
+   "id": "node.variable.candidates",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (list)",
+   "critical": true,
+   "node": "shortlist_candidates",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.selection_rationale",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "shortlist_candidates",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_candidates",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "shortlist_candidates",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "shortlist_candidates"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "bakeoff"
+  },
+  {
+   "id": "node.metric.best_cv_score",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.925928751173838",
+   "critical": true,
+   "node": "bakeoff"
+  },
+  {
+   "id": "node.variable.bakeoff_table",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (DataFrame)",
+   "critical": true,
+   "node": "bakeoff",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.best_candidate",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "bakeoff",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.best_cv_score",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "bakeoff",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "bakeoff"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "tune_best"
+  },
+  {
+   "id": "node.metric.n_trials_completed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 40.0",
+   "critical": true,
+   "node": "tune_best"
+  },
+  {
+   "id": "node.metric.best_cv_score_tuned",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.9280761119258244",
+   "critical": true,
+   "node": "tune_best"
+  },
+  {
+   "id": "node.variable.tuned_model",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (Pipeline)",
+   "critical": true,
+   "node": "tune_best",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.best_params",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (dict)",
+   "critical": true,
+   "node": "tune_best",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.tuning_result",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (dict)",
+   "critical": true,
+   "node": "tune_best",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_trials_completed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "tune_best",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.best_cv_score_tuned",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "tune_best",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "tune_best"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "selection_audit"
+  },
+  {
+   "id": "node.metric.n_selection_issues",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.0",
+   "critical": true,
+   "node": "selection_audit"
+  },
+  {
+   "id": "node.variable.selection_audit",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (dict)",
+   "critical": true,
+   "node": "selection_audit",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.selection_issues",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (list)",
+   "critical": true,
+   "node": "selection_audit",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_selection_issues",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "selection_audit",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "selection_audit"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.metric.macro_f1",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.8240396995820108",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.metric.roc_auc",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.9283343258563268",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.metric.log_loss",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.3291009311560136",
+   "critical": true,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.variable.y_pred",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (ndarray)",
+   "critical": true,
+   "node": "holdout_evaluation",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.y_prob",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (ndarray)",
+   "critical": true,
+   "node": "holdout_evaluation",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.evaluation",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (dict)",
+   "critical": true,
+   "node": "holdout_evaluation",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.macro_f1",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "holdout_evaluation",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.roc_auc",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "holdout_evaluation",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.log_loss",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "holdout_evaluation",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "holdout_evaluation"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "diagnostic_curves"
+  },
+  {
+   "id": "node.metric.average_precision",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 0.8211643598313074",
+   "critical": true,
+   "node": "diagnostic_curves"
+  },
+  {
+   "id": "node.variable.curve_diagnostics",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (dict)",
+   "critical": true,
+   "node": "diagnostic_curves",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.average_precision",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (float)",
+   "critical": true,
+   "node": "diagnostic_curves",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "diagnostic_curves"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "feature_importance"
+  },
+  {
+   "id": "node.metric.n_features_reported",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "= 14.0",
+   "critical": true,
+   "node": "feature_importance"
+  },
+  {
+   "id": "node.variable.importance_table",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (DataFrame)",
+   "critical": true,
+   "node": "feature_importance",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.importance",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (dict)",
+   "critical": true,
+   "node": "feature_importance",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.variable.n_features_reported",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (int)",
+   "critical": true,
+   "node": "feature_importance",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "feature_importance"
+  },
+  {
+   "id": "node.executed",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "completed",
+   "critical": true,
+   "node": "performance_report"
+  },
+  {
+   "id": "node.variable.model_card_text",
+   "dimension": "contract",
+   "status": "pass",
+   "detail": "bound (str)",
+   "critical": true,
+   "node": "performance_report",
+   "evidence": "end_of_session_kernel"
+  },
+  {
+   "id": "node.no_hallucination_phrases",
+   "dimension": "integrity",
+   "status": "pass",
+   "detail": "clean",
+   "critical": false,
+   "node": "performance_report"
+  }
+ ],
+ "scored": {
+  "at": "2026-11-14T01:28:55+00:00",
+  "commit": "bc65528-dirty"
+ }
+}
